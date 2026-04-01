@@ -249,12 +249,65 @@ export function GeminiPanel({
     URL.revokeObjectURL(url);
   };
 
+  // プレゼン技法の自動適用判定
+  const emotionTargets = ["all_staff", "new_staff", "medical_staff", "front_staff", "management"];
+  const emotionPurposes = ["educate", "motivate", "celebrate"];
+  const appliesEmotion = emotionTargets.includes(gsTarget) || emotionPurposes.includes(gsPurpose);
+
+  const catchTargets = ["management", "all_staff", "new_staff", "medical_staff", "front_staff"];
+  const catchPurposes = ["educate", "persuade", "motivate", "propose"];
+  const appliesCatch = catchTargets.includes(gsTarget) || catchPurposes.includes(gsPurpose);
+
+  const beforeAfterPurposes = ["inform", "report", "propose"];
+  const beforeAfterTargets = ["all_staff", "management", "medical_staff", "front_staff"];
+  const appliesBeforeAfter = beforeAfterPurposes.includes(gsPurpose) || beforeAfterTargets.includes(gsTarget);
+
+  const hasTechniques = appliesEmotion || appliesCatch || appliesBeforeAfter;
+
   const handleGensparkGenerate = async () => {
     if (!result) return;
     setGsLoading(true);
     setGsPrompt("");
 
     try {
+      const techniques: string[] = [];
+
+      if (appliesEmotion) {
+        techniques.push(`【感情の動線設計】
+スライド構成全体を以下の5段階の感情の動線で設計してください：
+① 共感（現場の課題・悩みをスタッフの言葉で言語化するスライド）
+② 気づき（なぜその課題が起きているかのWhy・原因を示すスライド）
+③ 希望（こう変われる・こうなれる未来のビジョンを示すスライド）
+④ 具体策（明日から現場で使える行動レベルの方法を示すスライド）
+⑤ 決意（チームへのメッセージ・参加者のコミットメントを促すスライド）
+各段階に少なくとも1枚以上のスライドを割り当ててください。`);
+      }
+
+      if (appliesCatch) {
+        techniques.push(`【1スライド1メッセージ・キャッチコピー構造】
+全てのコンテンツスライドに以下の2層構造を必ず使用してください：
+・キャッチライン：そのスライドの結論を全角15文字以内の一言で表現
+  （例：「褒め方で人は3倍育つ」「報告は24時間以内が鉄則」）
+・サポートテキスト：キャッチラインの根拠・補足を箇条書き3点以内で記載
+キャッチラインはスライド上部に大きく（36pt以上）配置し、
+見た瞬間0.5秒で内容が理解できるデザインにしてください。`);
+      }
+
+      if (appliesBeforeAfter) {
+        techniques.push(`【Before / After 比較レイアウト】
+変化・改善・新制度・新ルールを説明するスライドでは必ず以下を使用してください：
+・左カラム（Before）：現状・課題・これまでの方法
+・右カラム（After）：改善後・解決策・これからの方法
+・Beforeエリア：落ち着いたグレー（#6B7280）系の配色
+・Afterエリア：ピンク・ローズ系（#f43f5e）の配色で「明るくなった」印象を演出
+・各カラムの上部にアイコンを配置（Before: ⚠️ または 😔、After: ✅ または 😊）
+この比較レイアウトにより、変化への理解と受け入れを促進してください。`);
+      }
+
+      const techniqueBlock = techniques.length > 0
+        ? `\n\n【自動適用プレゼン技法】\n${techniques.join("\n\n")}`
+        : "";
+
       const prompt = `あなたはGenspark AIスライド生成に特化したプロンプトエンジニアです。
 以下の分析結果とユーザー要件をもとに、Gensparkで最高品質のPPTXスライドを
 生成するための完全なプロンプトを日本語で作成してください。
@@ -280,6 +333,7 @@ ${result}
 ### 3. 推奨スライド構成
 タイトルスライドから終わりまで、各スライドの見出しと内容概要を番号付きで列挙する。
 枚数は内容レベルに合わせる。
+${techniqueBlock}
 
 ### 4. レイアウト・テキスト量の厳格な指示（最重要）
 以下の指示を必ずプロンプトに含める：
@@ -494,6 +548,29 @@ ${result}
               className={selectClass}
             />
           </div>
+
+          {hasTechniques && (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-gray-500">自動適用される技法：</p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {appliesEmotion && (
+                  <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-1 text-xs text-pink-700">
+                    感情の動線設計
+                  </span>
+                )}
+                {appliesCatch && (
+                  <span className="rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700">
+                    1スライド1メッセージ
+                  </span>
+                )}
+                {appliesBeforeAfter && (
+                  <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                    Before/After比較
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleGensparkGenerate}
