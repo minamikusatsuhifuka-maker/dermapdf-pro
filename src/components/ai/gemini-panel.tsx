@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { BrainCircuit, Copy, Download, Loader2 } from "lucide-react";
+import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
 
@@ -145,6 +145,46 @@ interface GeminiPanelProps {
   onResult?: (result: string) => void;
 }
 
+const TARGET_OPTIONS = [
+  { value: "all_staff", label: "全スタッフ（職種混合）" },
+  { value: "management", label: "管理職・リーダー層" },
+  { value: "new_staff", label: "新入社員・新人スタッフ" },
+  { value: "medical_staff", label: "医療スタッフ（看護師・技師等）" },
+  { value: "front_staff", label: "受付・フロントスタッフ" },
+  { value: "patients", label: "患者・一般向け" },
+  { value: "investors", label: "投資家・金融機関向け" },
+  { value: "partners", label: "取引先・パートナー企業向け" },
+];
+
+const LEVEL_OPTIONS = [
+  { value: "simple", label: "簡潔（要点のみ・5〜8枚）" },
+  { value: "standard", label: "標準（バランス重視・10〜15枚）" },
+  { value: "detailed", label: "詳しく（網羅的・20〜30枚）" },
+  { value: "expert", label: "専門家向け（データ重視・制限なし）" },
+];
+
+const PURPOSE_OPTIONS = [
+  { value: "inform", label: "情報共有・周知" },
+  { value: "educate", label: "教育・研修" },
+  { value: "persuade", label: "説得・意思決定促進" },
+  { value: "motivate", label: "モチベーションアップ" },
+  { value: "report", label: "報告・振り返り" },
+  { value: "propose", label: "提案・企画" },
+  { value: "celebrate", label: "表彰・表彰式" },
+];
+
+const TONE_OPTIONS = [
+  { value: "professional", label: "プロフェッショナル（ビジネス調）" },
+  { value: "friendly", label: "親しみやすい（カジュアル調）" },
+  { value: "inspiring", label: "感動的・ストーリー調" },
+  { value: "data_driven", label: "データドリブン（グラフ・数値重視）" },
+  { value: "visual", label: "ビジュアル重視（図解・イラスト）" },
+];
+
+function getLabel(options: { value: string; label: string }[], value: string) {
+  return options.find((o) => o.value === value)?.label ?? value;
+}
+
 export function GeminiPanel({
   fileBase64,
   fileMime,
@@ -155,6 +195,15 @@ export function GeminiPanel({
   const [purpose, setPurpose] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Genspark state
+  const [gsTarget, setGsTarget] = useState("all_staff");
+  const [gsLevel, setGsLevel] = useState("standard");
+  const [gsPurpose, setGsPurpose] = useState("inform");
+  const [gsTone, setGsTone] = useState("professional");
+  const [gsNotes, setGsNotes] = useState("");
+  const [gsPrompt, setGsPrompt] = useState("");
+  const [gsLoading, setGsLoading] = useState(false);
 
   const handleAnalyze = async () => {
     if (!fileBase64 || !fileMime || !fileName) {
@@ -199,6 +248,70 @@ export function GeminiPanel({
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleGensparkGenerate = async () => {
+    if (!result) return;
+    setGsLoading(true);
+    setGsPrompt("");
+
+    try {
+      const prompt = `あなたはGensparkのAIプレゼン資料生成に最適化されたプロンプトエンジニアです。
+以下の分析結果とユーザーの要件をもとに、Gensparkで最高品質のプレゼン資料を
+生成するための詳細なプロンプトを日本語で作成してください。
+
+【分析結果】
+${result}
+
+【プレゼン要件】
+- ターゲット層: ${getLabel(TARGET_OPTIONS, gsTarget)}
+- 内容レベル: ${getLabel(LEVEL_OPTIONS, gsLevel)}（スライド枚数の目安を含む）
+- プレゼンの目的: ${getLabel(PURPOSE_OPTIONS, gsPurpose)}
+- スライドのトーン: ${getLabel(TONE_OPTIONS, gsTone)}
+- 追加要望: ${gsNotes || "なし"}
+
+【出力形式】
+Gensparkへの入力プロンプトとして、以下を含めてください：
+1. プレゼン全体のテーマと目的
+2. ターゲット聴衆の詳細説明
+3. 推奨スライド構成（タイトル・各スライドの見出しと内容概要）
+4. デザイン指示（カラー・フォント・レイアウトの推奨）
+5. 各スライドで使用すべきビジュアル要素の指示
+6. 話し言葉のトーンとスタイルの指示
+7. 必ず含めるべきデータ・数値・引用
+8. Gensparkへの特別指示（アニメーション、インフォグラフィック等）
+
+プロンプトは英語ではなく日本語で、コピーしてGensparkにすぐ貼り付けられる
+完成形で出力してください。`;
+
+      // テキストのみのリクエスト（ファイル不要）
+      const data = fileBase64 && fileMime
+        ? await analyzeWithGemini(fileBase64, fileMime, prompt)
+        : await analyzeWithGemini("", "text/plain", prompt);
+
+      if (!data.success) throw new Error(data.error || "プロンプト生成に失敗しました");
+      setGsPrompt(data.analysis);
+      toastOk("Gensparkプロンプトを生成しました");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "生成に失敗しました";
+      toastError(msg);
+    } finally {
+      setGsLoading(false);
+    }
+  };
+
+  const handleGsCopyAndOpen = async () => {
+    await navigator.clipboard.writeText(gsPrompt);
+    toastOk("コピーしました。Gensparkを開きます...");
+    window.open("https://www.genspark.ai", "_blank");
+  };
+
+  const handleGsCopyOnly = async () => {
+    await navigator.clipboard.writeText(gsPrompt);
+    toastOk("クリップボードにコピーしました");
+  };
+
+  const selectClass =
+    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
 
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
@@ -280,6 +393,114 @@ export function GeminiPanel({
               <Download className="h-3.5 w-3.5" /> テキスト保存
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Genspark プレゼン資料生成 */}
+      {result && (
+        <div className="w-full space-y-4 rounded-2xl border border-purple-200 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
+          <h3 className="flex items-center gap-2 text-base font-bold text-gray-700">
+            <Sparkles className="h-5 w-5 text-purple-500" />
+            Gensparkプレゼン資料を作成
+          </h3>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                聴講ターゲット
+              </label>
+              <select value={gsTarget} onChange={(e) => setGsTarget(e.target.value)} className={selectClass}>
+                {TARGET_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                内容レベル
+              </label>
+              <select value={gsLevel} onChange={(e) => setGsLevel(e.target.value)} className={selectClass}>
+                {LEVEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                プレゼンの目的
+              </label>
+              <select value={gsPurpose} onChange={(e) => setGsPurpose(e.target.value)} className={selectClass}>
+                {PURPOSE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                スライドのトーン
+              </label>
+              <select value={gsTone} onChange={(e) => setGsTone(e.target.value)} className={selectClass}>
+                {TONE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-600">
+              追加要望（任意）
+            </label>
+            <textarea
+              value={gsNotes}
+              onChange={(e) => setGsNotes(e.target.value)}
+              placeholder="例：会社のカラーはピンクと白。冒頭に院長の挨拶スライドを入れてほしい。など"
+              rows={3}
+              className={selectClass}
+            />
+          </div>
+
+          <button
+            onClick={handleGensparkGenerate}
+            disabled={gsLoading}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+          >
+            {gsLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {gsLoading ? "生成中..." : "Gensparkプロンプトを生成"}
+          </button>
+
+          {gsPrompt && (
+            <div className="space-y-3">
+              <textarea
+                readOnly
+                value={gsPrompt}
+                rows={12}
+                className="w-full rounded-xl border border-purple-200 bg-white/80 px-4 py-3 text-sm"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleGsCopyAndOpen}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 text-sm font-medium text-white shadow-sm"
+                >
+                  <Copy className="h-3.5 w-3.5" /> コピーしてGensparkを開く
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={handleGsCopyOnly}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/60 px-4 py-2 text-sm font-medium text-gray-600 shadow-sm backdrop-blur-sm hover:bg-white/80"
+                >
+                  <Copy className="h-3.5 w-3.5" /> コピーのみ
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

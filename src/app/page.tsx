@@ -182,9 +182,9 @@ export default function Home() {
         </section>
 
         {/* AIパネル */}
-        <div className="grid gap-8 lg:grid-cols-2">
+        <div className="w-full space-y-8">
           {(activePanel === "gemini" || activePanel === null) && (
-            <section>
+            <section className="w-full">
               <GeminiPanel
                 fileBase64={fileBase64}
                 fileMime={fileMime}
@@ -195,13 +195,13 @@ export default function Home() {
           )}
 
           {activePanel === "genspark" && (
-            <section>
+            <section className="w-full">
               <GensparkPanel analysisResult={analysisResult} />
             </section>
           )}
 
           {activePanel === "message" && (
-            <section>
+            <section className="w-full">
               <MessagePanel
                 fileBase64={fileBase64}
                 fileMime={fileMime}
