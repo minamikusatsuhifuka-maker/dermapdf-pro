@@ -39,34 +39,53 @@ async function getGeminiKey(): Promise<string> {
 export async function analyzeWithGemini(
   base64: string,
   mimeType: string,
-  prompt: string
+  prompt: string,
+  analysisType?: string
 ): Promise<GeminiResult> {
-  try {
+  const isTranscription = analysisType === "transcription";
+  const maxOutputTokens = isTranscription ? 65536 : 8192;
+  const temperature = isTranscription ? 0.1 : 0.3;
+
+  const callGemini = async (): Promise<GeminiResult> => {
     const apiKey = await getGeminiKey();
 
-    const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    let res: Response;
+    try {
+      res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: base64,
+                  },
                 },
-              },
-              { text: prompt },
-            ],
+                { text: prompt },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature,
+            maxOutputTokens,
           },
-        ],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 8192,
-        },
-      }),
-    });
+        }),
+      });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error("タイムアウトしました。PDFのページ数を減らすか、再度お試しください。");
+      }
+      throw err;
+    }
 
     let responseData: {
       candidates?: Array<{
@@ -94,6 +113,14 @@ export async function analyzeWithGemini(
       responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
     return { success: true, analysis };
+  };
+
+  try {
+    const result = await callGemini();
+    if (result.success) return result;
+
+    // 失敗時に1回リトライ
+    return await callGemini();
   } catch (e) {
     return {
       success: false,

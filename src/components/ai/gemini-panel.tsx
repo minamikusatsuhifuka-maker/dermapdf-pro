@@ -103,7 +103,14 @@ const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
   detail_summary:
     "この資料の内容を、通常の要約よりも細部まで丁寧に読み取り、詳細にまとめてください。表面的なキーワードだけでなく、文脈・背景・ニュアンス・行間の意図まで汲み取り、以下の形式で出力してください。\n\n## 全体の概要\n（資料全体を3〜5文で説明）\n\n## 主要テーマと詳細内容\n（各セクション・章ごとに、見出しと詳細な説明を箇条書きで記載）\n\n## 重要なポイント・数値・固有名詞\n（見逃してはいけない具体的な情報を列挙）\n\n## 読み取れる背景・意図・示唆\n（明示されていないが文脈から読み取れる意図や示唆）\n\n## まとめと活用提案\n（この資料をどう活用できるか、具体的な提案）\n\n省略せず、資料の細部まで丁寧に反映してください。",
   transcription:
-    "この資料に含まれる全てのテキストを書き起こしてください。図・表・グラフ内の文字も含め、ページ順・レイアウト構造を維持しながら全文を出力してください。一切省略せず完全に出力してください。",
+    "この資料に含まれる全てのテキストを正確に書き起こしてください。\n\n" +
+    "【出力ルール】\n" +
+    "・ページ番号がある場合は「--- P.1 ---」のように区切りを入れる\n" +
+    "・図・表・グラフ内の文字も含める\n" +
+    "・手書き文字も読み取れる範囲で書き起こす\n" +
+    "・レイアウト構造（タイトル・見出し・本文）を維持する\n" +
+    "・一切省略せず、全ページを完全に出力する\n" +
+    "・出力が長くなっても途中で止めず必ず最後まで出力する",
 
   // 皮膚科・医療
   findings:
@@ -192,7 +199,7 @@ export function GeminiPanel({
         ? `${basePrompt}\n\n目的: ${purpose}`
         : basePrompt;
 
-      const data = await analyzeWithGemini(fileBase64, fileMime, fullPrompt);
+      const data = await analyzeWithGemini(fileBase64, fileMime, fullPrompt, analysisType);
       if (!data.success) throw new Error(data.error || "分析に失敗しました");
 
       setResult(data.analysis);
@@ -311,6 +318,14 @@ export function GeminiPanel({
           className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
         />
       </div>
+
+      {/* 全文書き起こし警告 */}
+      {analysisType === "transcription" && (
+        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+          ⏱ 全文書き起こしは処理に1〜2分かかる場合があります。
+          ページ数が多い場合は先にページを絞ってからお試しください。
+        </div>
+      )}
 
       {/* 実行ボタン */}
       <button
