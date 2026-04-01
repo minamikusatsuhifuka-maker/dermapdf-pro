@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { splitPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
 import {
   TARGET_OPTIONS,
   LEVEL_OPTIONS,
@@ -174,6 +175,18 @@ export function GeminiPanel({
   const [purpose, setPurpose] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [transcriptionProgress, setTranscriptionProgress] = useState("");
+
+  // PDFのページ数を取得
+  const isPdf = fileMime === "application/pdf";
+  useEffect(() => {
+    if (!fileBase64 || !isPdf) {
+      setPageCount(null);
+      return;
+    }
+    getPdfPageCount(fileBase64).then(setPageCount).catch(() => setPageCount(null));
+  }, [fileBase64, isPdf]);
 
   // Genspark state
   const [gsTarget, setGsTarget] = useState("all_staff");
@@ -184,6 +197,8 @@ export function GeminiPanel({
   const [gsPrompt, setGsPrompt] = useState("");
   const [gsLoading, setGsLoading] = useState(false);
 
+  const CHUNK_SIZE = 10;
+
   const handleAnalyze = async () => {
     if (!fileBase64 || !fileMime || !fileName) {
       toastError("ファイルが選択されていません");
@@ -192,24 +207,88 @@ export function GeminiPanel({
 
     setLoading(true);
     setResult("");
+    setTranscriptionProgress("");
 
     try {
-      const basePrompt = ANALYSIS_PROMPTS[analysisType];
-      const fullPrompt = purpose
-        ? `${basePrompt}\n\n目的: ${purpose}`
-        : basePrompt;
+      // バッチ書き起こし: PDFかつtranscriptionかつ10ページ超
+      const useBatch =
+        analysisType === "transcription" &&
+        isPdf &&
+        pageCount !== null &&
+        pageCount > CHUNK_SIZE;
 
-      const data = await analyzeWithGemini(fileBase64, fileMime, fullPrompt, analysisType);
-      if (!data.success) throw new Error(data.error || "分析に失敗しました");
+      if (useBatch) {
+        const totalPages = pageCount!;
+        const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
+        let fullText = "";
 
-      setResult(data.analysis);
-      onResult?.(data.analysis);
-      toastOk("AI分析が完了しました");
+        for (let i = 0; i < totalChunks; i++) {
+          const startPage = i * CHUNK_SIZE;
+          const endPage = Math.min(startPage + CHUNK_SIZE - 1, totalPages - 1);
+
+          setTranscriptionProgress(
+            `書き起こし中... (${i + 1}/${totalChunks}チャンク / P.${startPage + 1}〜${endPage + 1})`
+          );
+
+          try {
+            const chunkBase64 = await splitPdfPages(fileBase64, startPage, endPage);
+            const chunkResult = await analyzeWithGemini(
+              chunkBase64,
+              "application/pdf",
+              `P.${startPage + 1}〜P.${endPage + 1} の全テキストを書き起こしてください。\n` +
+                `【出力ルール】\n` +
+                `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
+                `・図・表・手書き文字も含め全て書き起こす\n` +
+                `・一切省略せず完全に出力する`,
+              "transcription"
+            );
+
+            if (!chunkResult.success) {
+              throw new Error(
+                `P.${startPage + 1}〜${endPage + 1} の処理に失敗: ${chunkResult.error}`
+              );
+            }
+
+            fullText += `\n\n${chunkResult.analysis}`;
+          } catch (chunkErr) {
+            const msg =
+              chunkErr instanceof Error ? chunkErr.message : "処理エラー";
+            fullText += `\n\n⚠️ P.${startPage + 1}以降の処理でエラーが発生しました: ${msg}`;
+            setResult(fullText.trim());
+            onResult?.(fullText.trim());
+            toastError(`一部エラーがありましたが途中結果を表示します`);
+            return;
+          }
+        }
+
+        setResult(fullText.trim());
+        onResult?.(fullText.trim());
+        toastOk("全文書き起こしが完了しました");
+      } else {
+        // 通常の分析（画像、10ページ以下のPDF、transcription以外）
+        const basePrompt = ANALYSIS_PROMPTS[analysisType];
+        const fullPrompt = purpose
+          ? `${basePrompt}\n\n目的: ${purpose}`
+          : basePrompt;
+
+        const data = await analyzeWithGemini(
+          fileBase64,
+          fileMime,
+          fullPrompt,
+          analysisType
+        );
+        if (!data.success) throw new Error(data.error || "分析に失敗しました");
+
+        setResult(data.analysis);
+        onResult?.(data.analysis);
+        toastOk("AI分析が完了しました");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "分析に失敗しました";
       toastError(msg);
     } finally {
       setLoading(false);
+      setTranscriptionProgress("");
     }
   };
 
@@ -322,8 +401,11 @@ export function GeminiPanel({
       {/* 全文書き起こし警告 */}
       {analysisType === "transcription" && (
         <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-          ⏱ 全文書き起こしは処理に1〜2分かかる場合があります。
-          ページ数が多い場合は先にページを絞ってからお試しください。
+          {isPdf && pageCount !== null && pageCount > 30
+            ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します（${pageCount}ページ）。数分かかる場合があります`
+            : isPdf && pageCount !== null && pageCount > 10
+              ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します。約${Math.ceil(pageCount / CHUNK_SIZE)}〜${Math.ceil(pageCount / CHUNK_SIZE) * 2}分かかります`
+              : "⏱ 処理に30秒〜1分かかる場合があります"}
         </div>
       )}
 
@@ -340,6 +422,14 @@ export function GeminiPanel({
         )}
         {loading ? "分析中..." : "実行"}
       </button>
+
+      {/* 書き起こし進捗 */}
+      {transcriptionProgress && (
+        <div className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mt-2 flex items-center gap-2">
+          <span className="animate-spin">⚙️</span>
+          <span>{transcriptionProgress}</span>
+        </div>
+      )}
 
       {/* 結果表示 */}
       {result && (
