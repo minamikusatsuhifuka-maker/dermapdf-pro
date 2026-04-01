@@ -7,84 +7,135 @@ import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
 
 export type AnalysisType =
+  // 基本分析
   | "summary"
   | "detail_summary"
+  | "transcription"
+  // 皮膚科・医療
   | "findings"
   | "ingredients"
-  | "care"
+  | "care_plan"
   | "patient_consent"
+  // 経営・戦略
   | "business_strategy"
   | "grade_design"
   | "grade_analyze"
   | "marketing_copy"
-  | "staff_guidance"
-  | "goal_cheer"
   | "management_plan"
   | "swot"
   | "kpi_plan"
-  | "briefing_hr"
-  | "briefing_manager"
-  | "briefing_staff";
+  // 人材育成
+  | "training_summary"
+  | "training_quiz"
+  | "training_newcomer"
+  | "training_roleplay"
+  | "training_ojt"
+  | "staff_guidance"
+  | "goal_cheer";
 
-const ANALYSIS_LABELS: Record<AnalysisType, string> = {
-  summary: "概要・要約",
-  detail_summary: "詳細にまとめる",
-  findings: "所見まとめ",
-  ingredients: "成分分析",
-  care: "ケアプラン",
-  patient_consent: "患者同意書生成",
-  business_strategy: "経営戦略分析",
-  grade_design: "等級制度設計",
-  grade_analyze: "等級制度分析",
-  marketing_copy: "マーケティングコピー",
-  staff_guidance: "スタッフ指導メモ",
-  goal_cheer: "目標応援メッセージ",
-  management_plan: "経営計画書",
-  swot: "SWOT分析",
-  kpi_plan: "KPI設計",
-  briefing_hr: "人事ブリーフィング",
-  briefing_manager: "管理者ブリーフィング",
-  briefing_staff: "スタッフブリーフィング",
-};
+interface AnalysisOption {
+  value: AnalysisType;
+  label: string;
+}
+
+interface AnalysisGroup {
+  label: string;
+  options: AnalysisOption[];
+}
+
+const ANALYSIS_GROUPS: AnalysisGroup[] = [
+  {
+    label: "\u{1F4C4} 基本分析",
+    options: [
+      { value: "summary", label: "概要・要約" },
+      { value: "detail_summary", label: "詳細にまとめる" },
+      { value: "transcription", label: "全文書き起こし" },
+    ],
+  },
+  {
+    label: "\u{1F3E5} 皮膚科・医療",
+    options: [
+      { value: "findings", label: "所見まとめ" },
+      { value: "ingredients", label: "成分分析" },
+      { value: "care_plan", label: "ケアプラン" },
+      { value: "patient_consent", label: "患者同意書生成" },
+    ],
+  },
+  {
+    label: "\u{1F4BC} 経営・戦略",
+    options: [
+      { value: "business_strategy", label: "経営戦略分析" },
+      { value: "grade_design", label: "等級制度設計" },
+      { value: "grade_analyze", label: "等級制度分析" },
+      { value: "marketing_copy", label: "マーケティングコピー" },
+      { value: "management_plan", label: "経営計画書" },
+      { value: "swot", label: "SWOT分析" },
+      { value: "kpi_plan", label: "KPI設計" },
+    ],
+  },
+  {
+    label: "\u{1F465} 人材育成",
+    options: [
+      { value: "training_summary", label: "研修資料の要点整理" },
+      { value: "training_quiz", label: "理解度確認テスト作成" },
+      { value: "training_newcomer", label: "新人向けわかりやすい解説" },
+      { value: "training_roleplay", label: "ロールプレイシナリオ作成" },
+      { value: "training_ojt", label: "OJT計画書作成" },
+      { value: "staff_guidance", label: "スタッフ指導メモ" },
+      { value: "goal_cheer", label: "目標応援メッセージ" },
+    ],
+  },
+];
 
 const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
-  summary: "この文書の内容を日本語で簡潔に要約してください。",
-  detail_summary: `この資料の内容を、通常の要約よりも細部まで丁寧に読み取り、詳細にまとめてください。
-表面的なキーワードだけでなく、文脈・背景・ニュアンス・行間の意図まで汲み取り、
-以下の形式で出力してください。
+  // 基本分析
+  summary:
+    "この資料の内容を簡潔に要約してください。主要なポイントを箇条書きで整理し、全体像がわかるようにまとめてください。",
+  detail_summary:
+    "この資料の内容を、通常の要約よりも細部まで丁寧に読み取り、詳細にまとめてください。表面的なキーワードだけでなく、文脈・背景・ニュアンス・行間の意図まで汲み取り、以下の形式で出力してください。\n\n## 全体の概要\n（資料全体を3〜5文で説明）\n\n## 主要テーマと詳細内容\n（各セクション・章ごとに、見出しと詳細な説明を箇条書きで記載）\n\n## 重要なポイント・数値・固有名詞\n（見逃してはいけない具体的な情報を列挙）\n\n## 読み取れる背景・意図・示唆\n（明示されていないが文脈から読み取れる意図や示唆）\n\n## まとめと活用提案\n（この資料をどう活用できるか、具体的な提案）\n\n省略せず、資料の細部まで丁寧に反映してください。",
+  transcription:
+    "この資料に含まれる全てのテキストを書き起こしてください。図・表・グラフ内の文字も含め、ページ順・レイアウト構造を維持しながら全文を出力してください。一切省略せず完全に出力してください。",
 
-## 全体の概要
-（資料全体を3〜5文で説明）
+  // 皮膚科・医療
+  findings:
+    "この医療資料の所見・診断・治療方針を整理してください。【主訴】【所見】【診断】【治療方針】【経過観察事項】の形式で出力してください。",
+  ingredients:
+    "この資料に含まれる成分・処方・薬剤情報を抽出し、各成分の効果・用途・注意事項を整理してください。",
+  care_plan:
+    "この資料をもとに患者向けのスキンケアプランを作成してください。【現状分析】【推奨ケア手順】【使用製品提案】【注意事項】【次回来院の目安】の形式で出力してください。",
+  patient_consent:
+    "この資料の内容をもとに、患者向けの説明資料・同意書の文案を作成してください。専門用語を平易な言葉に言い換え、患者が理解・同意しやすい形式で出力してください。",
 
-## 主要テーマと詳細内容
-（各セクション・章ごとに、見出しと詳細な説明を箇条書きで記載）
+  // 経営・戦略
+  business_strategy:
+    "この資料をもとに経営戦略の観点から分析してください。【現状分析】【課題】【戦略オプション】【推奨アクション】【KPI候補】の形式で出力してください。",
+  grade_design:
+    "この資料をもとに等級制度・評価制度の設計案を作成してください。【等級定義】【各等級の役割・期待値】【評価基準】【昇格要件】の形式で具体的に出力してください。",
+  grade_analyze:
+    "この等級制度・評価制度の資料を分析してください。【制度の特徴】【強み】【課題・改善点】【スタッフへの影響】【改善提案】の形式で出力してください。",
+  marketing_copy:
+    "この資料の内容をもとに、クリニックのマーケティングに使えるコピー・文章を作成してください。ターゲット患者に響く言葉で、SNS投稿用・ホームページ用・院内POPのそれぞれに合わせた文案を出力してください。",
+  management_plan:
+    "この資料をもとに10年ビジョンから逆算した経営計画書を作成してください。【10年ビジョン】【5年目標】【3年目標】【1年目標】【四半期アクションプラン】の形式で具体的に出力してください。",
+  swot: "この資料をもとにSWOT分析を行ってください。【強み(S)】【弱み(W)】【機会(O)】【脅威(T)】を整理した後、クロスSWOT戦略（SO/ST/WO/WT）と優先実行施策TOP5を出力してください。",
+  kpi_plan:
+    "この資料をもとに部門別KPIツリーを設計してください。【最終目標KGI】【部門別KPI】【月次アクション指標】【測定方法・頻度】の形式で出力してください。",
 
-## 重要なポイント・数値・固有名詞
-（見逃してはいけない具体的な情報を列挙）
-
-## 読み取れる背景・意図・示唆
-（明示されていないが文脈から読み取れる意図や示唆）
-
-## まとめと活用提案
-（この資料をどう活用できるか、具体的な提案）
-
-省略せず、資料の細部まで丁寧に反映してください。`,
-  findings: "この文書に含まれる医学的所見をまとめてください。",
-  ingredients: "この文書に記載されている成分・薬剤を分析してください。",
-  care: "この文書に基づいたケアプランを日本語で作成してください。",
-  patient_consent: "この文書の内容に基づいて、患者向けの同意書を日本語で作成してください。",
-  business_strategy: "この文書を経営戦略の観点から分析し、提言をまとめてください。",
-  grade_design: "この文書を参考に等級制度の設計案を提案してください。",
-  grade_analyze: "この文書に記載された等級制度を分析し、改善点を提案してください。",
-  marketing_copy: "この文書の内容をもとに、マーケティング用のコピーを作成してください。",
-  staff_guidance: "この文書に基づいてスタッフ向けの指導メモを作成してください。",
-  goal_cheer: "この文書の目標に対する応援・モチベーションメッセージを作成してください。",
-  management_plan: "この文書をもとに経営計画書を作成してください。",
-  swot: "この文書の内容についてSWOT分析を行ってください。",
-  kpi_plan: "この文書に基づいてKPIを設計してください。",
-  briefing_hr: "この文書の内容を人事担当者向けにブリーフィングしてください。",
-  briefing_manager: "この文書の内容を管理者向けにブリーフィングしてください。",
-  briefing_staff: "この文書の内容をスタッフ向けにブリーフィングしてください。",
+  // 人材育成
+  training_summary:
+    "この研修資料の要点を整理してください。【研修目的】【学習ポイント（箇条書き）】【受講者が持ち帰るべき3つのメッセージ】【実践アクション提案】の形式で出力してください。",
+  training_quiz:
+    "この資料をもとに理解度確認テストを作成してください。【4択問題×5問（解答・解説付き）】【○×問題×5問（解答・解説付き）】【記述問題×2問（模範解答付き）】の形式で出力してください。",
+  training_newcomer:
+    "この資料の内容を、業界未経験の新入社員でも理解できるよう、専門用語を噛み砕いてわかりやすく解説してください。具体的な例え話や身近な例を使い、親しみやすい文体で出力してください。",
+  training_roleplay:
+    "この資料の内容をもとに、スタッフ研修で使えるロールプレイシナリオを作成してください。【シナリオのテーマ】【登場人物と役割】【シナリオ本文（対話形式）】【振り返りポイント】を含めて出力してください。",
+  training_ojt:
+    "この資料をもとに、新人スタッフ向けのOJT計画書を作成してください。【習得目標】【週別スケジュール（4週間）】【各週のチェックポイント】【評価基準】の形式で具体的に出力してください。",
+  staff_guidance:
+    "この資料をもとに、管理職がスタッフ指導に使えるメモを作成してください。【指導のポイント】【よくある失敗パターンと対処法】【褒めるべき行動の具体例】【改善を促す言葉かけの例文】の形式で出力してください。",
+  goal_cheer:
+    "この資料の内容をもとに、スタッフへの目標応援・モチベーションアップのメッセージを作成してください。個人の成長を承認し、チームの目標達成に向けた前向きなメッセージを複数パターン出力してください。",
 };
 
 interface GeminiPanelProps {
@@ -166,13 +217,15 @@ export function GeminiPanel({
           onChange={(e) => setAnalysisType(e.target.value as AnalysisType)}
           className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
         >
-          {(Object.entries(ANALYSIS_LABELS) as [AnalysisType, string][]).map(
-            ([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            )
-          )}
+          {ANALYSIS_GROUPS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.options.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
         </select>
       </div>
 

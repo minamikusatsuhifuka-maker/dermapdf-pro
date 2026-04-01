@@ -28,7 +28,7 @@ const WORKFLOWS: Workflow[] = [
     steps: [
       { title: "文書要約", description: "診療文書の内容を要約", analysisType: "summary" },
       { title: "所見抽出", description: "重要な所見を抽出", analysisType: "findings" },
-      { title: "ケアプラン作成", description: "ケアプランを自動生成", analysisType: "care" },
+      { title: "ケアプラン作成", description: "ケアプランを自動生成", analysisType: "care_plan" },
     ],
   },
   {
@@ -69,7 +69,7 @@ const WORKFLOWS: Workflow[] = [
     steps: [
       { title: "現状分析", description: "現制度を分析", analysisType: "grade_analyze" },
       { title: "制度設計", description: "新制度を設計", analysisType: "grade_design" },
-      { title: "ブリーフィング", description: "人事向け説明資料", analysisType: "briefing_hr" },
+      { title: "ブリーフィング", description: "人事向け説明資料", analysisType: "training_summary" },
     ],
   },
   {
@@ -98,7 +98,7 @@ const WORKFLOWS: Workflow[] = [
     category: "beauty",
     steps: [
       { title: "要約", description: "文書を要約", analysisType: "summary" },
-      { title: "スタッフ説明", description: "スタッフ向け説明", analysisType: "briefing_staff" },
+      { title: "スタッフ説明", description: "スタッフ向け説明", analysisType: "staff_guidance" },
     ],
   },
 ];
