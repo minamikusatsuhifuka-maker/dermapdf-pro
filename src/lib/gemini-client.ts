@@ -4,7 +4,8 @@
  * サーバーを経由せずクライアントから直接呼び出す
  */
 
-const GEMINI_MODEL = "gemini-2.5-pro";
+export const CURRENT_MODEL = "gemini-2.5-pro";
+const GEMINI_MODEL = CURRENT_MODEL;
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 interface GeminiResult {

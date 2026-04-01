@@ -1,7 +1,14 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle } from "lucide-react";
+import { CURRENT_MODEL } from "@/lib/gemini-client";
+import {
+  checkForNewerGeminiModel,
+  forceModelCheck,
+  type ModelCheckResult,
+} from "@/lib/model-checker";
 
 interface ApiStatus {
   pdfCo: boolean;
@@ -35,6 +42,26 @@ function StatusBadge({ label, active }: { label: string; active: boolean }) {
 
 export function Header({ apiStatus }: HeaderProps) {
   const status = apiStatus ?? { pdfCo: false, removeBg: false, gemini: false };
+  const [modelCheck, setModelCheck] = useState<ModelCheckResult | null>(null);
+
+  const runCheck = useCallback(async () => {
+    try {
+      const res = await fetch("/api/get-gemini-key");
+      const data = await res.json();
+      if (!data.key) return;
+      const result = await checkForNewerGeminiModel(data.key);
+      setModelCheck(result);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    runCheck();
+  }, [runCheck]);
+
+  const handleForceCheck = () => {
+    forceModelCheck();
+    runCheck();
+  };
 
   return (
     <header className="w-full">
@@ -55,6 +82,13 @@ export function Header({ apiStatus }: HeaderProps) {
               <StatusBadge label="PDF.co" active={status.pdfCo} />
               <StatusBadge label="remove.bg" active={status.removeBg} />
               <StatusBadge label="Gemini AI" active={status.gemini} />
+              <button
+                onClick={handleForceCheck}
+                className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+                title="クリックして最新モデルを再チェック"
+              >
+                🤖 {CURRENT_MODEL.replace("gemini-", "Gemini ")}
+              </button>
               <a
                 href="https://www.genspark.ai/ai_slides?tab=explore"
                 target="_blank"
@@ -67,6 +101,30 @@ export function Header({ apiStatus }: HeaderProps) {
               </a>
             </div>
           </div>
+
+          {/* モデルアップデートアラート */}
+          {modelCheck?.hasNewer && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span>⚡</span>
+              <span>
+                新しいGeminiモデルが利用可能です：
+                <strong>{modelCheck.newerModels.join(", ")}</strong>
+              </span>
+              <span className="text-amber-600">（設定から変更できます）</span>
+              <button
+                onClick={handleForceCheck}
+                className="ml-auto text-amber-600 underline"
+              >
+                再チェック
+              </button>
+            </div>
+          )}
+
+          {modelCheck && (
+            <p className="mt-1 text-right text-[10px] text-gray-400">
+              最終チェック日: {modelCheck.lastChecked}
+            </p>
+          )}
         </div>
       </div>
     </header>

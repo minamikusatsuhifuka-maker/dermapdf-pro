@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { UploadZone } from "@/components/upload/upload-zone";
 import { PageGrid } from "@/components/pdf/page-grid";
@@ -13,6 +13,8 @@ import type { AnalysisType } from "@/components/ai/gemini-panel";
 import { GensparkPanel } from "@/components/ai/genspark-panel";
 import { MessagePanel } from "@/components/ai/message-panel";
 import { WorkflowPanel } from "@/components/workflow/workflow-panel";
+import { AnalysisStockPanel } from "@/components/stock/analysis-stock-panel";
+import { loadAllAnalyses } from "@/lib/analysis-storage";
 import {
   SettingsModal,
   PhilosophyBanner,
@@ -36,8 +38,19 @@ export default function Home() {
   const [fileMime, setFileMime] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
 
+  const [stockCount, setStockCount] = useState(0);
+
   const { settings, save: saveSettings, context: clinicContext } =
     useClinicSettings();
+
+  // ストック件数の更新
+  const refreshStockCount = useCallback(() => {
+    setStockCount(loadAllAnalyses().length);
+  }, []);
+
+  useEffect(() => {
+    refreshStockCount();
+  }, [refreshStockCount]);
 
   const handleFiles = useCallback(async (files: File[]) => {
     const pdf = files.find((f) => f.type === "application/pdf");
@@ -114,8 +127,22 @@ export default function Home() {
         </section>
 
         {/* クイックアクション */}
-        <section>
-          <QuickActions onAction={handleQuickAction} />
+        <section className="space-y-3">
+          <div className="flex items-center gap-3">
+            <QuickActions onAction={handleQuickAction} />
+          </div>
+          {stockCount > 0 && (
+            <button
+              onClick={() =>
+                document
+                  .getElementById("analysis-stock")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+            >
+              保存済み分析 ({stockCount}件) ↓
+            </button>
+          )}
         </section>
 
         {/* プログレス */}
@@ -189,7 +216,10 @@ export default function Home() {
                 fileBase64={fileBase64}
                 fileMime={fileMime}
                 fileName={fileName}
-                onResult={(r) => setAnalysisResult(r)}
+                onResult={(r) => {
+                  setAnalysisResult(r);
+                  setTimeout(refreshStockCount, 500);
+                }}
               />
             </section>
           )}
@@ -211,6 +241,11 @@ export default function Home() {
             </section>
           )}
         </div>
+
+        {/* ストックパネル */}
+        <section>
+          <AnalysisStockPanel />
+        </section>
       </main>
     </div>
   );

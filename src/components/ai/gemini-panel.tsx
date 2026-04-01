@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles } from "lucide-react";
+import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
+import { saveAnalysis } from "@/lib/analysis-storage";
 
 export type AnalysisType =
   // 基本分析
@@ -465,7 +466,7 @@ ${techniqueBlock}
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleCopy}
               className="inline-flex items-center gap-1.5 rounded-lg bg-white/60 px-4 py-2 text-sm font-medium text-gray-600 shadow-sm backdrop-blur-sm hover:bg-white/80"
@@ -477,6 +478,24 @@ ${techniqueBlock}
               className="inline-flex items-center gap-1.5 rounded-lg bg-white/60 px-4 py-2 text-sm font-medium text-gray-600 shadow-sm backdrop-blur-sm hover:bg-white/80"
             >
               <Download className="h-3.5 w-3.5" /> テキスト保存
+            </button>
+            <button
+              onClick={() => {
+                const label = ANALYSIS_GROUPS.flatMap((g) => g.options).find(
+                  (o) => o.value === analysisType
+                )?.label ?? analysisType;
+                saveAnalysis({
+                  fileName: fileName ?? "unknown",
+                  analysisType,
+                  analysisLabel: label,
+                  content: result,
+                  tags: [],
+                });
+                toastOk("ストックに保存しました");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-rose-400 to-purple-400 px-4 py-2 text-sm font-medium text-white shadow-sm"
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" /> ストックに保存
             </button>
           </div>
         </div>
