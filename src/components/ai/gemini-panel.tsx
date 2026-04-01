@@ -210,15 +210,30 @@ export function GeminiPanel({
     setTranscriptionProgress("");
 
     try {
-      // バッチ書き起こし: PDFかつtranscriptionかつ10ページ超
-      const useBatch =
-        analysisType === "transcription" &&
-        isPdf &&
-        pageCount !== null &&
-        pageCount > CHUNK_SIZE;
+      // バッチ書き起こし判定: PDFかつtranscriptionかつページ数取得成功かつ10ページ超
+      const isTranscription = analysisType === "transcription";
+      const effectivePageCount = isPdf && pageCount !== null ? pageCount : 0;
+      const useBatch = isTranscription && isPdf && effectivePageCount > CHUNK_SIZE;
 
-      if (useBatch) {
-        const totalPages = pageCount!;
+      if (isTranscription && isPdf && effectivePageCount <= 0) {
+        // ページ数取得失敗 → 通常処理にフォールバック
+        console.warn("ページ数取得失敗、通常処理で実行します");
+        const basePrompt = ANALYSIS_PROMPTS[analysisType];
+        const fullPrompt = purpose
+          ? `${basePrompt}\n\n目的: ${purpose}`
+          : basePrompt;
+        const data = await analyzeWithGemini(
+          fileBase64,
+          fileMime,
+          fullPrompt,
+          "transcription"
+        );
+        if (!data.success) throw new Error(data.error || "分析に失敗しました");
+        setResult(data.analysis);
+        onResult?.(data.analysis);
+        toastOk("AI分析が完了しました");
+      } else if (useBatch) {
+        const totalPages = effectivePageCount;
         const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
         let fullText = "";
 
@@ -251,12 +266,16 @@ export function GeminiPanel({
 
             fullText += `\n\n${chunkResult.analysis}`;
           } catch (chunkErr) {
-            const msg =
-              chunkErr instanceof Error ? chunkErr.message : "処理エラー";
-            fullText += `\n\n⚠️ P.${startPage + 1}以降の処理でエラーが発生しました: ${msg}`;
+            console.error(`チャンク${i + 1}エラー:`, chunkErr);
+            const errMsg =
+              chunkErr instanceof Error ? chunkErr.message : String(chunkErr);
+            setTranscriptionProgress(
+              `❌ P.${startPage + 1}〜${endPage + 1} でエラー: ${errMsg}`
+            );
+            fullText += `\n\n⚠️ P.${startPage + 1}〜${endPage + 1} の処理でエラーが発生しました。\nエラー内容: ${errMsg}`;
             setResult(fullText.trim());
             onResult?.(fullText.trim());
-            toastError(`一部エラーがありましたが途中結果を表示します`);
+            toastError("一部エラーがありましたが途中結果を表示します");
             return;
           }
         }
@@ -405,7 +424,9 @@ export function GeminiPanel({
             ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します（${pageCount}ページ）。数分かかる場合があります`
             : isPdf && pageCount !== null && pageCount > 10
               ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します。約${Math.ceil(pageCount / CHUNK_SIZE)}〜${Math.ceil(pageCount / CHUNK_SIZE) * 2}分かかります`
-              : "⏱ 処理に30秒〜1分かかる場合があります"}
+              : isPdf && pageCount !== null && pageCount > 0
+                ? `⏱ 処理に30秒〜1分かかる場合があります（${pageCount}ページ）`
+                : "⏱ 処理に30秒〜1分かかる場合があります"}
         </div>
       )}
 
