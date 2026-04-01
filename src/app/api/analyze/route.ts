@@ -1,4 +1,8 @@
+import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 interface AnalyzeRequest {
   base64: string;
@@ -7,29 +11,40 @@ interface AnalyzeRequest {
   prompt: string;
 }
 
-const MAX_SIZE_BYTES = 18 * 1024 * 1024; // 18MB
+const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 
 export async function POST(request: Request) {
   try {
-    const { base64, mime, fileName, prompt } =
-      (await request.json()) as AnalyzeRequest;
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return Response.json(
-        { error: "Gemini APIキーが設定されていません" },
-        { status: 500 }
+    const body = await request.text();
+    const bodySize = new TextEncoder().encode(body).length;
+    if (bodySize > MAX_SIZE_BYTES) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `リクエストサイズが上限（50MB）を超えています: ${(bodySize / 1024 / 1024).toFixed(1)}MB`,
+        },
+        { status: 200 }
       );
     }
 
-    // サイズチェック
+    const { base64, mime, fileName, prompt } = JSON.parse(body) as AnalyzeRequest;
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, error: "Gemini APIキーが設定されていません" },
+        { status: 200 }
+      );
+    }
+
     const sizeBytes = Math.round((base64.length * 3) / 4);
-    if (sizeBytes > MAX_SIZE_BYTES) {
-      return Response.json(
+    if (sizeBytes > 18 * 1024 * 1024) {
+      return NextResponse.json(
         {
+          success: false,
           error: `ファイルサイズが上限（18MB）を超えています: ${(sizeBytes / 1024 / 1024).toFixed(1)}MB（${fileName}）`,
         },
-        { status: 400 }
+        { status: 200 }
       );
     }
 
@@ -59,13 +74,14 @@ export async function POST(request: Request) {
 
     const analysis = response.text ?? "";
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       analysis,
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "AI分析に失敗しました";
-    return Response.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: String(e) },
+      { status: 200 }
+    );
   }
 }

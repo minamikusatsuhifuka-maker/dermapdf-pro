@@ -1,3 +1,8 @@
+import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 interface ExtractRequest {
   base64: string;
   fileName: string;
@@ -11,9 +16,9 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.PDF_CO_API_KEY;
     if (!apiKey) {
-      return Response.json(
-        { error: "PDF.co APIキーが設定されていません" },
-        { status: 500 }
+      return NextResponse.json(
+        { success: false, error: "PDF.co APIキーが設定されていません" },
+        { status: 200 }
       );
     }
 
@@ -42,7 +47,6 @@ export async function POST(request: Request) {
       throw new Error(splitData.message || "ページ抽出に失敗しました");
     }
 
-    // 非同期ジョブの場合はポーリング
     let resultUrl: string;
     if (splitData.jobId) {
       resultUrl = await waitForJob(splitData.jobId, apiKey);
@@ -54,20 +58,20 @@ export async function POST(request: Request) {
       throw new Error("抽出結果のURLを取得できませんでした");
     }
 
-    // 結果をダウンロードしてbase64に変換
     const downloadRes = await fetch(resultUrl);
     const arrayBuffer = await downloadRes.arrayBuffer();
     const resultBase64 = Buffer.from(arrayBuffer).toString("base64");
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       base64: resultBase64,
       fileName: fileName.replace(/\.pdf$/i, `_pages_${pageRange}.pdf`),
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "ページ抽出に失敗しました";
-    return Response.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: String(e) },
+      { status: 200 }
+    );
   }
 }
 

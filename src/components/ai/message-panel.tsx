@@ -66,10 +66,16 @@ export function MessagePanel({
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "生成に失敗しました");
+      let data: { success?: boolean; error?: string; analysis?: string };
+      try {
+        const text = await res.text();
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, error: "サーバーエラーが発生しました" };
+      }
+      if (!data.success && data.error) throw new Error(data.error);
 
-      setResult(data.analysis);
+      setResult(data.analysis ?? "");
       toastOk("メッセージを生成しました");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "生成に失敗しました";

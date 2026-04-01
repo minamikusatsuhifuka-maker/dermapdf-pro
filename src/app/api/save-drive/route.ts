@@ -1,5 +1,9 @@
+import { NextResponse } from "next/server";
 import { google } from "googleapis";
 import { Readable } from "stream";
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 interface SaveDriveRequest {
   base64: string;
@@ -20,9 +24,9 @@ export async function POST(request: Request) {
     );
 
     if (!clientEmail || !privateKey) {
-      return Response.json(
-        { error: "Google Drive認証情報が設定されていません" },
-        { status: 500 }
+      return NextResponse.json(
+        { success: false, error: "Google Drive認証情報が設定されていません" },
+        { status: 200 }
       );
     }
 
@@ -56,17 +60,16 @@ export async function POST(request: Request) {
     const fileId = res.data.id;
     const fileUrl = res.data.webViewLink;
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       fileId,
       fileUrl,
       fileName: res.data.name,
     });
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Google Driveへの保存に失敗しました";
-    return Response.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: String(e) },
+      { status: 200 }
+    );
   }
 }

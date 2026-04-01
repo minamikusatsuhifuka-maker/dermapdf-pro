@@ -1,13 +1,19 @@
+import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const pdfCo = !!process.env.PDF_CO_API_KEY;
     const removeBg = !!process.env.REMOVE_BG_API_KEY;
     const gemini = !!process.env.GEMINI_API_KEY;
 
-    return Response.json({ pdfCo, removeBg, gemini });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "APIキーの確認に失敗しました";
-    return Response.json({ error: message }, { status: 500 });
+    return NextResponse.json({ pdfCo, removeBg, gemini });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: String(e) },
+      { status: 200 }
+    );
   }
 }

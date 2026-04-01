@@ -1,10 +1,14 @@
+import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 interface RemoveBgRequest {
   base64: string;
   mime: string;
   fileName: string;
 }
 
-// HEIC画像をPNGに変換（PDF.co経由）
 async function convertHeicToPng(
   base64: string,
   apiKey: string
@@ -32,7 +36,6 @@ async function convertHeicToPng(
     throw new Error(data.message || "HEIC→PNG変換に失敗しました");
   }
 
-  // 変換結果をダウンロードしてbase64に変換
   const downloadRes = await fetch(data.url);
   const arrayBuffer = await downloadRes.arrayBuffer();
   return Buffer.from(arrayBuffer).toString("base64");
@@ -45,29 +48,27 @@ export async function POST(request: Request) {
 
     const removeBgKey = process.env.REMOVE_BG_API_KEY;
     if (!removeBgKey) {
-      return Response.json(
-        { error: "remove.bg APIキーが設定されていません" },
-        { status: 500 }
+      return NextResponse.json(
+        { success: false, error: "remove.bg APIキーが設定されていません" },
+        { status: 200 }
       );
     }
 
     let imageBase64 = base64;
     let imageMime = mime;
 
-    // HEIC画像の場合はPNGに変換
     if (mime.includes("heic") || mime.includes("heif")) {
       const pdfCoKey = process.env.PDF_CO_API_KEY;
       if (!pdfCoKey) {
-        return Response.json(
-          { error: "HEIC変換にはPDF.co APIキーが必要です" },
-          { status: 500 }
+        return NextResponse.json(
+          { success: false, error: "HEIC変換にはPDF.co APIキーが必要です" },
+          { status: 200 }
         );
       }
       imageBase64 = await convertHeicToPng(base64, pdfCoKey);
       imageMime = "image/png";
     }
 
-    // remove.bg API呼び出し
     const formData = new FormData();
     const imageBuffer = Buffer.from(imageBase64, "base64");
     const blob = new Blob([imageBuffer], { type: imageMime });
@@ -98,20 +99,18 @@ export async function POST(request: Request) {
     const resultBase64 = Buffer.from(resultBuffer).toString("base64");
     const dataUrl = `data:image/png;base64,${resultBase64}`;
 
-    const outputFileName = fileName.replace(
-      /\.[^.]+$/,
-      "_nobg.png"
-    );
+    const outputFileName = fileName.replace(/\.[^.]+$/, "_nobg.png");
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       dataUrl,
       base64: resultBase64,
       fileName: outputFileName,
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "背景除去に失敗しました";
-    return Response.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: String(e) },
+      { status: 200 }
+    );
   }
 }

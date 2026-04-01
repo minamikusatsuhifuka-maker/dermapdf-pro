@@ -1,10 +1,14 @@
+import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 interface CompressRequest {
   base64: string;
   fileName: string;
   quality: number;
 }
 
-// 非同期ジョブのポーリング
 async function waitForAsyncJob(
   jobId: string,
   apiKey: string
@@ -43,15 +47,14 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.PDF_CO_API_KEY;
     if (!apiKey) {
-      return Response.json(
-        { error: "PDF.co APIキーが設定されていません" },
-        { status: 500 }
+      return NextResponse.json(
+        { success: false, error: "PDF.co APIキーが設定されていません" },
+        { status: 200 }
       );
     }
 
     const originalSize = Math.round((base64.length * 3) / 4);
 
-    // v2/pdf/compress を試行
     let resultUrl: string | null = null;
 
     try {
@@ -87,7 +90,6 @@ export async function POST(request: Request) {
       // v2が失敗した場合、v1にフォールバック
     }
 
-    // v1/pdf/optimize フォールバック
     if (!resultUrl) {
       const optimizeRes = await fetch(
         "https://api.pdf.co/v1/pdf/optimize",
@@ -129,22 +131,22 @@ export async function POST(request: Request) {
       throw new Error("圧縮結果のURLを取得できませんでした");
     }
 
-    // 結果をダウンロードしてbase64に変換
     const downloadRes = await fetch(resultUrl);
     const arrayBuffer = await downloadRes.arrayBuffer();
     const resultBase64 = Buffer.from(arrayBuffer).toString("base64");
     const compressedSize = arrayBuffer.byteLength;
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       base64: resultBase64,
       fileName: fileName.replace(/\.pdf$/i, "_compressed.pdf"),
       originalSize,
       compressedSize,
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "PDF圧縮に失敗しました";
-    return Response.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: String(e) },
+      { status: 200 }
+    );
   }
 }
