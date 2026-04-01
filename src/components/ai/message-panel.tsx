@@ -4,6 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { MessageSquare, Copy, Loader2 } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
+import { analyzeWithGemini } from "@/lib/gemini-client";
 
 type MessageType = "patient" | "staff" | "recruit" | "sns" | "dm";
 
@@ -55,27 +56,10 @@ export function MessagePanel({
         prompt = `クリニック理念: ${clinicContext}\n\n${prompt}`;
       }
 
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          base64: fileBase64,
-          mime: fileMime,
-          fileName,
-          prompt,
-        }),
-      });
+      const data = await analyzeWithGemini(fileBase64, fileMime, prompt);
+      if (!data.success) throw new Error(data.error || "生成に失敗しました");
 
-      let data: { success?: boolean; error?: string; analysis?: string };
-      try {
-        const text = await res.text();
-        data = JSON.parse(text);
-      } catch {
-        data = { success: false, error: "サーバーエラーが発生しました" };
-      }
-      if (!data.success && data.error) throw new Error(data.error);
-
-      setResult(data.analysis ?? "");
+      setResult(data.analysis);
       toastOk("メッセージを生成しました");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "生成に失敗しました";

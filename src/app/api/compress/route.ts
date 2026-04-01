@@ -42,8 +42,9 @@ async function waitForAsyncJob(
 
 export async function POST(request: Request) {
   try {
-    const { base64, fileName, quality } =
-      (await request.json()) as CompressRequest;
+    const arrayBuffer = await request.arrayBuffer();
+    const text = new TextDecoder().decode(arrayBuffer);
+    const { base64, fileName, quality } = JSON.parse(text) as CompressRequest;
 
     const apiKey = process.env.PDF_CO_API_KEY;
     if (!apiKey) {
@@ -132,9 +133,9 @@ export async function POST(request: Request) {
     }
 
     const downloadRes = await fetch(resultUrl);
-    const arrayBuffer = await downloadRes.arrayBuffer();
-    const resultBase64 = Buffer.from(arrayBuffer).toString("base64");
-    const compressedSize = arrayBuffer.byteLength;
+    const downloadBuffer = await downloadRes.arrayBuffer();
+    const resultBase64 = Buffer.from(downloadBuffer).toString("base64");
+    const compressedSize = downloadBuffer.byteLength;
 
     return NextResponse.json({
       success: true,

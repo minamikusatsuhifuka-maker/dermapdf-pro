@@ -4,6 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { BrainCircuit, Copy, Download, Loader2 } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
+import { analyzeWithGemini } from "@/lib/gemini-client";
 
 export type AnalysisType =
   | "summary"
@@ -97,28 +98,11 @@ export function GeminiPanel({
         ? `${basePrompt}\n\n目的: ${purpose}`
         : basePrompt;
 
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          base64: fileBase64,
-          mime: fileMime,
-          fileName,
-          prompt: fullPrompt,
-        }),
-      });
+      const data = await analyzeWithGemini(fileBase64, fileMime, fullPrompt);
+      if (!data.success) throw new Error(data.error || "分析に失敗しました");
 
-      let data: { success?: boolean; error?: string; analysis?: string };
-      try {
-        const text = await res.text();
-        data = JSON.parse(text);
-      } catch {
-        data = { success: false, error: "サーバーエラーが発生しました" };
-      }
-      if (!data.success && data.error) throw new Error(data.error);
-
-      setResult(data.analysis ?? "");
-      onResult?.(data.analysis ?? "");
+      setResult(data.analysis);
+      onResult?.(data.analysis);
       toastOk("AI分析が完了しました");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "分析に失敗しました";
