@@ -50,6 +50,12 @@ export default function Home() {
 
   useEffect(() => {
     refreshStockCount();
+    window.addEventListener("storage", refreshStockCount);
+    window.addEventListener("analysisStockUpdated", refreshStockCount);
+    return () => {
+      window.removeEventListener("storage", refreshStockCount);
+      window.removeEventListener("analysisStockUpdated", refreshStockCount);
+    };
   }, [refreshStockCount]);
 
   const handleFiles = useCallback(async (files: File[]) => {
@@ -216,10 +222,7 @@ export default function Home() {
                 fileBase64={fileBase64}
                 fileMime={fileMime}
                 fileName={fileName}
-                onResult={(r) => {
-                  setAnalysisResult(r);
-                  setTimeout(refreshStockCount, 500);
-                }}
+                onResult={(r) => setAnalysisResult(r)}
               />
             </section>
           )}

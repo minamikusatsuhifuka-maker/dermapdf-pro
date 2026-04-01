@@ -24,6 +24,16 @@ export function AnalysisStockPanel() {
 
   useEffect(() => {
     reload();
+    window.addEventListener("storage", reload);
+    window.addEventListener("analysisStockUpdated", reload);
+    return () => {
+      window.removeEventListener("storage", reload);
+      window.removeEventListener("analysisStockUpdated", reload);
+    };
+  }, [reload]);
+
+  useEffect(() => {
+    reload();
   }, [reload]);
 
   const filtered = search

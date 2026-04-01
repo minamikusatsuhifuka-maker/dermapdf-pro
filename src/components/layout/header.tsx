@@ -104,13 +104,13 @@ export function Header({ apiStatus }: HeaderProps) {
 
           {/* モデルアップデートアラート */}
           {modelCheck?.hasNewer && (
-            <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               <span>⚡</span>
               <span>
-                新しいGeminiモデルが利用可能です：
+                より新しいGeminiモデルが利用可能です（現在: {CURRENT_MODEL}）：
                 <strong>{modelCheck.newerModels.join(", ")}</strong>
               </span>
-              <span className="text-amber-600">（設定から変更できます）</span>
+              <span className="text-amber-600">※ preview版は有料のみ。現在のgemini-2.5-proは安定・無料枠あり。</span>
               <button
                 onClick={handleForceCheck}
                 className="ml-auto text-amber-600 underline"

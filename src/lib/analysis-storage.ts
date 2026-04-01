@@ -22,6 +22,7 @@ export function saveAnalysis(
   records.unshift(newRecord);
   const trimmed = records.slice(0, 100);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  window.dispatchEvent(new Event("analysisStockUpdated"));
   return newRecord;
 }
 
