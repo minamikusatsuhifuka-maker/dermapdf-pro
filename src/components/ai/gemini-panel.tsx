@@ -8,6 +8,7 @@ import { analyzeWithGemini } from "@/lib/gemini-client";
 
 export type AnalysisType =
   | "summary"
+  | "detail_summary"
   | "findings"
   | "ingredients"
   | "care"
@@ -27,6 +28,7 @@ export type AnalysisType =
 
 const ANALYSIS_LABELS: Record<AnalysisType, string> = {
   summary: "概要・要約",
+  detail_summary: "詳細にまとめる",
   findings: "所見まとめ",
   ingredients: "成分分析",
   care: "ケアプラン",
@@ -47,6 +49,26 @@ const ANALYSIS_LABELS: Record<AnalysisType, string> = {
 
 const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
   summary: "この文書の内容を日本語で簡潔に要約してください。",
+  detail_summary: `この資料の内容を、通常の要約よりも細部まで丁寧に読み取り、詳細にまとめてください。
+表面的なキーワードだけでなく、文脈・背景・ニュアンス・行間の意図まで汲み取り、
+以下の形式で出力してください。
+
+## 全体の概要
+（資料全体を3〜5文で説明）
+
+## 主要テーマと詳細内容
+（各セクション・章ごとに、見出しと詳細な説明を箇条書きで記載）
+
+## 重要なポイント・数値・固有名詞
+（見逃してはいけない具体的な情報を列挙）
+
+## 読み取れる背景・意図・示唆
+（明示されていないが文脈から読み取れる意図や示唆）
+
+## まとめと活用提案
+（この資料をどう活用できるか、具体的な提案）
+
+省略せず、資料の細部まで丁寧に反映してください。`,
   findings: "この文書に含まれる医学的所見をまとめてください。",
   ingredients: "この文書に記載されている成分・薬剤を分析してください。",
   care: "この文書に基づいたケアプランを日本語で作成してください。",
