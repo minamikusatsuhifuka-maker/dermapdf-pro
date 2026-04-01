@@ -302,7 +302,7 @@ Gensparkへの入力プロンプトとして、以下を含めてください：
   const handleGsCopyAndOpen = async () => {
     await navigator.clipboard.writeText(gsPrompt);
     toastOk("コピーしました。Gensparkを開きます...");
-    window.open("https://www.genspark.ai", "_blank");
+    window.open("https://www.genspark.ai/ai_slides?tab=explore", "_blank");
   };
 
   const handleGsCopyOnly = async () => {
@@ -498,6 +498,14 @@ Gensparkへの入力プロンプトとして、以下を含めてください：
                 >
                   <Copy className="h-3.5 w-3.5" /> コピーのみ
                 </button>
+                <a
+                  href="https://www.genspark.ai/ai_slides?tab=explore"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  Gensparkで資料作成
+                </a>
               </div>
             </div>
           )}

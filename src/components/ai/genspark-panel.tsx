@@ -126,13 +126,23 @@ export function GensparkPanel({
             rows={8}
             className="w-full rounded-xl border border-gray-200 bg-white/80 px-4 py-3 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
           />
-          <button
-            onClick={handleCopyAndOpen}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 px-6 py-3 text-sm font-bold text-white shadow-lg"
-          >
-            <Copy className="h-4 w-4" /> Gensparkにコピー
-            <ExternalLink className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCopyAndOpen}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 px-6 py-3 text-sm font-bold text-white shadow-lg"
+            >
+              <Copy className="h-4 w-4" /> Gensparkにコピー
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+            <a
+              href="https://www.genspark.ai/ai_slides?tab=explore"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Gensparkで資料作成
+            </a>
+          </div>
         </div>
       )}
     </div>

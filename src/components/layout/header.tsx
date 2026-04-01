@@ -51,10 +51,20 @@ export function Header({ apiStatus }: HeaderProps) {
                 皮膚科・美容皮膚科クリニック向け 統合ツールキット
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusBadge label="PDF.co" active={status.pdfCo} />
               <StatusBadge label="remove.bg" active={status.removeBg} />
               <StatusBadge label="Gemini AI" active={status.gemini} />
+              <a
+                href="https://www.genspark.ai/ai_slides?tab=explore"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+              >
+                <span>✨</span>
+                <span>Gensparkで資料作成</span>
+                <span>→</span>
+              </a>
             </div>
           </div>
         </div>
