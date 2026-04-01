@@ -9,6 +9,8 @@ import {
   clearAllAnalyses,
   exportAnalysesAsJSON,
   exportAnalysesAsText,
+  updateAnalysisTitle,
+  getDisplayTitle,
   type AnalysisRecord,
 } from "@/lib/analysis-storage";
 import {
@@ -184,6 +186,7 @@ export function AnalysisStockPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeGensparkId, setActiveGensparkId] = useState<string | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     setRecords(loadAllAnalyses());
@@ -202,6 +205,7 @@ export function AnalysisStockPanel() {
   const filtered = search
     ? records.filter(
         (r) =>
+          getDisplayTitle(r).toLowerCase().includes(search.toLowerCase()) ||
           r.fileName.toLowerCase().includes(search.toLowerCase()) ||
           r.content.toLowerCase().includes(search.toLowerCase()) ||
           r.analysisLabel.toLowerCase().includes(search.toLowerCase())
@@ -312,9 +316,39 @@ export function AnalysisStockPanel() {
                   <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
                     {r.analysisLabel}
                   </span>
-                  <span className="flex-1 truncate text-sm font-medium text-gray-700">
-                    {r.fileName}
-                  </span>
+                  {editingId === r.id ? (
+                    <input
+                      type="text"
+                      defaultValue={getDisplayTitle(r)}
+                      autoFocus
+                      placeholder={r.fileName}
+                      className="flex-1 text-sm font-semibold border-b border-purple-400 outline-none bg-transparent w-full max-w-xs"
+                      onBlur={(e) => {
+                        updateAnalysisTitle(r.id, e.target.value);
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          updateAnalysisTitle(r.id, e.currentTarget.value);
+                          setEditingId(null);
+                        }
+                        if (e.key === "Escape") {
+                          setEditingId(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="flex-1 truncate text-sm font-medium text-gray-700">
+                      {getDisplayTitle(r)}
+                      <button
+                        onClick={() => setEditingId(r.id)}
+                        className="ml-1 text-gray-400 hover:text-purple-500 transition-colors"
+                        title="タイトルを編集"
+                      >
+                        ✏️
+                      </button>
+                    </span>
+                  )}
                   <span className="text-xs text-gray-400">
                     {new Date(r.createdAt).toLocaleString("ja-JP")}
                   </span>

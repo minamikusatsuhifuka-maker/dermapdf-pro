@@ -6,6 +6,7 @@ export interface AnalysisRecord {
   analysisLabel: string;
   content: string;
   tags: string[];
+  title?: string;
 }
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
@@ -32,6 +33,20 @@ export function loadAllAnalyses(): AnalysisRecord[] {
   } catch {
     return [];
   }
+}
+
+export function updateAnalysisTitle(id: string, title: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    records[idx].title = title;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+export function getDisplayTitle(record: AnalysisRecord): string {
+  return record.title || record.fileName;
 }
 
 export function deleteAnalysis(id: string): void {
