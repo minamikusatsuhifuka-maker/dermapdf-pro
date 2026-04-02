@@ -20,6 +20,10 @@ export interface ClinicSettings {
   vision: string;
   values: string;
   slogan: string;
+  // アチーブメント哲学
+  choiceTheoryEnabled: boolean;
+  priorityNeeds: string[];
+  developmentPolicy: string;
 }
 
 const DEFAULT_SETTINGS: ClinicSettings = {
@@ -29,7 +33,43 @@ const DEFAULT_SETTINGS: ClinicSettings = {
   vision: "",
   values: "",
   slogan: "",
+  choiceTheoryEnabled: false,
+  priorityNeeds: [],
+  developmentPolicy: "",
 };
+
+const NEED_OPTIONS = [
+  { value: "生存", label: "生存の欲求" },
+  { value: "愛・所属", label: "愛・所属の欲求" },
+  { value: "力・承認", label: "力・承認の欲求" },
+  { value: "自由", label: "自由の欲求" },
+  { value: "楽しみ", label: "楽しみの欲求" },
+];
+
+export function buildPhilosophyContext(settings: ClinicSettings): string {
+  const parts: string[] = [];
+  if (settings.clinicName) parts.push(`【クリニック名】${settings.clinicName}`);
+  if (settings.purpose) parts.push(`【経営理念・パーパス】${settings.purpose}`);
+  if (settings.mission) parts.push(`【ミッション】${settings.mission}`);
+  if (settings.vision) parts.push(`【ビジョン】${settings.vision}`);
+  if (settings.values) parts.push(`【バリュー】${settings.values}`);
+  if (settings.slogan) parts.push(`【スローガン】${settings.slogan}`);
+  if (settings.choiceTheoryEnabled) {
+    parts.push("【選択理論活用】有効");
+    if (settings.priorityNeeds.length > 0) {
+      parts.push(`【重視する欲求】${settings.priorityNeeds.join("・")}`);
+    }
+  }
+  if (settings.developmentPolicy) {
+    parts.push(`【育成方針】${settings.developmentPolicy}`);
+  }
+  if (parts.length === 0) return "";
+  return (
+    "\n\n━━━━━━━━━━━━━━━━━━━━━━━━\n【クリニック理念コンテキスト】\n以下の理念・哲学と一致した内容・言葉遣いで出力してください。\n" +
+    parts.join("\n") +
+    "\n━━━━━━━━━━━━━━━━━━━━━━━━"
+  );
+}
 
 export function useClinicSettings() {
   const [settings, setSettings] = useState<ClinicSettings>(DEFAULT_SETTINGS);
@@ -76,6 +116,15 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleToggleNeed = (need: string) => {
+    setForm((prev) => ({
+      ...prev,
+      priorityNeeds: prev.priorityNeeds.includes(need)
+        ? prev.priorityNeeds.filter((n) => n !== need)
+        : [...prev.priorityNeeds, need],
+    }));
+  };
+
   const handleSave = () => {
     onSave(form);
     toastOk("設定を保存しました");
@@ -90,6 +139,9 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
     { key: "values", label: "バリュー", multiline: true },
     { key: "slogan", label: "スローガン" },
   ];
+
+  const inputClass =
+    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -113,21 +165,70 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
               </label>
               {multiline ? (
                 <textarea
-                  value={form[key]}
+                  value={form[key] as string}
                   onChange={(e) => handleChange(key, e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  className={inputClass}
                 />
               ) : (
                 <input
                   type="text"
-                  value={form[key]}
+                  value={form[key] as string}
                   onChange={(e) => handleChange(key, e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  className={inputClass}
                 />
               )}
             </div>
           ))}
+        </div>
+
+        {/* アチーブメント哲学セクション */}
+        <div className="space-y-4 border-t border-gray-200 pt-4">
+          <h3 className="text-sm font-bold text-gray-700">アチーブメント哲学</h3>
+
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-600">選択理論活用</label>
+            <button
+              type="button"
+              onClick={() => setForm((prev) => ({ ...prev, choiceTheoryEnabled: !prev.choiceTheoryEnabled }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.choiceTheoryEnabled ? "bg-purple-500" : "bg-gray-300"}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.choiceTheoryEnabled ? "translate-x-6" : "translate-x-1"}`}
+              />
+            </button>
+            <span className="text-xs text-gray-400">{form.choiceTheoryEnabled ? "ON" : "OFF"}</span>
+          </div>
+
+          {form.choiceTheoryEnabled && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-600">重視する欲求</label>
+              <div className="flex flex-wrap gap-2">
+                {NEED_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="inline-flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.priorityNeeds.includes(opt.value)}
+                      onChange={() => handleToggleNeed(opt.value)}
+                      className="rounded border-gray-300 text-purple-500 focus:ring-purple-300"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-600">育成方針メモ</label>
+            <textarea
+              value={form.developmentPolicy}
+              onChange={(e) => setForm((prev) => ({ ...prev, developmentPolicy: e.target.value }))}
+              placeholder="例：リードマネジメントを土台とした内発的動機重視"
+              rows={3}
+              className={inputClass}
+            />
+          </div>
         </div>
 
         <button

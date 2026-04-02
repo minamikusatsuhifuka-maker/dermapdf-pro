@@ -6,6 +6,7 @@ export interface AnalysisRecord {
   analysisLabel: string;
   content: string;
   tags: string[];
+  folder: string;
   title?: string;
 }
 
@@ -69,6 +70,29 @@ export function exportAnalysesAsJSON(): void {
   a.download = `dermapdf_analyses_${new Date().toISOString().split("T")[0]}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function updateAnalysisTags(id: string, tags: string[], folder: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    records[idx].tags = tags;
+    records[idx].folder = folder;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+export function getAllFolders(): string[] {
+  const records = loadAllAnalyses();
+  const folders = new Set(records.map((r) => r.folder).filter(Boolean));
+  return Array.from(folders);
+}
+
+export function getAllTags(): string[] {
+  const records = loadAllAnalyses();
+  const tags = new Set(records.flatMap((r) => r.tags || []));
+  return Array.from(tags);
 }
 
 export function exportAnalysesAsText(): void {

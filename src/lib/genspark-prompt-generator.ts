@@ -36,6 +36,15 @@ export const TONE_OPTIONS = [
   { value: "visual", label: "ビジュアル重視（図解・イラスト）" },
 ];
 
+export const LM_ANALYSIS_OPTIONS = [
+  { value: "lm_five_needs", label: "5つの基本的欲求で分析" },
+  { value: "lm_quality_world", label: "上質世界との紐付け分析" },
+  { value: "lm_1on1", label: "1on1面談アジェンダ作成" },
+  { value: "lm_goal_setting", label: "内発的動機型目標設定支援" },
+  { value: "lm_feedback", label: "リードマネジメント型フィードバック" },
+  { value: "lm_risk_prevention", label: "離職・メンタルリスク予防分析" },
+];
+
 export function getLabel(
   options: { value: string; label: string }[],
   value: string

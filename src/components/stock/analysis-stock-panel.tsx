@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2 } from "lucide-react";
+import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   loadAllAnalyses,
@@ -10,6 +10,7 @@ import {
   exportAnalysesAsJSON,
   exportAnalysesAsText,
   updateAnalysisTitle,
+  updateAnalysisTags,
   getDisplayTitle,
   type AnalysisRecord,
 } from "@/lib/analysis-storage";
@@ -24,6 +25,104 @@ import {
 
 const selectClass =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
+
+const DEFAULT_FOLDERS = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
+
+function TagFolderEditor({
+  record,
+  allFolders,
+  onSave,
+  onClose,
+}: {
+  record: AnalysisRecord;
+  allFolders: string[];
+  onSave: (tags: string[], folder: string) => void;
+  onClose: () => void;
+}) {
+  const [folder, setFolder] = useState(record.folder || "");
+  const [tags, setTags] = useState<string[]>(record.tags || []);
+  const [tagInput, setTagInput] = useState("");
+
+  const folderOptions = Array.from(new Set([...DEFAULT_FOLDERS, ...allFolders]));
+
+  const addTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      setTags([...tags, trimmed]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (t: string) => {
+    setTags(tags.filter((tag) => tag !== t));
+  };
+
+  return (
+    <div className="space-y-3 border-t border-gray-100 bg-gray-50/50 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <h4 className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+          <Tag className="h-3.5 w-3.5" /> タグ・フォルダ編集
+        </h4>
+        <button onClick={onClose} className="rounded p-1 hover:bg-gray-200">
+          <X className="h-3 w-3 text-gray-400" />
+        </button>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-gray-500">フォルダ</label>
+        <select
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          className={selectClass}
+        >
+          <option value="">未分類</option>
+          {folderOptions.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-gray-500">タグ</label>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {tags.map((t) => (
+            <span key={t} className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+              {t}
+              <button onClick={() => removeTag(t)} className="hover:text-red-500">
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); addTag(); }
+            }}
+            placeholder="タグを入力（Enterで追加）"
+            className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+          />
+          <button
+            onClick={addTag}
+            className="rounded-lg bg-purple-100 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-200"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={() => onSave(tags, folder)}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-rose-400 to-purple-400 px-3 py-2 text-xs font-bold text-white shadow-sm"
+      >
+        <Save className="h-3 w-3" /> 保存
+      </button>
+    </div>
+  );
+}
 
 function InlineGensparkPanel({
   record,
@@ -187,9 +286,19 @@ export function AnalysisStockPanel() {
   const [activeGensparkId, setActiveGensparkId] = useState<string | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [editingTagId, setEditingTagId] = useState<string | null>(null);
+  const [customFolders, setCustomFolders] = useState<string[]>([]);
+  const [showAddFolder, setShowAddFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   const reload = useCallback(() => {
-    setRecords(loadAllAnalyses());
+    const all = loadAllAnalyses();
+    setRecords(all);
+    // カスタムフォルダを収集
+    const existingFolders = new Set(all.map((r) => r.folder).filter(Boolean));
+    const custom = Array.from(existingFolders).filter((f) => !DEFAULT_FOLDERS.includes(f));
+    setCustomFolders(custom);
   }, []);
 
   useEffect(() => {
@@ -202,15 +311,35 @@ export function AnalysisStockPanel() {
     };
   }, [reload]);
 
-  const filtered = search
-    ? records.filter(
-        (r) =>
-          getDisplayTitle(r).toLowerCase().includes(search.toLowerCase()) ||
-          r.fileName.toLowerCase().includes(search.toLowerCase()) ||
-          r.content.toLowerCase().includes(search.toLowerCase()) ||
-          r.analysisLabel.toLowerCase().includes(search.toLowerCase())
-      )
+  const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
+
+  // フォルダフィルタ + 検索フィルタ
+  const folderFiltered = activeFolder
+    ? records.filter((r) => r.folder === activeFolder)
     : records;
+
+  const filtered = search
+    ? folderFiltered.filter((r) => {
+        const q = search.toLowerCase();
+        return (
+          getDisplayTitle(r).toLowerCase().includes(q) ||
+          r.fileName.toLowerCase().includes(q) ||
+          r.content.toLowerCase().includes(q) ||
+          r.analysisLabel.toLowerCase().includes(q) ||
+          (r.folder || "").toLowerCase().includes(q) ||
+          (r.tags || []).some((t) => t.toLowerCase().includes(q))
+        );
+      })
+    : folderFiltered;
+
+  const handleAddFolder = () => {
+    const trimmed = newFolderName.trim();
+    if (trimmed && !allFolders.includes(trimmed)) {
+      setCustomFolders((prev) => [...prev, trimmed]);
+    }
+    setNewFolderName("");
+    setShowAddFolder(false);
+  };
 
   const handleDelete = (id: string) => {
     deleteAnalysis(id);
@@ -283,6 +412,56 @@ export function AnalysisStockPanel() {
         </div>
       </div>
 
+      {/* フォルダタブ */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          onClick={() => setActiveFolder(null)}
+          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            activeFolder === null
+              ? "bg-purple-500 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <FolderOpen className="mr-1 inline h-3 w-3" />
+          すべて
+        </button>
+        {allFolders.map((f) => (
+          <button
+            key={f}
+            onClick={() => setActiveFolder(activeFolder === f ? null : f)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeFolder === f
+                ? "bg-purple-500 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+        {showAddFolder ? (
+          <div className="inline-flex items-center gap-1">
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddFolder(); if (e.key === "Escape") setShowAddFolder(false); }}
+              placeholder="フォルダ名"
+              autoFocus
+              className="w-24 rounded-full border border-gray-200 px-2 py-1 text-xs focus:border-purple-300 focus:outline-none"
+            />
+            <button onClick={handleAddFolder} className="rounded-full bg-purple-100 px-2 py-1 text-xs text-purple-700 hover:bg-purple-200">追加</button>
+            <button onClick={() => setShowAddFolder(false)} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowAddFolder(true)}
+            className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-purple-300 hover:text-purple-500"
+          >
+            <Plus className="mr-0.5 inline h-3 w-3" /> フォルダ追加
+          </button>
+        )}
+      </div>
+
       {/* 検索 */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -290,7 +469,7 @@ export function AnalysisStockPanel() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="ファイル名・内容・分析タイプで検索..."
+          placeholder="ファイル名・内容・分析タイプ・タグ・フォルダで検索..."
           className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
         />
       </div>
@@ -316,6 +495,12 @@ export function AnalysisStockPanel() {
                   <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
                     {r.analysisLabel}
                   </span>
+                  {r.folder && (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                      <FolderOpen className="mr-0.5 inline h-2.5 w-2.5" />
+                      {r.folder}
+                    </span>
+                  )}
                   {editingId === r.id ? (
                     <input
                       type="text"
@@ -353,6 +538,13 @@ export function AnalysisStockPanel() {
                     {new Date(r.createdAt).toLocaleString("ja-JP")}
                   </span>
                   <button
+                    onClick={() => setEditingTagId(editingTagId === r.id ? null : r.id)}
+                    className="rounded p-1 hover:bg-gray-100"
+                    title="タグ・フォルダ編集"
+                  >
+                    <Tag className="h-3.5 w-3.5 text-gray-400" />
+                  </button>
+                  <button
                     onClick={() =>
                       setActiveGensparkId(isGensparkActive ? null : r.id)
                     }
@@ -386,7 +578,18 @@ export function AnalysisStockPanel() {
                   </button>
                 </div>
 
-                {!isExpanded && !isGensparkActive && (
+                {/* タグバッジ表示 */}
+                {(r.tags || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-4 pb-1">
+                    {r.tags.map((t) => (
+                      <span key={t} className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {!isExpanded && !isGensparkActive && editingTagId !== r.id && (
                   <p className="truncate px-4 pb-3 text-xs text-gray-500">
                     {r.content.slice(0, 100)}...
                   </p>
@@ -398,6 +601,20 @@ export function AnalysisStockPanel() {
                       {r.content}
                     </pre>
                   </div>
+                )}
+
+                {editingTagId === r.id && (
+                  <TagFolderEditor
+                    record={r}
+                    allFolders={allFolders}
+                    onSave={(tags, folder) => {
+                      updateAnalysisTags(r.id, tags, folder);
+                      setEditingTagId(null);
+                      reload();
+                      toastOk("タグ・フォルダを保存しました");
+                    }}
+                    onClose={() => setEditingTagId(null)}
+                  />
                 )}
 
                 {isGensparkActive && (

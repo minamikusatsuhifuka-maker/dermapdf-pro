@@ -7,6 +7,7 @@ import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
 import { splitPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
+import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
 import {
   TARGET_OPTIONS,
   LEVEL_OPTIONS,
@@ -41,7 +42,14 @@ export type AnalysisType =
   | "training_roleplay"
   | "training_ojt"
   | "staff_guidance"
-  | "goal_cheer";
+  | "goal_cheer"
+  // リードマネジメント
+  | "lm_five_needs"
+  | "lm_quality_world"
+  | "lm_1on1"
+  | "lm_goal_setting"
+  | "lm_feedback"
+  | "lm_risk_prevention";
 
 interface AnalysisOption {
   value: AnalysisType;
@@ -93,6 +101,17 @@ const ANALYSIS_GROUPS: AnalysisGroup[] = [
       { value: "training_ojt", label: "OJT計画書作成" },
       { value: "staff_guidance", label: "スタッフ指導メモ" },
       { value: "goal_cheer", label: "目標応援メッセージ" },
+    ],
+  },
+  {
+    label: "\u{1F331} リードマネジメント（選択理論）",
+    options: [
+      { value: "lm_five_needs", label: "5つの基本的欲求で分析" },
+      { value: "lm_quality_world", label: "上質世界との紐付け分析" },
+      { value: "lm_1on1", label: "1on1面談アジェンダ作成" },
+      { value: "lm_goal_setting", label: "内発的動機型目標設定支援" },
+      { value: "lm_feedback", label: "リードマネジメント型フィードバック" },
+      { value: "lm_risk_prevention", label: "離職・メンタルリスク予防分析" },
     ],
   },
 ];
@@ -153,6 +172,20 @@ const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
     "この資料をもとに、管理職がスタッフ指導に使えるメモを作成してください。【指導のポイント】【よくある失敗パターンと対処法】【褒めるべき行動の具体例】【改善を促す言葉かけの例文】の形式で出力してください。",
   goal_cheer:
     "この資料の内容をもとに、スタッフへの目標応援・モチベーションアップのメッセージを作成してください。個人の成長を承認し、チームの目標達成に向けた前向きなメッセージを複数パターン出力してください。",
+
+  // リードマネジメント（選択理論）
+  lm_five_needs:
+    "この資料の内容を、選択理論心理学の「5つの基本的欲求」の観点から分析してください。\n\n## 生存の欲求への影響・活用\n## 愛・所属の欲求への影響・活用\n## 力・承認の欲求への影響・活用\n## 自由の欲求への影響・活用\n## 楽しみの欲求への影響・活用\n\n各欲求について、この資料がスタッフや組織にどう作用するか、リードマネジメント的にどう活用できるかを具体的に記述してください。",
+  lm_quality_world:
+    "この資料の内容を「上質世界（Quality World）」の概念で分析してください。\n\n## スタッフの上質世界に訴えるポイント\n## 上質世界と業務目標を一致させる方法\n## 承認・承認が生まれる場面の抽出\n## リードマネジメント的な関わり方の提案\n\nボスマネジメントではなく、スタッフ自身の内発的動機を引き出す視点で分析してください。",
+  lm_1on1:
+    "この資料をもとに、リードマネジメント型の1on1面談アジェンダを作成してください。\n\n【面談の原則】\n・強制・批判・脅し・文句・罰・褒賞でコントロールしない\n・傾聴・支援・励ます・尊敬・信頼・受容・意見の違いを交渉するの7つを使う\n\n## アイスブレイク（承認・ねぎらいの言葉）\n## 前回からの振り返り（気づきを問う）\n## 今回のテーマ（本人が話したいことを優先）\n## リードマネジメント的な問いかけ5選\n## 次回までのアクション（本人が決める）\n\n問いかけは「〜すべき」ではなく「〜はどう思いますか？」「〜するとしたら何から始めますか？」形式で作成してください。",
+  lm_goal_setting:
+    "この資料をもとに、スタッフが内発的動機から目標を設定できるよう支援するシートを作成してください。\n\n## なぜこの目標が自分にとって大切か（上質世界との接続）\n## 達成した時にどんな自分になっているか（ビジョン）\n## 具体的な行動目標（SMARTゴール形式）\n## 周囲のサポートで欲しいこと\n## 自己評価の基準\n\n外部からの強制ではなく、本人の「やりたい」から生まれる目標設定を促してください。",
+  lm_feedback:
+    "この資料の内容をもとに、管理職がスタッフに伝えるリードマネジメント型フィードバック文を作成してください。\n\n【フィードバックの原則】\n・事実ベースで伝える（批判・評価ではなく観察）\n・Iメッセージで伝える（「あなたは〜」ではなく「私は〜と感じた」）\n・相手の上質世界を尊重する\n・改善を強制せず、気づきを促す\n\n## 承認・ねぎらいのフィードバック例文（3パターン）\n## 改善を促すリードマネジメント的な問いかけ例文（3パターン）\n## 目標達成を支援する関わり方の提案",
+  lm_risk_prevention:
+    "この資料をもとに、スタッフの離職リスク・メンタルヘルスリスクの予防策を選択理論の観点から分析してください。\n\n## 欲求充足度の観点から見たリスク要因\n## 上質世界が満たされていないサインの見つけ方\n## リードマネジメント的な早期介入の方法\n## 心理的安全性を高める職場環境の提案\n## 管理職向けの具体的な声かけ・関わり方\n\n「問題が起きてから対処する」ではなく「予防する」視点で分析してください。",
 };
 
 interface GeminiPanelProps {
@@ -160,6 +193,7 @@ interface GeminiPanelProps {
   fileMime?: string;
   fileName?: string;
   onResult?: (result: string) => void;
+  clinicSettings?: ClinicSettings;
 }
 
 // TARGET_OPTIONS, LEVEL_OPTIONS, PURPOSE_OPTIONS, TONE_OPTIONS, getTechniqueFlags
@@ -170,7 +204,10 @@ export function GeminiPanel({
   fileMime,
   fileName,
   onResult,
+  clinicSettings,
 }: GeminiPanelProps) {
+  // 理念コンテキストを構築
+  const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
   const [analysisType, setAnalysisType] = useState<AnalysisType>("summary");
   const [purpose, setPurpose] = useState("");
   const [result, setResult] = useState("");
@@ -219,9 +256,9 @@ export function GeminiPanel({
         // ページ数取得失敗 → 通常処理にフォールバック
         console.warn("ページ数取得失敗、通常処理で実行します");
         const basePrompt = ANALYSIS_PROMPTS[analysisType];
-        const fullPrompt = purpose
+        const fullPrompt = (purpose
           ? `${basePrompt}\n\n目的: ${purpose}`
-          : basePrompt;
+          : basePrompt) + philosophyContext;
         const data = await analyzeWithGemini(
           fileBase64,
           fileMime,
@@ -291,9 +328,9 @@ export function GeminiPanel({
       } else {
         // 通常の分析（画像、10ページ以下のPDF、transcription以外）
         const basePrompt = ANALYSIS_PROMPTS[analysisType];
-        const fullPrompt = purpose
+        const fullPrompt = (purpose
           ? `${basePrompt}\n\n目的: ${purpose}`
-          : basePrompt;
+          : basePrompt) + philosophyContext;
 
         const data = await analyzeWithGemini(
           fileBase64,
@@ -490,6 +527,7 @@ export function GeminiPanel({
                   analysisLabel: label,
                   content: result,
                   tags: [],
+                  folder: "",
                 });
                 toastOk("ストックに保存しました");
               }}

@@ -223,6 +223,7 @@ export default function Home() {
                 fileMime={fileMime}
                 fileName={fileName}
                 onResult={(r) => setAnalysisResult(r)}
+                clinicSettings={settings}
               />
             </section>
           )}
