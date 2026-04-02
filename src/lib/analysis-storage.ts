@@ -53,6 +53,25 @@ export function getDisplayTitle(record: AnalysisRecord): string {
 export function deleteAnalysis(id: string): void {
   const records = loadAllAnalyses().filter((r) => r.id !== id);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  window.dispatchEvent(new Event("analysisStockUpdated"));
+}
+
+export function renameFolder(oldName: string, newName: string): void {
+  const records = loadAllAnalyses();
+  records.forEach((r) => {
+    if (r.folder === oldName) r.folder = newName;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  window.dispatchEvent(new Event("analysisStockUpdated"));
+}
+
+export function deleteFolder(folderName: string): void {
+  const records = loadAllAnalyses();
+  records.forEach((r) => {
+    if (r.folder === folderName) r.folder = "";
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  window.dispatchEvent(new Event("analysisStockUpdated"));
 }
 
 export function clearAllAnalyses(): void {

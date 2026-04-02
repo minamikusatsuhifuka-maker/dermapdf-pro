@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save } from "lucide-react";
+import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   loadAllAnalyses,
@@ -12,6 +12,8 @@ import {
   updateAnalysisTitle,
   updateAnalysisTags,
   getDisplayTitle,
+  renameFolder,
+  deleteFolder,
   type AnalysisRecord,
 } from "@/lib/analysis-storage";
 import {
@@ -27,6 +29,7 @@ const selectClass =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
 
 const DEFAULT_FOLDERS = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
+const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
 
 function TagFolderEditor({
   record,
@@ -291,15 +294,31 @@ export function AnalysisStockPanel() {
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+
+  const loadCustomFolders = useCallback((): string[] => {
+    try {
+      return JSON.parse(localStorage.getItem(CUSTOM_FOLDERS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const saveCustomFolders = useCallback((folders: string[]) => {
+    localStorage.setItem(CUSTOM_FOLDERS_KEY, JSON.stringify(folders));
+    setCustomFolders(folders);
+  }, []);
 
   const reload = useCallback(() => {
     const all = loadAllAnalyses();
     setRecords(all);
-    // カスタムフォルダを収集
+    // カスタムフォルダを収集（localStorage + レコードから）
+    const saved = loadCustomFolders();
     const existingFolders = new Set(all.map((r) => r.folder).filter(Boolean));
-    const custom = Array.from(existingFolders).filter((f) => !DEFAULT_FOLDERS.includes(f));
-    setCustomFolders(custom);
-  }, []);
+    const fromRecords = Array.from(existingFolders).filter((f) => !DEFAULT_FOLDERS.includes(f));
+    const merged = Array.from(new Set([...saved, ...fromRecords]));
+    setCustomFolders(merged);
+  }, [loadCustomFolders]);
 
   useEffect(() => {
     reload();
@@ -335,10 +354,30 @@ export function AnalysisStockPanel() {
   const handleAddFolder = () => {
     const trimmed = newFolderName.trim();
     if (trimmed && !allFolders.includes(trimmed)) {
-      setCustomFolders((prev) => [...prev, trimmed]);
+      saveCustomFolders([...customFolders, trimmed]);
     }
     setNewFolderName("");
     setShowAddFolder(false);
+  };
+
+  const handleRenameFolder = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingFolderId(null);
+      return;
+    }
+    renameFolder(oldName, trimmed);
+    const updated = customFolders.map((f) => (f === oldName ? trimmed : f));
+    saveCustomFolders(updated);
+    if (activeFolder === oldName) setActiveFolder(trimmed);
+    setEditingFolderId(null);
+  };
+
+  const handleDeleteFolder = (folderName: string) => {
+    deleteFolder(folderName);
+    const updated = customFolders.filter((f) => f !== folderName);
+    saveCustomFolders(updated);
+    if (activeFolder === folderName) setActiveFolder(null);
   };
 
   const handleDelete = (id: string) => {
@@ -413,10 +452,10 @@ export function AnalysisStockPanel() {
       </div>
 
       {/* フォルダタブ */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         <button
           onClick={() => setActiveFolder(null)}
-          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
             activeFolder === null
               ? "bg-purple-500 text-white"
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -425,21 +464,63 @@ export function AnalysisStockPanel() {
           <FolderOpen className="mr-1 inline h-3 w-3" />
           すべて
         </button>
-        {allFolders.map((f) => (
-          <button
-            key={f}
-            onClick={() => setActiveFolder(activeFolder === f ? null : f)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              activeFolder === f
-                ? "bg-purple-500 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+        {allFolders.map((f) => {
+          const isCustom = !DEFAULT_FOLDERS.includes(f);
+          const isEditing = editingFolderId === f;
+
+          if (isEditing) {
+            return (
+              <div key={f} className="inline-flex shrink-0 items-center gap-1">
+                <input
+                  type="text"
+                  defaultValue={f}
+                  autoFocus
+                  className="w-24 rounded-full border border-purple-400 px-2 py-1 text-xs outline-none"
+                  onBlur={(e) => handleRenameFolder(f, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRenameFolder(f, e.currentTarget.value);
+                    if (e.key === "Escape") setEditingFolderId(null);
+                  }}
+                />
+              </div>
+            );
+          }
+
+          return (
+            <div key={f} className="inline-flex shrink-0 items-center gap-0.5">
+              <button
+                onClick={() => setActiveFolder(activeFolder === f ? null : f)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeFolder === f
+                    ? "bg-purple-500 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {f}
+              </button>
+              {isCustom && (
+                <>
+                  <button
+                    onClick={() => setEditingFolderId(f)}
+                    className="rounded p-0.5 text-gray-400 hover:text-purple-500 transition-colors"
+                    title="フォルダ名を変更"
+                  >
+                    <Pencil className="h-2.5 w-2.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFolder(f)}
+                    className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                    title="フォルダを削除"
+                  >
+                    <Trash2 className="h-2.5 w-2.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
         {showAddFolder ? (
-          <div className="inline-flex items-center gap-1">
+          <div className="inline-flex shrink-0 items-center gap-1">
             <input
               type="text"
               value={newFolderName}
@@ -455,7 +536,7 @@ export function AnalysisStockPanel() {
         ) : (
           <button
             onClick={() => setShowAddFolder(true)}
-            className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-purple-300 hover:text-purple-500"
+            className="shrink-0 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-purple-300 hover:text-purple-500"
           >
             <Plus className="mr-0.5 inline h-3 w-3" /> フォルダ追加
           </button>
