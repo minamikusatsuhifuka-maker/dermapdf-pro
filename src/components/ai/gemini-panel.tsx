@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus } from "lucide-react";
+import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
 import { splitPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
 import {
@@ -234,6 +235,98 @@ export function GeminiPanel({
   const [gsPrompt, setGsPrompt] = useState("");
   const [gsLoading, setGsLoading] = useState(false);
 
+  // テンプレート関連state
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [showGsSaveTemplate, setShowGsSaveTemplate] = useState(false);
+  const [gsTemplateName, setGsTemplateName] = useState("");
+  const [templates, setTemplates] = useState<AnalysisTemplate[]>([]);
+
+  // テンプレート読み込みとイベントリスナー
+  useEffect(() => {
+    const reloadTemplates = () => setTemplates(loadTemplates());
+    reloadTemplates();
+    window.addEventListener("templatesUpdated", reloadTemplates);
+    window.addEventListener("storage", reloadTemplates);
+
+    // テンプレート適用イベント
+    const handleApplyGemini = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail.analysisType) setAnalysisType(detail.analysisType);
+      if (detail.analysisPurpose !== undefined) setPurpose(detail.analysisPurpose);
+    };
+    const handleApplyGenspark = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail.target) setGsTarget(detail.target);
+      if (detail.level) setGsLevel(detail.level);
+      if (detail.purpose) setGsPurpose(detail.purpose);
+      if (detail.tone) setGsTone(detail.tone);
+      if (detail.notes !== undefined) setGsNotes(detail.notes);
+    };
+    window.addEventListener("applyTemplateGemini", handleApplyGemini);
+    window.addEventListener("applyTemplateGenspark", handleApplyGenspark);
+
+    return () => {
+      window.removeEventListener("templatesUpdated", reloadTemplates);
+      window.removeEventListener("storage", reloadTemplates);
+      window.removeEventListener("applyTemplateGemini", handleApplyGemini);
+      window.removeEventListener("applyTemplateGenspark", handleApplyGenspark);
+    };
+  }, []);
+
+  const handleSaveTemplate = () => {
+    const name = templateName.trim();
+    if (!name) return;
+    saveTemplate({
+      name,
+      analysisType,
+      analysisPurpose: purpose,
+      gensparkTarget: gsTarget,
+      gensparkLevel: gsLevel,
+      gensparkPurpose: gsPurpose,
+      gensparkTone: gsTone,
+      gensparkNotes: gsNotes,
+      memo: "",
+    });
+    setTemplateName("");
+    setShowSaveTemplate(false);
+    toastOk("テンプレートを保存しました");
+  };
+
+  const handleGsSaveTemplate = () => {
+    const name = gsTemplateName.trim();
+    if (!name) return;
+    saveTemplate({
+      name,
+      analysisType,
+      analysisPurpose: purpose,
+      gensparkTarget: gsTarget,
+      gensparkLevel: gsLevel,
+      gensparkPurpose: gsPurpose,
+      gensparkTone: gsTone,
+      gensparkNotes: gsNotes,
+      memo: "",
+    });
+    setGsTemplateName("");
+    setShowGsSaveTemplate(false);
+    toastOk("テンプレートを保存しました");
+  };
+
+  const handleApplyTemplateToGemini = (t: AnalysisTemplate) => {
+    setAnalysisType(t.analysisType as AnalysisType);
+    setPurpose(t.analysisPurpose);
+    toastOk(`「${t.name}」を適用しました`);
+  };
+
+  const handleApplyTemplateToGenspark = (t: AnalysisTemplate) => {
+    setGsTarget(t.gensparkTarget);
+    setGsLevel(t.gensparkLevel);
+    setGsPurpose(t.gensparkPurpose);
+    setGsTone(t.gensparkTone);
+    setGsNotes(t.gensparkNotes);
+    toastOk(`「${t.name}」を適用しました`);
+  };
+
   const CHUNK_SIZE = 5;
 
   const handleAnalyze = async () => {
@@ -423,6 +516,30 @@ export function GeminiPanel({
         Gemini AI分析
       </h2>
 
+      {/* テンプレートから呼び出し */}
+      {templates.length > 0 && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-600">
+            テンプレートから呼び出す
+          </label>
+          <select
+            value=""
+            onChange={(e) => {
+              const t = templates.find((t) => t.id === e.target.value);
+              if (t) handleApplyTemplateToGemini(t);
+            }}
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+          >
+            <option value="">-- テンプレートを選択 --</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}（{t.analysisType}）
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* 分析タイプ選択 */}
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-600">
@@ -472,11 +589,12 @@ export function GeminiPanel({
         </div>
       )}
 
-      {/* 実行ボタン */}
-      <button
-        onClick={handleAnalyze}
-        disabled={loading || !fileBase64}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+      {/* 実行ボタン + テンプレート保存 */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleAnalyze}
+          disabled={loading || !fileBase64}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -484,7 +602,42 @@ export function GeminiPanel({
           <span>🚀</span>
         )}
         {loading ? "分析中..." : "実行"}
-      </button>
+        </button>
+        <button
+          onClick={() => setShowSaveTemplate(true)}
+          className="inline-flex items-center gap-1 rounded-xl border border-purple-200 bg-white px-3 py-3 text-sm font-medium text-purple-600 hover:bg-purple-50"
+        >
+          <Save className="h-4 w-4" /> テンプレート保存
+        </button>
+      </div>
+
+      {/* テンプレート保存モーダル */}
+      {showSaveTemplate && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-purple-700">テンプレートとして保存</span>
+            <button onClick={() => setShowSaveTemplate(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <input
+            type="text"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSaveTemplate(); }}
+            placeholder="テンプレート名（例：管理職研修用）"
+            autoFocus
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+          />
+          <button
+            onClick={handleSaveTemplate}
+            disabled={!templateName.trim()}
+            className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-purple-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+          >
+            <Save className="h-3 w-3" /> 保存
+          </button>
+        </div>
+      )}
 
       {/* 書き起こし進捗 */}
       {transcriptionProgress && (
@@ -546,6 +699,30 @@ export function GeminiPanel({
             <Sparkles className="h-5 w-5 text-purple-500" />
             Gensparkプレゼン資料を作成
           </h3>
+
+          {/* Gensparkテンプレートから呼び出し */}
+          {templates.length > 0 && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                テンプレートから呼び出す
+              </label>
+              <select
+                value=""
+                onChange={(e) => {
+                  const t = templates.find((t) => t.id === e.target.value);
+                  if (t) handleApplyTemplateToGenspark(t);
+                }}
+                className={selectClass}
+              >
+                <option value="">-- テンプレートを選択 --</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -629,18 +806,54 @@ export function GeminiPanel({
             </div>
           )}
 
-          <button
-            onClick={handleGensparkGenerate}
-            disabled={gsLoading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
-          >
-            {gsLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            {gsLoading ? "生成中..." : "Gensparkプロンプトを生成"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleGensparkGenerate}
+              disabled={gsLoading}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+            >
+              {gsLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {gsLoading ? "生成中..." : "Gensparkプロンプトを生成"}
+            </button>
+            <button
+              onClick={() => setShowGsSaveTemplate(true)}
+              className="inline-flex items-center gap-1 rounded-xl border border-pink-200 bg-white px-3 py-3 text-sm font-medium text-pink-600 hover:bg-pink-50"
+            >
+              <Save className="h-4 w-4" /> 設定を保存
+            </button>
+          </div>
+
+          {/* Genspark テンプレート保存モーダル */}
+          {showGsSaveTemplate && (
+            <div className="rounded-lg border border-pink-200 bg-pink-50 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-pink-700">テンプレートとして保存</span>
+                <button onClick={() => setShowGsSaveTemplate(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={gsTemplateName}
+                onChange={(e) => setGsTemplateName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleGsSaveTemplate(); }}
+                placeholder="テンプレート名（例：管理職研修用）"
+                autoFocus
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-200"
+              />
+              <button
+                onClick={handleGsSaveTemplate}
+                disabled={!gsTemplateName.trim()}
+                className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-pink-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+              >
+                <Save className="h-3 w-3" /> 保存
+              </button>
+            </div>
+          )}
 
           {gsPrompt && (
             <div className="space-y-3">

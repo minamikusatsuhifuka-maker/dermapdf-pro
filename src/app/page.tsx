@@ -14,7 +14,9 @@ import { GensparkPanel } from "@/components/ai/genspark-panel";
 import { MessagePanel } from "@/components/ai/message-panel";
 import { WorkflowPanel } from "@/components/workflow/workflow-panel";
 import { AnalysisStockPanel } from "@/components/stock/analysis-stock-panel";
+import { TemplatePanel } from "@/components/templates/template-panel";
 import { loadAllAnalyses } from "@/lib/analysis-storage";
+import { loadTemplates, initDefaultTemplates } from "@/lib/template-storage";
 import {
   SettingsModal,
   PhilosophyBanner,
@@ -39,6 +41,7 @@ export default function Home() {
   const [fileName, setFileName] = useState<string | undefined>();
 
   const [stockCount, setStockCount] = useState(0);
+  const [templateCount, setTemplateCount] = useState(0);
 
   const { settings, save: saveSettings, context: clinicContext } =
     useClinicSettings();
@@ -48,15 +51,25 @@ export default function Home() {
     setStockCount(loadAllAnalyses().length);
   }, []);
 
+  const refreshTemplateCount = useCallback(() => {
+    setTemplateCount(loadTemplates().length);
+  }, []);
+
   useEffect(() => {
+    initDefaultTemplates();
     refreshStockCount();
+    refreshTemplateCount();
     window.addEventListener("storage", refreshStockCount);
     window.addEventListener("analysisStockUpdated", refreshStockCount);
+    window.addEventListener("templatesUpdated", refreshTemplateCount);
+    window.addEventListener("storage", refreshTemplateCount);
     return () => {
       window.removeEventListener("storage", refreshStockCount);
       window.removeEventListener("analysisStockUpdated", refreshStockCount);
+      window.removeEventListener("templatesUpdated", refreshTemplateCount);
+      window.removeEventListener("storage", refreshTemplateCount);
     };
-  }, [refreshStockCount]);
+  }, [refreshStockCount, refreshTemplateCount]);
 
   const handleFiles = useCallback(async (files: File[]) => {
     const pdf = files.find((f) => f.type === "application/pdf");
@@ -137,18 +150,32 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <QuickActions onAction={handleQuickAction} />
           </div>
-          {stockCount > 0 && (
-            <button
-              onClick={() =>
-                document
-                  .getElementById("analysis-stock")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
-              className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
-            >
-              保存済み分析 ({stockCount}件) ↓
-            </button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {templateCount > 0 && (
+              <button
+                onClick={() =>
+                  document
+                    .getElementById("template-panel")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+              >
+                テンプレート ({templateCount}件) ↓
+              </button>
+            )}
+            {stockCount > 0 && (
+              <button
+                onClick={() =>
+                  document
+                    .getElementById("analysis-stock")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+              >
+                保存済み分析 ({stockCount}件) ↓
+              </button>
+            )}
+          </div>
         </section>
 
         {/* プログレス */}
@@ -245,6 +272,11 @@ export default function Home() {
             </section>
           )}
         </div>
+
+        {/* テンプレートパネル */}
+        <section id="template-panel">
+          <TemplatePanel />
+        </section>
 
         {/* ストックパネル */}
         <section>
