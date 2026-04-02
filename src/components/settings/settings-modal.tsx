@@ -10,6 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toastOk } from "@/components/ui/toast-provider";
+import { loadFeatureFlags, saveFeatureFlags, type FeatureFlags } from "@/lib/feature-flags";
 
 const STORAGE_KEY = "dermapdf-clinic-settings";
 
@@ -107,10 +108,15 @@ interface SettingsModalProps {
 export function SettingsModal({ settings, onSave }: SettingsModalProps) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ClinicSettings>(settings);
+  const [flags, setFlags] = useState<FeatureFlags>({ staffKarute: true, monthlyReport: true, templatePanel: true });
 
   useEffect(() => {
     setForm(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (open) setFlags(loadFeatureFlags());
+  }, [open]);
 
   const handleChange = (key: keyof ClinicSettings, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -127,6 +133,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
 
   const handleSave = () => {
     onSave(form);
+    saveFeatureFlags(flags);
     toastOk("設定を保存しました");
     setOpen(false);
   };
@@ -228,6 +235,56 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
               rows={3}
               className={inputClass}
             />
+          </div>
+        </div>
+
+        {/* 機能管理セクション */}
+        <div className="border-t pt-4 mt-4">
+          <h3 className="text-sm font-bold text-gray-700 mb-3">機能管理</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            使用しない機能をOFFにするとページがすっきりします
+          </p>
+
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div>
+              <div className="text-sm font-medium text-gray-700">スタッフカルテ</div>
+              <div className="text-xs text-gray-400">スタッフの育成記録・1on1管理</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFlags((prev) => ({ ...prev, staffKarute: !prev.staffKarute }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.staffKarute ? "bg-purple-500" : "bg-gray-300"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.staffKarute ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div>
+              <div className="text-sm font-medium text-gray-700">定期レポート生成</div>
+              <div className="text-xs text-gray-400">ストック分析からレポートを自動生成</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFlags((prev) => ({ ...prev, monthlyReport: !prev.monthlyReport }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.monthlyReport ? "bg-purple-500" : "bg-gray-300"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.monthlyReport ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm font-medium text-gray-700">テンプレート</div>
+              <div className="text-xs text-gray-400">分析設定を保存して呼び出し</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFlags((prev) => ({ ...prev, templatePanel: !prev.templatePanel }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.templatePanel ? "bg-purple-500" : "bg-gray-300"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.templatePanel ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
           </div>
         </div>
 

@@ -75,7 +75,7 @@ export function Header({ apiStatus }: HeaderProps) {
                 </span>
               </h1>
               <p className="mt-1 text-sm text-gray-500">
-                皮膚科・美容皮膚科クリニック向け 統合ツールキット
+                皮膚科・美容皮膚科クリニック向け 統合ツールキット（設定・機能管理）
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

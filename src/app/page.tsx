@@ -20,6 +20,7 @@ import { StaffPanel } from "@/components/staff/staff-panel";
 import { loadAllAnalyses } from "@/lib/analysis-storage";
 import { loadTemplates, initDefaultTemplates } from "@/lib/template-storage";
 import { loadStaffProfiles } from "@/lib/staff-storage";
+import { loadFeatureFlags, type FeatureFlags } from "@/lib/feature-flags";
 import {
   SettingsModal,
   PhilosophyBanner,
@@ -46,6 +47,7 @@ export default function Home() {
   const [stockCount, setStockCount] = useState(0);
   const [templateCount, setTemplateCount] = useState(0);
   const [staffCount, setStaffCount] = useState(0);
+  const [flags, setFlags] = useState<FeatureFlags>({ staffKarute: true, monthlyReport: true, templatePanel: true });
 
   const { settings, save: saveSettings, context: clinicContext } =
     useClinicSettings();
@@ -68,12 +70,15 @@ export default function Home() {
     refreshStockCount();
     refreshTemplateCount();
     refreshStaffCount();
+    setFlags(loadFeatureFlags());
+    const updateFlags = () => setFlags(loadFeatureFlags());
     window.addEventListener("storage", refreshStockCount);
     window.addEventListener("analysisStockUpdated", refreshStockCount);
     window.addEventListener("templatesUpdated", refreshTemplateCount);
     window.addEventListener("storage", refreshTemplateCount);
     window.addEventListener("staffUpdated", refreshStaffCount);
     window.addEventListener("storage", refreshStaffCount);
+    window.addEventListener("featureFlagsUpdated", updateFlags);
     return () => {
       window.removeEventListener("storage", refreshStockCount);
       window.removeEventListener("analysisStockUpdated", refreshStockCount);
@@ -81,6 +86,7 @@ export default function Home() {
       window.removeEventListener("storage", refreshTemplateCount);
       window.removeEventListener("staffUpdated", refreshStaffCount);
       window.removeEventListener("storage", refreshStaffCount);
+      window.removeEventListener("featureFlagsUpdated", updateFlags);
     };
   }, [refreshStockCount, refreshTemplateCount, refreshStaffCount]);
 
@@ -164,27 +170,31 @@ export default function Home() {
             <QuickActions onAction={handleQuickAction} />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() =>
-                document
-                  .getElementById("staff-panel")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
-              className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-1.5 text-xs font-semibold text-green-700 transition-colors hover:bg-green-100"
-            >
-              スタッフカルテ ({staffCount}人) ↓
-            </button>
-            <button
-              onClick={() =>
-                document
-                  .getElementById("report-panel")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
-              className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
-            >
-              📊 レポート生成 ↓
-            </button>
-            {templateCount > 0 && (
+            {flags.staffKarute && (
+              <button
+                onClick={() =>
+                  document
+                    .getElementById("staff-panel")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-1.5 text-xs font-semibold text-green-700 transition-colors hover:bg-green-100"
+              >
+                スタッフカルテ ({staffCount}人) ↓
+              </button>
+            )}
+            {flags.monthlyReport && (
+              <button
+                onClick={() =>
+                  document
+                    .getElementById("report-panel")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+              >
+                📊 レポート生成 ↓
+              </button>
+            )}
+            {flags.templatePanel && templateCount > 0 && (
               <button
                 onClick={() =>
                   document
@@ -307,14 +317,18 @@ export default function Home() {
         </div>
 
         {/* テンプレートパネル */}
-        <section id="template-panel">
-          <TemplatePanel />
-        </section>
+        {flags.templatePanel && (
+          <section id="template-panel">
+            <TemplatePanel />
+          </section>
+        )}
 
         {/* レポートパネル */}
-        <section>
-          <MonthlyReportPanel clinicSettings={settings} />
-        </section>
+        {flags.monthlyReport && (
+          <section>
+            <MonthlyReportPanel clinicSettings={settings} />
+          </section>
+        )}
 
         {/* ストックパネル */}
         <section>
@@ -322,9 +336,11 @@ export default function Home() {
         </section>
 
         {/* スタッフカルテ */}
-        <section>
-          <StaffPanel clinicSettings={settings} />
-        </section>
+        {flags.staffKarute && (
+          <section>
+            <StaffPanel clinicSettings={settings} />
+          </section>
+        )}
       </main>
     </div>
   );
