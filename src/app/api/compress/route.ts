@@ -42,9 +42,17 @@ async function waitForAsyncJob(
 
 export async function POST(request: Request) {
   try {
-    const arrayBuffer = await request.arrayBuffer();
-    const text = new TextDecoder().decode(arrayBuffer);
-    const { base64, fileName, quality } = JSON.parse(text) as CompressRequest;
+    let base64: string, fileName: string, quality: number;
+    try {
+      const arrayBuffer = await request.arrayBuffer();
+      const text = new TextDecoder().decode(arrayBuffer);
+      ({ base64, fileName, quality } = JSON.parse(text) as CompressRequest);
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "リクエストの解析に失敗しました" },
+        { status: 200 }
+      );
+    }
 
     const apiKey = process.env.PDF_CO_API_KEY;
     if (!apiKey) {
@@ -146,7 +154,7 @@ export async function POST(request: Request) {
     });
   } catch (e) {
     return NextResponse.json(
-      { success: false, error: String(e) },
+      { success: false, error: e instanceof Error ? e.message : String(e) },
       { status: 200 }
     );
   }

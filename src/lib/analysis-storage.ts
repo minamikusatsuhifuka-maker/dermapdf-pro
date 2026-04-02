@@ -151,3 +151,156 @@ export function exportAnalysesAsText(): void {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export async function exportAnalysesAsDocx(): Promise<void> {
+  const { Document, Paragraph, TextRun, HeadingLevel, Packer } = await import("docx");
+  const records = loadAllAnalyses();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const children: any[] = [];
+
+  children.push(
+    new Paragraph({ text: "DermaPDF Pro 分析ストック", heading: HeadingLevel.TITLE })
+  );
+  children.push(
+    new Paragraph({ text: `エクスポート日時: ${new Date().toLocaleString("ja-JP")}` })
+  );
+  children.push(new Paragraph({ text: "" }));
+
+  records.forEach((r, i) => {
+    children.push(
+      new Paragraph({ text: `${i + 1}. ${r.title || r.fileName}`, heading: HeadingLevel.HEADING_1 })
+    );
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: "分析タイプ: ", bold: true }),
+          new TextRun({ text: r.analysisLabel }),
+        ],
+      })
+    );
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: "保存日時: ", bold: true }),
+          new TextRun({ text: new Date(r.createdAt).toLocaleString("ja-JP") }),
+        ],
+      })
+    );
+    if (r.folder) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "フォルダ: ", bold: true }),
+            new TextRun({ text: r.folder }),
+          ],
+        })
+      );
+    }
+    if (r.tags?.length) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "タグ: ", bold: true }),
+            new TextRun({ text: r.tags.join(", ") }),
+          ],
+        })
+      );
+    }
+    children.push(new Paragraph({ text: "" }));
+
+    r.content.split("\n").forEach((line) => {
+      children.push(new Paragraph({ text: line || " " }));
+    });
+
+    children.push(new Paragraph({ text: "" }));
+    children.push(new Paragraph({ text: "─".repeat(40) }));
+    children.push(new Paragraph({ text: "" }));
+  });
+
+  const doc = new Document({ sections: [{ children }] });
+  const blob = new Blob([await Packer.toBlob(doc)], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dermapdf_analyses_${new Date().toISOString().split("T")[0]}.docx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportAnalysesAsPdf(): Promise<void> {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const records = loadAllAnalyses();
+
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const margin = 50;
+  const lineHeight = 16;
+  const fontSize = 10;
+
+  let page = pdfDoc.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - margin;
+
+  const addText = (text: string, isBold = false, size = fontSize) => {
+    const f = isBold ? boldFont : font;
+    const maxWidth = pageWidth - margin * 2;
+    const words = text.split("");
+    let line = "";
+    for (const char of words) {
+      const testLine = line + char;
+      const width = f.widthOfTextAtSize(testLine, size);
+      if (width > maxWidth && line.length > 0) {
+        if (y < margin + lineHeight) {
+          page = pdfDoc.addPage([pageWidth, pageHeight]);
+          y = pageHeight - margin;
+        }
+        page.drawText(line, { x: margin, y, font: f, size, color: rgb(0, 0, 0) });
+        y -= lineHeight;
+        line = char;
+      } else {
+        line = testLine;
+      }
+    }
+    if (line) {
+      if (y < margin + lineHeight) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - margin;
+      }
+      page.drawText(line, { x: margin, y, font: f, size, color: rgb(0, 0, 0) });
+      y -= lineHeight;
+    }
+  };
+
+  addText("DermaPDF Pro Analysis Stock", true, 16);
+  y -= 8;
+  addText(`Export: ${new Date().toLocaleString("ja-JP")}`);
+  y -= 16;
+
+  records.forEach((r, i) => {
+    addText(`${i + 1}. ${r.title || r.fileName}`, true, 12);
+    addText(`Type: ${r.analysisLabel}`);
+    addText(`Date: ${new Date(r.createdAt).toLocaleString("ja-JP")}`);
+    if (r.folder) addText(`Folder: ${r.folder}`);
+    if (r.tags?.length) addText(`Tags: ${r.tags.join(", ")}`);
+    y -= 8;
+    r.content.split("\n").forEach((line) => addText(line || " "));
+    y -= 8;
+    addText("-".repeat(50));
+    y -= 8;
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes as unknown as ArrayBuffer], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dermapdf_analyses_${new Date().toISOString().split("T")[0]}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

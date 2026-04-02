@@ -9,6 +9,8 @@ import {
   clearAllAnalyses,
   exportAnalysesAsJSON,
   exportAnalysesAsText,
+  exportAnalysesAsDocx,
+  exportAnalysesAsPdf,
   updateAnalysisTitle,
   updateAnalysisTags,
   getDisplayTitle,
@@ -431,6 +433,20 @@ export function AnalysisStockPanel() {
             className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
           >
             <Download className="h-3 w-3" /> テキスト
+          </button>
+          <button
+            onClick={() => exportAnalysesAsDocx()}
+            disabled={records.length === 0}
+            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          >
+            <Download className="h-3 w-3" /> Word
+          </button>
+          <button
+            onClick={() => exportAnalysesAsPdf()}
+            disabled={records.length === 0}
+            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          >
+            <Download className="h-3 w-3" /> PDF
           </button>
           {showConfirmClear ? (
             <div className="flex items-center gap-1">

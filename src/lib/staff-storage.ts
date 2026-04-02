@@ -97,3 +97,66 @@ function loadAllStaffRecords(): StaffRecord[] {
     return [];
   }
 }
+
+export function exportStaffAsCSV(): void {
+  const profiles = loadStaffProfiles();
+  const headers = ["名前", "役職", "入社日", "優位な欲求", "上質世界メモ", "現在の目標", "目標期限", "成長メモ", "登録日"];
+
+  const rows = profiles.map((p) =>
+    [
+      p.name,
+      p.role || "",
+      p.joinDate || "",
+      (p.dominantNeeds || []).join("・"),
+      p.qualityWorld || "",
+      p.currentGoal || "",
+      p.goalDeadline || "",
+      p.growthMemo || "",
+      new Date(p.createdAt).toLocaleDateString("ja-JP"),
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`)
+  );
+
+  const csv = [headers.map((h) => `"${h}"`).join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const bom = "\uFEFF";
+  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dermapdf_staff_${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function exportStaffRecordsAsCSV(staffId?: string): void {
+  const profiles = loadStaffProfiles();
+  const allRecords: Record<string, string>[] = [];
+
+  profiles.forEach((p) => {
+    if (staffId && p.id !== staffId) return;
+    const records = loadStaffRecords(p.id);
+    records.forEach((r) => {
+      allRecords.push({
+        スタッフ名: p.name,
+        役職: p.role || "",
+        記録種別: r.typeLabel,
+        日付: r.date,
+        内容: r.content,
+      });
+    });
+  });
+
+  const defaultHeaders = ["スタッフ名", "役職", "記録種別", "日付", "内容"];
+  const headers = allRecords.length > 0 ? Object.keys(allRecords[0]) : defaultHeaders;
+  const rows = allRecords.map((r) =>
+    headers.map((h) => `"${String(r[h] || "").replace(/"/g, '""')}"`)
+  );
+  const csv = [headers.map((h) => `"${h}"`).join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const bom = "\uFEFF";
+  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dermapdf_staff_records_${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

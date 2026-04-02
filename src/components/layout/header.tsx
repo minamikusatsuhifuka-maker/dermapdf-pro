@@ -41,8 +41,16 @@ function StatusBadge({ label, active }: { label: string; active: boolean }) {
 }
 
 export function Header({ apiStatus }: HeaderProps) {
-  const status = apiStatus ?? { pdfCo: false, removeBg: false, gemini: false };
+  const [status, setStatus] = useState<ApiStatus>(apiStatus ?? { pdfCo: false, removeBg: false, gemini: false });
   const [modelCheck, setModelCheck] = useState<ModelCheckResult | null>(null);
+
+  // APIキーの存在を動的にチェック
+  useEffect(() => {
+    fetch("/api/check-keys")
+      .then((r) => r.json())
+      .then((data: ApiStatus) => setStatus(data))
+      .catch(() => {});
+  }, []);
 
   const runCheck = useCallback(async () => {
     try {

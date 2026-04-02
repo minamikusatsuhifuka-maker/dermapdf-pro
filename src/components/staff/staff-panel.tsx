@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Plus, X, Trash2, ChevronDown, ChevronUp, Loader2, Copy, BookmarkPlus } from "lucide-react";
+import { Plus, X, Trash2, ChevronDown, ChevronUp, Loader2, Copy, BookmarkPlus, Download } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   loadStaffProfiles,
@@ -12,6 +12,8 @@ import {
   loadStaffRecords,
   saveStaffRecord,
   deleteStaffRecord,
+  exportStaffAsCSV,
+  exportStaffRecordsAsCSV,
   type StaffProfile,
   type StaffRecord,
 } from "@/lib/staff-storage";
@@ -581,12 +583,28 @@ export function StaffPanel({ clinicSettings }: StaffPanelProps) {
         <h2 className="text-lg font-bold text-gray-700">
           スタッフカルテ ({profiles.length}人)
         </h2>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="inline-flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100"
-        >
-          <Plus className="h-3 w-3" /> スタッフを追加
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => exportStaffAsCSV()}
+            disabled={profiles.length === 0}
+            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          >
+            <Download className="h-3 w-3" /> スタッフCSV
+          </button>
+          <button
+            onClick={() => exportStaffRecordsAsCSV()}
+            disabled={profiles.length === 0}
+            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          >
+            <Download className="h-3 w-3" /> 記録CSV
+          </button>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="inline-flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100"
+          >
+            <Plus className="h-3 w-3" /> スタッフを追加
+          </button>
+        </div>
       </div>
 
       {showAddForm && (
