@@ -15,6 +15,7 @@ import { MessagePanel } from "@/components/ai/message-panel";
 import { WorkflowPanel } from "@/components/workflow/workflow-panel";
 import { AnalysisStockPanel } from "@/components/stock/analysis-stock-panel";
 import { TemplatePanel } from "@/components/templates/template-panel";
+import { MonthlyReportPanel } from "@/components/reports/monthly-report-panel";
 import { loadAllAnalyses } from "@/lib/analysis-storage";
 import { loadTemplates, initDefaultTemplates } from "@/lib/template-storage";
 import {
@@ -151,6 +152,16 @@ export default function Home() {
             <QuickActions onAction={handleQuickAction} />
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() =>
+                document
+                  .getElementById("report-panel")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+            >
+              📊 レポート生成 ↓
+            </button>
             {templateCount > 0 && (
               <button
                 onClick={() =>
@@ -276,6 +287,11 @@ export default function Home() {
         {/* テンプレートパネル */}
         <section id="template-panel">
           <TemplatePanel />
+        </section>
+
+        {/* レポートパネル */}
+        <section>
+          <MonthlyReportPanel clinicSettings={settings} />
         </section>
 
         {/* ストックパネル */}

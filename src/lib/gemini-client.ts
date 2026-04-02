@@ -130,3 +130,68 @@ export async function analyzeWithGemini(
     };
   }
 }
+
+/** テキストのみでGemini APIを呼び出す（ファイル不要） */
+export async function analyzeTextWithGemini(
+  prompt: string
+): Promise<GeminiResult> {
+  const callGemini = async (): Promise<GeminiResult> => {
+    const apiKey = await getGeminiKey();
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    let res: Response;
+    try {
+      res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 16384 },
+        }),
+      });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error("タイムアウトしました。再度お試しください。");
+      }
+      throw err;
+    }
+
+    let responseData: {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+      error?: { message?: string };
+    };
+
+    try {
+      const text = await res.text();
+      responseData = JSON.parse(text);
+    } catch {
+      return { success: false, analysis: "", error: "Gemini APIのレスポンス解析に失敗しました" };
+    }
+
+    if (responseData.error) {
+      return { success: false, analysis: "", error: responseData.error.message || "Gemini APIエラー" };
+    }
+
+    const analysis = responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    return { success: true, analysis };
+  };
+
+  try {
+    const result = await callGemini();
+    if (result.success) return result;
+    return await callGemini();
+  } catch (e) {
+    return {
+      success: false,
+      analysis: "",
+      error: e instanceof Error ? e.message : "レポート生成に失敗しました",
+    };
+  }
+}
