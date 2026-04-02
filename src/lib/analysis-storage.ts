@@ -114,6 +114,27 @@ export function getAllTags(): string[] {
   return Array.from(tags);
 }
 
+export function getAllTagsSorted(): string[] {
+  const records = loadAllAnalyses();
+  const tags = new Set(records.flatMap((r) => r.tags || []));
+  return Array.from(tags).sort((a, b) =>
+    a.localeCompare(b, "ja", { sensitivity: "base" })
+  );
+}
+
+export function getTagsWithCount(): { tag: string; count: number }[] {
+  const records = loadAllAnalyses();
+  const countMap = new Map<string, number>();
+  records.forEach((r) => {
+    (r.tags || []).forEach((tag) => {
+      countMap.set(tag, (countMap.get(tag) || 0) + 1);
+    });
+  });
+  return Array.from(countMap.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => a.tag.localeCompare(b.tag, "ja", { sensitivity: "base" }));
+}
+
 export function exportAnalysesAsText(): void {
   const data = loadAllAnalyses();
   const text = data

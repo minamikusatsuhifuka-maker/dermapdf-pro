@@ -12,6 +12,7 @@ import {
   updateAnalysisTitle,
   updateAnalysisTags,
   getDisplayTitle,
+  getTagsWithCount,
   renameFolder,
   deleteFolder,
   type AnalysisRecord,
@@ -295,6 +296,7 @@ export function AnalysisStockPanel() {
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [showTagList, setShowTagList] = useState(false);
 
   const loadCustomFolders = useCallback((): string[] => {
     try {
@@ -543,17 +545,56 @@ export function AnalysisStockPanel() {
         )}
       </div>
 
-      {/* 検索 */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="ファイル名・内容・分析タイプ・タグ・フォルダで検索..."
-          className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
-        />
+      {/* 検索 + タグ一覧ボタン */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ファイル名・内容・分析タイプ・タグ・フォルダで検索..."
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+          />
+        </div>
+        <button
+          onClick={() => setShowTagList(!showTagList)}
+          className="flex items-center gap-1 px-3 py-2 text-xs border rounded-lg hover:border-purple-300 whitespace-nowrap"
+        >
+          🏷 タグ ({getTagsWithCount().length}種)
+        </button>
       </div>
+
+      {/* タグ一覧パネル */}
+      {showTagList && (() => {
+        const tagsWithCount = getTagsWithCount();
+        return (
+          <div className="border border-purple-100 rounded-lg bg-purple-50 p-3 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-purple-700">🏷 タグ一覧（五十音順）</span>
+              <button onClick={() => setShowTagList(false)} className="text-gray-400 text-xs">✕ 閉じる</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {tagsWithCount.map(({ tag, count }) => (
+                <button
+                  key={tag}
+                  onClick={() => {
+                    setSearch(tag);
+                    setShowTagList(false);
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 bg-white border border-purple-200 rounded-full text-xs hover:bg-purple-100 transition-colors"
+                >
+                  <span className="text-purple-700">{tag}</span>
+                  <span className="text-gray-400 text-[10px]">({count})</span>
+                </button>
+              ))}
+              {tagsWithCount.length === 0 && (
+                <span className="text-xs text-gray-400">タグがまだ登録されていません</span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 一覧 */}
       {filtered.length === 0 ? (
