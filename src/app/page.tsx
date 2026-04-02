@@ -16,8 +16,10 @@ import { WorkflowPanel } from "@/components/workflow/workflow-panel";
 import { AnalysisStockPanel } from "@/components/stock/analysis-stock-panel";
 import { TemplatePanel } from "@/components/templates/template-panel";
 import { MonthlyReportPanel } from "@/components/reports/monthly-report-panel";
+import { StaffPanel } from "@/components/staff/staff-panel";
 import { loadAllAnalyses } from "@/lib/analysis-storage";
 import { loadTemplates, initDefaultTemplates } from "@/lib/template-storage";
+import { loadStaffProfiles } from "@/lib/staff-storage";
 import {
   SettingsModal,
   PhilosophyBanner,
@@ -43,6 +45,7 @@ export default function Home() {
 
   const [stockCount, setStockCount] = useState(0);
   const [templateCount, setTemplateCount] = useState(0);
+  const [staffCount, setStaffCount] = useState(0);
 
   const { settings, save: saveSettings, context: clinicContext } =
     useClinicSettings();
@@ -56,21 +59,30 @@ export default function Home() {
     setTemplateCount(loadTemplates().length);
   }, []);
 
+  const refreshStaffCount = useCallback(() => {
+    setStaffCount(loadStaffProfiles().length);
+  }, []);
+
   useEffect(() => {
     initDefaultTemplates();
     refreshStockCount();
     refreshTemplateCount();
+    refreshStaffCount();
     window.addEventListener("storage", refreshStockCount);
     window.addEventListener("analysisStockUpdated", refreshStockCount);
     window.addEventListener("templatesUpdated", refreshTemplateCount);
     window.addEventListener("storage", refreshTemplateCount);
+    window.addEventListener("staffUpdated", refreshStaffCount);
+    window.addEventListener("storage", refreshStaffCount);
     return () => {
       window.removeEventListener("storage", refreshStockCount);
       window.removeEventListener("analysisStockUpdated", refreshStockCount);
       window.removeEventListener("templatesUpdated", refreshTemplateCount);
       window.removeEventListener("storage", refreshTemplateCount);
+      window.removeEventListener("staffUpdated", refreshStaffCount);
+      window.removeEventListener("storage", refreshStaffCount);
     };
-  }, [refreshStockCount, refreshTemplateCount]);
+  }, [refreshStockCount, refreshTemplateCount, refreshStaffCount]);
 
   const handleFiles = useCallback(async (files: File[]) => {
     const pdf = files.find((f) => f.type === "application/pdf");
@@ -152,6 +164,16 @@ export default function Home() {
             <QuickActions onAction={handleQuickAction} />
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() =>
+                document
+                  .getElementById("staff-panel")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-1.5 text-xs font-semibold text-green-700 transition-colors hover:bg-green-100"
+            >
+              スタッフカルテ ({staffCount}人) ↓
+            </button>
             <button
               onClick={() =>
                 document
@@ -297,6 +319,11 @@ export default function Home() {
         {/* ストックパネル */}
         <section>
           <AnalysisStockPanel />
+        </section>
+
+        {/* スタッフカルテ */}
+        <section>
+          <StaffPanel clinicSettings={settings} />
         </section>
       </main>
     </div>

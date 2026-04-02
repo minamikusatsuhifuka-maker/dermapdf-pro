@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil } from "lucide-react";
+import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   loadAllAnalyses,
@@ -17,6 +17,7 @@ import {
   deleteFolder,
   type AnalysisRecord,
 } from "@/lib/analysis-storage";
+import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
 import {
   TARGET_OPTIONS,
   LEVEL_OPTIONS,
@@ -297,6 +298,8 @@ export function AnalysisStockPanel() {
   const [newFolderName, setNewFolderName] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [showTagList, setShowTagList] = useState(false);
+  const [staffLinkId, setStaffLinkId] = useState<string | null>(null);
+  const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
 
   const loadCustomFolders = useCallback((): string[] => {
     try {
@@ -314,6 +317,7 @@ export function AnalysisStockPanel() {
   const reload = useCallback(() => {
     const all = loadAllAnalyses();
     setRecords(all);
+    setStaffProfiles(loadStaffProfiles());
     // カスタムフォルダを収集（localStorage + レコードから）
     const saved = loadCustomFolders();
     const existingFolders = new Set(all.map((r) => r.folder).filter(Boolean));
@@ -326,9 +330,11 @@ export function AnalysisStockPanel() {
     reload();
     window.addEventListener("storage", reload);
     window.addEventListener("analysisStockUpdated", reload);
+    window.addEventListener("staffUpdated", reload);
     return () => {
       window.removeEventListener("storage", reload);
       window.removeEventListener("analysisStockUpdated", reload);
+      window.removeEventListener("staffUpdated", reload);
     };
   }, [reload]);
 
@@ -674,6 +680,15 @@ export function AnalysisStockPanel() {
                   >
                     Gensparkへ
                   </button>
+                  {staffProfiles.length > 0 && (
+                    <button
+                      onClick={() => setStaffLinkId(staffLinkId === r.id ? null : r.id)}
+                      className="rounded p-1 hover:bg-green-50"
+                      title="スタッフカルテに記録"
+                    >
+                      <User className="h-3.5 w-3.5 text-green-500" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleCopy(r.content)}
                     className="rounded p-1 hover:bg-gray-100"
@@ -737,6 +752,37 @@ export function AnalysisStockPanel() {
                     }}
                     onClose={() => setEditingTagId(null)}
                   />
+                )}
+
+                {staffLinkId === r.id && (
+                  <div className="border-t border-green-100 bg-green-50/50 px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-green-700">スタッフカルテに記録</span>
+                      <button onClick={() => setStaffLinkId(null)} className="text-gray-400 text-xs">✕ 閉じる</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {staffProfiles.map((sp) => (
+                        <button
+                          key={sp.id}
+                          onClick={() => {
+                            saveStaffRecord({
+                              staffId: sp.id,
+                              date: new Date().toISOString().split("T")[0],
+                              type: "memo",
+                              typeLabel: "メモ",
+                              content: `【${r.analysisLabel}】${getDisplayTitle(r)}\n${r.content.slice(0, 200)}...`,
+                              analysisId: r.id,
+                            });
+                            setStaffLinkId(null);
+                            toastOk(`${sp.name}のカルテに記録しました`);
+                          }}
+                          className="rounded-full border border-green-200 bg-white px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors"
+                        >
+                          {sp.name}{sp.role ? `（${sp.role}）` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 {isGensparkActive && (
