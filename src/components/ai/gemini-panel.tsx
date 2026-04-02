@@ -197,7 +197,7 @@ export function GeminiPanel({
   const [gsPrompt, setGsPrompt] = useState("");
   const [gsLoading, setGsLoading] = useState(false);
 
-  const CHUNK_SIZE = 10;
+  const CHUNK_SIZE = 5;
 
   const handleAnalyze = async () => {
     if (!fileBase64 || !fileMime || !fileName) {
@@ -265,6 +265,11 @@ export function GeminiPanel({
             }
 
             fullText += `\n\n${chunkResult.analysis}`;
+
+            // チャンク間ウェイト（API rate limit対策）
+            if (i < totalChunks - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
           } catch (chunkErr) {
             console.error(`チャンク${i + 1}エラー:`, chunkErr);
             const errMsg =
@@ -421,9 +426,9 @@ export function GeminiPanel({
       {analysisType === "transcription" && (
         <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
           {isPdf && pageCount !== null && pageCount > 30
-            ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します（${pageCount}ページ）。数分かかる場合があります`
-            : isPdf && pageCount !== null && pageCount > 10
-              ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します。約${Math.ceil(pageCount / CHUNK_SIZE)}〜${Math.ceil(pageCount / CHUNK_SIZE) * 2}分かかります`
+            ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します（${pageCount}ページ）。${Math.ceil(pageCount / CHUNK_SIZE)}〜${Math.ceil(pageCount / CHUNK_SIZE) * 2}分かかる場合があります`
+            : isPdf && pageCount !== null && pageCount > CHUNK_SIZE
+              ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します（${pageCount}ページ）。約${Math.ceil(pageCount / CHUNK_SIZE)}〜${Math.ceil(pageCount / CHUNK_SIZE) * 2}分かかります`
               : isPdf && pageCount !== null && pageCount > 0
                 ? `⏱ 処理に30秒〜1分かかる場合があります（${pageCount}ページ）`
                 : "⏱ 処理に30秒〜1分かかる場合があります"}

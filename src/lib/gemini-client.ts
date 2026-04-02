@@ -50,7 +50,8 @@ export async function analyzeWithGemini(
     const apiKey = await getGeminiKey();
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const timeoutMs = isTranscription ? 180000 : 120000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     let res: Response;
     try {
