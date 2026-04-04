@@ -304,6 +304,18 @@ export function AnalysisStockPanel() {
   const [staffLinkId, setStaffLinkId] = useState<string | null>(null);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
 
+  // 一括選択
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
   const [globalHeight, setGlobalHeight] = useState(240);
@@ -440,6 +452,49 @@ export function AnalysisStockPanel() {
     setActiveGensparkId(null);
     reload();
     toastOk("全件削除しました");
+  };
+
+  // 一括操作
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((r) => r.id)));
+    }
+  };
+
+  const bulkSetFolder = (folder: string) => {
+    const count = selectedIds.size;
+    Array.from(selectedIds).forEach((id) => {
+      const rec = records.find((r) => r.id === id);
+      updateAnalysisTags(id, rec?.tags || [], folder);
+    });
+    setSelectedIds(new Set());
+    reload();
+    toastOk(`${count}件を「${folder}」フォルダに移動しました`);
+  };
+
+  const bulkAddTag = (tag: string) => {
+    const count = selectedIds.size;
+    Array.from(selectedIds).forEach((id) => {
+      const rec = records.find((r) => r.id === id);
+      if (!rec) return;
+      const currentTags = rec.tags || [];
+      if (!currentTags.includes(tag)) {
+        updateAnalysisTags(id, [...currentTags, tag], rec.folder || "");
+      }
+    });
+    reload();
+    toastOk(`${count}件に「${tag}」タグを追加しました`);
+  };
+
+  const bulkDelete = () => {
+    const count = selectedIds.size;
+    Array.from(selectedIds).forEach((id) => deleteAnalysis(id));
+    setSelectedIds(new Set());
+    setActiveGensparkId(null);
+    reload();
+    toastOk(`${count}件を削除しました`);
   };
 
   return (
@@ -707,6 +762,76 @@ export function AnalysisStockPanel() {
         );
       })()}
 
+      {/* 選択操作バー */}
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-2 py-1">
+          <input
+            type="checkbox"
+            checked={selectedIds.size === filtered.length && filtered.length > 0}
+            onChange={toggleSelectAll}
+            className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+          />
+          <span className="text-xs text-gray-500">
+            {selectedIds.size > 0 ? `${selectedIds.size}件選択中` : "全選択"}
+          </span>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-gray-400 underline hover:text-gray-600"
+            >
+              選択解除
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 一括操作パネル */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 p-3">
+          <span className="text-xs font-semibold text-purple-700">
+            📋 {selectedIds.size}件を一括操作：
+          </span>
+
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-600">📁 フォルダ：</span>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) bulkSetFolder(e.target.value);
+              }}
+              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-purple-300"
+            >
+              <option value="">選択...</option>
+              {allFolders.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-600">🏷 タグ追加：</span>
+            <input
+              type="text"
+              placeholder="タグ名を入力してEnter"
+              className="w-32 rounded border border-gray-200 px-2 py-1 text-xs outline-none focus:border-purple-300"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                  bulkAddTag(e.currentTarget.value.trim());
+                  e.currentTarget.value = "";
+                }
+              }}
+            />
+          </div>
+
+          <button
+            onClick={bulkDelete}
+            className="ml-auto rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+          >
+            🗑 選択削除
+          </button>
+        </div>
+      )}
+
       {/* 一覧 */}
       {filtered.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">
@@ -722,9 +847,21 @@ export function AnalysisStockPanel() {
             return (
               <div
                 key={r.id}
-                className="overflow-hidden rounded-xl border border-gray-100 bg-white/60"
+                className={`overflow-hidden rounded-xl border ${
+                  selectedIds.has(r.id)
+                    ? "border-purple-200 bg-purple-50"
+                    : "border-gray-100 bg-white/60"
+                }`}
               >
-                <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <div className="flex items-start gap-2 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(r.id)}
+                    onChange={() => toggleSelect(r.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
                   <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
                     {r.analysisLabel}
                   </span>
@@ -826,6 +963,7 @@ export function AnalysisStockPanel() {
                       <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                     )}
                   </button>
+                  </div>
                 </div>
 
                 {/* タグバッジ表示 */}
