@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { UploadZone } from "@/components/upload/upload-zone";
+import { useAppStore } from "@/store/app-store";
 import { PageGrid } from "@/components/pdf/page-grid";
 import { ImageGrid } from "@/components/image/image-grid";
 import { ProgressBar } from "@/components/progress/progress-bar";
@@ -48,6 +49,11 @@ export default function Home() {
   const [templateCount, setTemplateCount] = useState(0);
   const [staffCount, setStaffCount] = useState(0);
   const [flags, setFlags] = useState<FeatureFlags>({ staffKarute: true, monthlyReport: true, templatePanel: true });
+
+  // テキスト入力モード
+  const inputMode = useAppStore((s) => s.inputMode);
+  const inputText = useAppStore((s) => s.inputText);
+  const inputTextFileName = useAppStore((s) => s.inputTextFileName);
 
   const { settings, save: saveSettings, context: clinicContext } =
     useClinicSettings();
@@ -123,6 +129,13 @@ export default function Home() {
     toastOk(`${files.length} 件のファイルを読み込みました`);
   }, []);
 
+  const handleTextInput = useCallback((text: string, textFileName: string) => {
+    // テキスト入力時はファイル名をセット
+    if (text.trim()) {
+      setFileName(textFileName);
+    }
+  }, []);
+
   const handleQuickAction = useCallback((actionId: string) => {
     switch (actionId) {
       case "gemini":
@@ -161,7 +174,7 @@ export default function Home() {
 
         {/* アップロード */}
         <section>
-          <UploadZone onFilesSelected={handleFiles} />
+          <UploadZone onFilesSelected={handleFiles} onTextInput={handleTextInput} />
         </section>
 
         {/* クイックアクション */}
@@ -228,8 +241,20 @@ export default function Home() {
           </section>
         )}
 
-        {/* PDFページ一覧 + PDFアクション */}
-        {pdfUrl && (
+        {/* テキスト入力モード時のヒント */}
+        {inputMode === "text" && !inputText.trim() && (
+          <section className="rounded-2xl border border-purple-200 bg-purple-50/50 p-6 text-center">
+            <p className="text-sm text-purple-500 font-medium">
+              ✏️ テキストを入力してください
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              テキストを入力するとAI分析が実行できます
+            </p>
+          </section>
+        )}
+
+        {/* PDFページ一覧 + PDFアクション（テキストモードでは非表示） */}
+        {inputMode === "file" && pdfUrl && (
           <>
             <section className="rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
               <h2 className="mb-4 text-lg font-bold text-gray-700">
@@ -258,8 +283,8 @@ export default function Home() {
           </>
         )}
 
-        {/* 画像一覧 */}
-        {images.length > 0 && (
+        {/* 画像一覧（テキストモードでは非表示） */}
+        {inputMode === "file" && images.length > 0 && (
           <section className="rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
             <h2 className="mb-4 text-lg font-bold text-gray-700">
               画像ファイル
@@ -291,7 +316,9 @@ export default function Home() {
               <GeminiPanel
                 fileBase64={fileBase64}
                 fileMime={fileMime}
-                fileName={fileName}
+                fileName={inputMode === "text" ? inputTextFileName : fileName}
+                inputMode={inputMode}
+                inputText={inputText}
                 onResult={(r) => setAnalysisResult(r)}
                 clinicSettings={settings}
               />

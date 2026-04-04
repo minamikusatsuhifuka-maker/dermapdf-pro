@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
-import { analyzeWithGemini } from "@/lib/gemini-client";
+import { analyzeWithGemini, analyzeTextWithGemini } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
 import { splitPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
@@ -193,6 +193,8 @@ interface GeminiPanelProps {
   fileBase64?: string;
   fileMime?: string;
   fileName?: string;
+  inputMode?: "file" | "text";
+  inputText?: string;
   onResult?: (result: string) => void;
   clinicSettings?: ClinicSettings;
 }
@@ -204,6 +206,8 @@ export function GeminiPanel({
   fileBase64,
   fileMime,
   fileName,
+  inputMode = "file",
+  inputText,
   onResult,
   clinicSettings,
 }: GeminiPanelProps) {
@@ -329,10 +333,21 @@ export function GeminiPanel({
 
   const CHUNK_SIZE = 5;
 
+  const isTextMode = inputMode === "text";
+
   const handleAnalyze = async () => {
-    if (!fileBase64 || !fileMime || !fileName) {
-      toastError("ファイルが選択されていません");
-      return;
+    // テキストモード: テキストが必要
+    if (isTextMode) {
+      if (!inputText || inputText.trim().length === 0) {
+        toastError("テキストが入力されていません");
+        return;
+      }
+    } else {
+      // ファイルモード: ファイルが必要
+      if (!fileBase64 || !fileMime || !fileName) {
+        toastError("ファイルが選択されていません");
+        return;
+      }
     }
 
     setLoading(true);
@@ -340,6 +355,21 @@ export function GeminiPanel({
     setTranscriptionProgress("");
 
     try {
+      // テキスト入力モードの場合
+      if (isTextMode && inputText) {
+        const basePrompt = ANALYSIS_PROMPTS[analysisType];
+        const fullPrompt = (purpose
+          ? `${basePrompt}\n\n目的: ${purpose}`
+          : basePrompt) + philosophyContext;
+        const data = await analyzeTextWithGemini(fullPrompt, inputText);
+        if (!data.success) throw new Error(data.error || "分析に失敗しました");
+        setResult(data.analysis);
+        onResult?.(data.analysis);
+        toastOk("AI分析が完了しました");
+        return;
+      }
+
+      // 以下ファイルモード
       // バッチ書き起こし判定: PDFかつtranscriptionかつページ数取得成功かつ10ページ超
       const isTranscription = analysisType === "transcription";
       const effectivePageCount = isPdf && pageCount !== null ? pageCount : 0;
@@ -353,8 +383,8 @@ export function GeminiPanel({
           ? `${basePrompt}\n\n目的: ${purpose}`
           : basePrompt) + philosophyContext;
         const data = await analyzeWithGemini(
-          fileBase64,
-          fileMime,
+          fileBase64!,
+          fileMime!,
           fullPrompt,
           "transcription"
         );
@@ -376,7 +406,7 @@ export function GeminiPanel({
           );
 
           try {
-            const chunkBase64 = await splitPdfPages(fileBase64, startPage, endPage);
+            const chunkBase64 = await splitPdfPages(fileBase64!, startPage, endPage);
             const chunkResult = await analyzeWithGemini(
               chunkBase64,
               "application/pdf",
@@ -426,8 +456,8 @@ export function GeminiPanel({
           : basePrompt) + philosophyContext;
 
         const data = await analyzeWithGemini(
-          fileBase64,
-          fileMime,
+          fileBase64!,
+          fileMime!,
           fullPrompt,
           analysisType
         );
@@ -685,7 +715,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       <div className="flex gap-2">
         <button
           onClick={handleAnalyze}
-          disabled={loading || !fileBase64}
+          disabled={loading || (isTextMode ? !inputText?.trim() : !fileBase64)}
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (

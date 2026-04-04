@@ -45,6 +45,7 @@ interface ImageFile {
 }
 
 type Mode = "pdf" | "image";
+type InputMode = "file" | "text";
 
 interface AppState {
   // PDF関連
@@ -52,6 +53,11 @@ interface AppState {
   pdfBytes: Uint8Array | null;
   fileName: string;
   mode: Mode;
+
+  // テキスト直接入力
+  inputMode: InputMode;
+  inputText: string;
+  inputTextFileName: string;
 
   // ページ選択
   selectedPages: Set<number>;
@@ -87,6 +93,8 @@ interface AppState {
   toggleImgSelected: (index: number) => void;
   selectAllImages: (indices: number[]) => void;
   clearImgSelected: () => void;
+  setInputMode: (mode: InputMode) => void;
+  setInputText: (text: string) => void;
   setClinicSettings: (settings: Partial<ClinicSettings>) => void;
   setApiKeys: (keys: ApiKeys) => void;
 }
@@ -112,6 +120,9 @@ export const useAppStore = create<AppState>((set) => ({
   cropResult: null,
   images: [],
   imgSelected: new Set<number>(),
+  inputMode: "file",
+  inputText: "",
+  inputTextFileName: "",
   clinicSettings: defaultClinicSettings,
   apiKeys: { pdfCo: false, removeBg: false, gemini: false },
 
@@ -185,6 +196,16 @@ export const useAppStore = create<AppState>((set) => ({
   selectAllImages: (indices) => set({ imgSelected: new Set(indices) }),
 
   clearImgSelected: () => set({ imgSelected: new Set<number>() }),
+
+  setInputMode: (mode) => {
+    const today = new Date().toISOString().split("T")[0];
+    set({
+      inputMode: mode,
+      inputTextFileName: `テキスト入力_${today}.txt`,
+    });
+  },
+
+  setInputText: (text) => set({ inputText: text }),
 
   setClinicSettings: (settings) =>
     set((state) => ({

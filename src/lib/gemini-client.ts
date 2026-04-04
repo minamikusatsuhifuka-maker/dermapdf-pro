@@ -131,10 +131,17 @@ export async function analyzeWithGemini(
   }
 }
 
-/** テキストのみでGemini APIを呼び出す（ファイル不要） */
+/** テキストのみでGemini APIを呼び出す（ファイル不要）
+ *  text を省略すると prompt のみで呼び出す（従来互換）
+ */
 export async function analyzeTextWithGemini(
-  prompt: string
+  prompt: string,
+  text?: string
 ): Promise<GeminiResult> {
+  const fullPrompt = text
+    ? `以下のテキストを分析してください。\n\n【テキスト内容】\n${text}\n\n【分析指示】\n${prompt}`
+    : prompt;
+
   const callGemini = async (): Promise<GeminiResult> => {
     const apiKey = await getGeminiKey();
 
@@ -148,7 +155,7 @@ export async function analyzeTextWithGemini(
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 16384 },
         }),
       });
