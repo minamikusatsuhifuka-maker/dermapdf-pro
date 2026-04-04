@@ -14,6 +14,8 @@ import {
   exportSingleAnalysisAsMarkdown,
   updateAnalysisTitle,
   updateAnalysisTags,
+  updateAnalysisContent,
+  revertAnalysisContent,
   getDisplayTitle,
   getTagsWithCount,
   renameFolder,
@@ -315,6 +317,10 @@ export function AnalysisStockPanel() {
       return next;
     });
   };
+
+  // インライン編集
+  const [editingContentId, setEditingContentId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
 
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
@@ -1010,18 +1016,86 @@ export function AnalysisStockPanel() {
                         );
                       })}
                     </div>
-                    <div
-                      className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700"
-                      style={{
-                        height: `${contentHeights[r.id] || globalHeight}px`,
-                        minHeight: "80px",
-                        maxHeight: "2000px",
-                        fontSize: `${fontSize}px`,
-                        lineHeight: "1.7",
-                      }}
-                    >
-                      {r.content}
-                    </div>
+
+                    {editingContentId === r.id ? (
+                      <div>
+                        <textarea
+                          value={editingContent}
+                          onChange={(e) => setEditingContent(e.target.value)}
+                          className="w-full rounded-lg border-2 border-purple-400 bg-white p-3 font-[inherit] resize-y focus:border-purple-500 focus:outline-none"
+                          style={{
+                            minHeight: `${contentHeights[r.id] || globalHeight}px`,
+                            fontSize: `${fontSize}px`,
+                            lineHeight: "1.7",
+                          }}
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              updateAnalysisContent(r.id, editingContent);
+                              setEditingContentId(null);
+                              reload();
+                              toastOk("内容を更新しました");
+                            }}
+                            className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-purple-700"
+                          >
+                            ✅ 保存
+                          </button>
+                          <button
+                            onClick={() => setEditingContentId(null)}
+                            className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs transition-colors hover:bg-gray-50"
+                          >
+                            ✕ キャンセル
+                          </button>
+                          <span className="ml-2 text-xs text-gray-400">
+                            {editingContent.length}文字
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <button
+                          onClick={() => {
+                            setEditingContent(r.content);
+                            setEditingContentId(r.id);
+                          }}
+                          className="absolute right-2 top-2 z-10 rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs transition-colors hover:border-purple-300 hover:text-purple-600"
+                        >
+                          ✏️ 編集
+                        </button>
+                        <div
+                          className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 pr-16 text-gray-700"
+                          style={{
+                            height: `${contentHeights[r.id] || globalHeight}px`,
+                            minHeight: "80px",
+                            maxHeight: "2000px",
+                            fontSize: `${fontSize}px`,
+                            lineHeight: "1.7",
+                          }}
+                        >
+                          {r.content}
+                        </div>
+                        {r.updatedAt && (
+                          <div className="mt-1 flex items-center justify-end gap-2">
+                            <span className="text-[10px] text-gray-400">
+                              編集済み: {new Date(r.updatedAt).toLocaleString("ja-JP")}
+                            </span>
+                            {r.originalContent && (
+                              <button
+                                onClick={() => {
+                                  revertAnalysisContent(r.id);
+                                  reload();
+                                  toastOk("元の内容に戻しました");
+                                }}
+                                className="text-[10px] text-purple-500 underline hover:text-purple-700"
+                              >
+                                ↩️ 元に戻す
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

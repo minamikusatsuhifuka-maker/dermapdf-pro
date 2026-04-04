@@ -216,6 +216,8 @@ export function GeminiPanel({
   const [analysisType, setAnalysisType] = useState<AnalysisType>("summary");
   const [purpose, setPurpose] = useState("");
   const [result, setResult] = useState("");
+  const [isEditingResult, setIsEditingResult] = useState(false);
+  const [editedResult, setEditedResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
@@ -772,10 +774,52 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       {/* 結果表示 */}
       {result && (
         <div className="space-y-3">
-          <div className="rounded-xl border border-gray-100 bg-white/80 p-4">
-            <div className="prose prose-sm max-w-none text-gray-700">
-              <ReactMarkdown>{result}</ReactMarkdown>
+          <div className="relative rounded-xl border border-gray-100 bg-white/80 p-4">
+            <div className="absolute right-2 top-2 z-10 flex gap-2">
+              {!isEditingResult ? (
+                <button
+                  onClick={() => {
+                    setEditedResult(result);
+                    setIsEditingResult(true);
+                  }}
+                  className="rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs backdrop-blur-sm transition-colors hover:border-purple-300 hover:text-purple-600"
+                >
+                  ✏️ 編集
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setResult(editedResult);
+                      onResult?.(editedResult);
+                      setIsEditingResult(false);
+                      toastOk("分析結果を更新しました");
+                    }}
+                    className="rounded-lg bg-purple-600 px-3 py-1 text-xs text-white transition-colors hover:bg-purple-700"
+                  >
+                    ✅ 保存
+                  </button>
+                  <button
+                    onClick={() => setIsEditingResult(false)}
+                    className="rounded-lg border border-gray-200 px-2 py-1 text-xs transition-colors hover:bg-gray-50"
+                  >
+                    ✕ キャンセル
+                  </button>
+                </>
+              )}
             </div>
+
+            {isEditingResult ? (
+              <textarea
+                value={editedResult}
+                onChange={(e) => setEditedResult(e.target.value)}
+                className="w-full min-h-[400px] rounded-lg border-2 border-purple-400 bg-white p-3 text-sm leading-relaxed resize-y font-[inherit] focus:border-purple-500 focus:outline-none"
+              />
+            ) : (
+              <div className="prose prose-sm max-w-none text-gray-700 pr-16">
+                <ReactMarkdown>{result}</ReactMarkdown>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

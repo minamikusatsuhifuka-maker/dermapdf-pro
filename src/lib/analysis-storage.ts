@@ -8,6 +8,8 @@ export interface AnalysisRecord {
   tags: string[];
   folder: string;
   title?: string;
+  updatedAt?: string;
+  originalContent?: string;
 }
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
@@ -41,6 +43,32 @@ export function updateAnalysisTitle(id: string, title: string): void {
   const idx = records.findIndex((r) => r.id === id);
   if (idx !== -1) {
     records[idx].title = title;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+export function updateAnalysisContent(id: string, content: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    if (!records[idx].originalContent) {
+      records[idx].originalContent = records[idx].content;
+    }
+    records[idx].content = content;
+    records[idx].updatedAt = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+export function revertAnalysisContent(id: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1 && records[idx].originalContent) {
+    records[idx].content = records[idx].originalContent!;
+    delete records[idx].originalContent;
+    delete records[idx].updatedAt;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
     window.dispatchEvent(new Event("analysisStockUpdated"));
   }
