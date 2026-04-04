@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
@@ -362,6 +362,18 @@ export function AnalysisStockPanel() {
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
+  // フォルダごとの件数を計算
+  const folderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    records.forEach((r) => {
+      const folder = r.folder || "";
+      if (folder) {
+        counts[folder] = (counts[folder] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [records]);
+
   // フォルダフィルタ + 検索フィルタ
   const folderFiltered = activeFolder
     ? records.filter((r) => r.folder === activeFolder)
@@ -537,25 +549,32 @@ export function AnalysisStockPanel() {
       </div>
 
       {/* フォルダタブ */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      <div className="flex flex-wrap items-center gap-1.5 pb-1">
         <button
           onClick={() => setActiveFolder(null)}
-          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
             activeFolder === null
-              ? "bg-purple-500 text-white"
+              ? "bg-purple-600 text-white"
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
           }`}
         >
-          <FolderOpen className="mr-1 inline h-3 w-3" />
-          すべて
+          <span>📚 すべて</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+            activeFolder === null
+              ? "bg-white/20 text-white"
+              : "bg-gray-200 text-gray-500"
+          }`}>
+            {records.length}
+          </span>
         </button>
         {allFolders.map((f) => {
           const isCustom = !DEFAULT_FOLDERS.includes(f);
           const isEditing = editingFolderId === f;
+          const count = folderCounts[f] || 0;
 
           if (isEditing) {
             return (
-              <div key={f} className="inline-flex shrink-0 items-center gap-1">
+              <div key={f} className="inline-flex items-center gap-1">
                 <input
                   type="text"
                   defaultValue={f}
@@ -572,16 +591,25 @@ export function AnalysisStockPanel() {
           }
 
           return (
-            <div key={f} className="inline-flex shrink-0 items-center gap-0.5">
+            <div key={f} className={`inline-flex items-center gap-0.5 ${
+              count === 0 && activeFolder !== f ? "opacity-40" : ""
+            }`}>
               <button
                 onClick={() => setActiveFolder(activeFolder === f ? null : f)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                   activeFolder === f
-                    ? "bg-purple-500 text-white"
+                    ? "bg-purple-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
-                {f}
+                <span>{f}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  activeFolder === f
+                    ? "bg-white/20 text-white"
+                    : "bg-gray-200 text-gray-500"
+                }`}>
+                  {count}
+                </span>
               </button>
               {isCustom && (
                 <>
