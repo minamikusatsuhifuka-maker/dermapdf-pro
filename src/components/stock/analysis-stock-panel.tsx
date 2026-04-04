@@ -304,6 +304,11 @@ export function AnalysisStockPanel() {
   const [staffLinkId, setStaffLinkId] = useState<string | null>(null);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
 
+  // カード高さ・フォントサイズ
+  const [fontSize, setFontSize] = useState(13);
+  const [globalHeight, setGlobalHeight] = useState(240);
+  const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
+
   const loadCustomFolders = useCallback((): string[] => {
     try {
       return JSON.parse(localStorage.getItem(CUSTOM_FOLDERS_KEY) || "[]");
@@ -340,6 +345,20 @@ export function AnalysisStockPanel() {
       window.removeEventListener("staffUpdated", reload);
     };
   }, [reload]);
+
+  // フォントサイズをlocalStorageから復元・保存
+  useEffect(() => {
+    const saved = localStorage.getItem("dermapdf_stock_fontsize");
+    if (saved) setFontSize(Number(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dermapdf_stock_fontsize", String(fontSize));
+  }, [fontSize]);
+
+  const setCardHeight = (id: string, h: number) => {
+    setContentHeights((prev) => ({ ...prev, [id]: h }));
+  };
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
@@ -416,11 +435,52 @@ export function AnalysisStockPanel() {
       id="analysis-stock"
       className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-bold text-gray-700">
           保存済み分析 ({records.length}件)
         </h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* 高さ一括変更 */}
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span>高さ</span>
+            {([
+              { label: "S", value: 160 },
+              { label: "M", value: 280 },
+              { label: "L", value: 500 },
+              { label: "XL", value: 900 },
+            ] as const).map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => { setGlobalHeight(opt.value); setContentHeights({}); }}
+                className={`flex h-6 w-6 items-center justify-center rounded border text-[10px] font-bold transition-colors ${
+                  globalHeight === opt.value
+                    ? "border-purple-400 bg-purple-50 text-purple-700"
+                    : "border-gray-200 text-gray-500 hover:border-purple-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* フォントサイズ変更 */}
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span>文字</span>
+            <button
+              onClick={() => setFontSize((f) => Math.max(10, f - 1))}
+              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-purple-300"
+            >
+              A-
+            </button>
+            <span className="w-8 text-center">{fontSize}px</span>
+            <button
+              onClick={() => setFontSize((f) => Math.min(20, f + 1))}
+              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-purple-300"
+            >
+              A+
+            </button>
+          </div>
+
           <button
             onClick={exportAnalysesAsJSON}
             disabled={records.length === 0}
@@ -758,10 +818,44 @@ export function AnalysisStockPanel() {
                 )}
 
                 {isExpanded && (
-                  <div className="border-t border-gray-100 px-4 py-3">
-                    <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm text-gray-700">
+                  <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+                    {/* 個別カード高さプリセット */}
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                      <span>📏 高さ：</span>
+                      {([
+                        { label: "小", value: 120 },
+                        { label: "中", value: 240 },
+                        { label: "大", value: 480 },
+                        { label: "特大", value: 800 },
+                      ] as const).map((opt) => {
+                        const current = contentHeights[r.id] || globalHeight;
+                        return (
+                          <button
+                            key={opt.label}
+                            onClick={() => setCardHeight(r.id, opt.value)}
+                            className={`rounded border px-1.5 py-0.5 transition-colors ${
+                              current === opt.value
+                                ? "border-purple-400 bg-purple-50 text-purple-600"
+                                : "border-gray-200 hover:border-purple-300"
+                            }`}
+                          >
+                            {opt.label}({opt.value}px)
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div
+                      className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700"
+                      style={{
+                        height: `${contentHeights[r.id] || globalHeight}px`,
+                        minHeight: "80px",
+                        maxHeight: "2000px",
+                        fontSize: `${fontSize}px`,
+                        lineHeight: "1.7",
+                      }}
+                    >
                       {r.content}
-                    </pre>
+                    </div>
                   </div>
                 )}
 
