@@ -11,6 +11,7 @@ import {
   exportAnalysesAsText,
   exportAnalysesAsDocx,
   exportAnalysesAsPdf,
+  exportSingleAnalysisAsMarkdown,
   updateAnalysisTitle,
   updateAnalysisTags,
   getDisplayTitle,
@@ -708,8 +709,16 @@ export function AnalysisStockPanel() {
                   <button
                     onClick={() => handleCopy(r.content)}
                     className="rounded p-1 hover:bg-gray-100"
+                    title="コピー"
                   >
                     <Copy className="h-3.5 w-3.5 text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => exportSingleAnalysisAsMarkdown(r)}
+                    className="rounded p-1 hover:bg-purple-50"
+                    title="MD保存"
+                  >
+                    <Download className="h-3.5 w-3.5 text-purple-400" />
                   </button>
                   <button
                     onClick={() => handleDelete(r.id)}
