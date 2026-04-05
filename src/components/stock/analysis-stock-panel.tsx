@@ -13,6 +13,8 @@ import {
   exportAnalysesAsPdf,
   exportSingleAnalysisAsMarkdown,
   exportSingleAnalysisAsPdf,
+  bulkExportAsSingleMarkdown,
+  bulkExportAsText,
   updateAnalysisTitle,
   updateAnalysisTags,
   updateAnalysisContent,
@@ -1186,43 +1188,49 @@ export function AnalysisStockPanel() {
 
       {/* 一括操作パネル */}
       {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] p-3">
-          <span className="text-xs font-semibold text-[#185FA5]">
-            📋 {selectedIds.size}件を一括操作：
-          </span>
+        <div className="flex flex-col gap-2 rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] p-3">
+          {/* 1行目: ラベル + フォルダ + タグ */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-[#185FA5]">
+              📋 {selectedIds.size}件を一括操作：
+            </span>
 
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-600">📁 フォルダ：</span>
-            <select
-              value=""
-              onChange={(e) => {
-                if (e.target.value) bulkSetFolder(e.target.value);
-              }}
-              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#B5D4F4]"
-            >
-              <option value="">選択...</option>
-              {getFlatFolderList(folderTree).map((f) => (
-                <option key={f.path} value={f.path}>{f.displayName}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-600">📁</span>
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) bulkSetFolder(e.target.value);
+                }}
+                className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#B5D4F4]"
+                title="選択した項目をフォルダに移動"
+              >
+                <option value="">フォルダ選択...</option>
+                {getFlatFolderList(folderTree).map((f) => (
+                  <option key={f.path} value={f.path}>{f.displayName}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-600">🏷</span>
+              <input
+                type="text"
+                placeholder="タグ名を入力してEnter"
+                className="w-32 rounded border border-gray-200 px-2 py-1 text-xs outline-none focus:border-[#B5D4F4]"
+                title="選択した項目にタグを追加"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                    bulkAddTag(e.currentTarget.value.trim());
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-600">🏷 タグ追加：</span>
-            <input
-              type="text"
-              placeholder="タグ名を入力してEnter"
-              className="w-32 rounded border border-gray-200 px-2 py-1 text-xs outline-none focus:border-[#B5D4F4]"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                  bulkAddTag(e.currentTarget.value.trim());
-                  e.currentTarget.value = "";
-                }
-              }}
-            />
-          </div>
-
-          <div className="flex items-center gap-1">
+          {/* 2行目: ロック + 複製 + ダウンロード + 削除 */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => {
                 bulkToggleLock(Array.from(selectedIds), true);
@@ -1230,6 +1238,7 @@ export function AnalysisStockPanel() {
                 toastOk(`${selectedIds.size}件をロックしました`);
               }}
               className="flex items-center gap-1 text-xs px-2 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
+              title={`選択した${selectedIds.size}件をロック`}
             >
               🔒 一括ロック
             </button>
@@ -1240,32 +1249,59 @@ export function AnalysisStockPanel() {
                 toastOk(`${selectedIds.size}件のロックを解除しました`);
               }}
               className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              title={`選択した${selectedIds.size}件のロックを解除`}
             >
               🔓 一括解除
             </button>
+            <button
+              onClick={() => {
+                let count = 0;
+                Array.from(selectedIds).forEach((id) => {
+                  if (duplicateAnalysis(id)) count++;
+                });
+                setSelectedIds(new Set());
+                reload();
+                toastOk(`${count}件を複製しました`);
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+              title={`選択した${selectedIds.size}件を複製`}
+            >
+              📋 一括複製
+            </button>
+
+            <span className="text-gray-300">|</span>
+
+            <button
+              onClick={() => {
+                const selected = records.filter((r) => selectedIds.has(r.id));
+                bulkExportAsSingleMarkdown(selected);
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-[#E6F1FB] border border-[#B5D4F4] text-[#185FA5] rounded-lg hover:bg-[#d0e8f8] transition-colors"
+              title={`選択した${selectedIds.size}件を1つのMDファイルでダウンロード`}
+            >
+              ⬇️ MD一括
+            </button>
+            <button
+              onClick={() => {
+                const selected = records.filter((r) => selectedIds.has(r.id));
+                bulkExportAsText(selected);
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              title={`選択した${selectedIds.size}件を1つのテキストファイルでダウンロード`}
+            >
+              ⬇️ テキスト一括
+            </button>
+
+            <span className="flex-1" />
+
+            <button
+              onClick={bulkDelete}
+              className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+              title={`選択した項目を削除（ロック済みは除外）`}
+            >
+              🗑 選択削除
+            </button>
           </div>
-
-          <button
-            onClick={() => {
-              let count = 0;
-              Array.from(selectedIds).forEach((id) => {
-                if (duplicateAnalysis(id)) count++;
-              });
-              setSelectedIds(new Set());
-              reload();
-              toastOk(`${count}件を複製しました`);
-            }}
-            className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-          >
-            📋 一括複製
-          </button>
-
-          <button
-            onClick={bulkDelete}
-            className="ml-auto rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-          >
-            🗑 選択削除
-          </button>
         </div>
       )}
 
