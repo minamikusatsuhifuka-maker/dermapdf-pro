@@ -44,21 +44,38 @@ export interface ClinicMonthData {
   };
 }
 
-function excelToText(wb: XLSX.WorkBook): string {
+const KEYWORDS = [
+  "日付", "年月", "支払い合計", "支払合計",
+  "現金", "クレジット", "ＱＲ", "QR", "電子マネー",
+  "返金", "入金額合計", "入金合計", "未収金",
+  "保険点数合計", "保険請求額合計", "窓口負担額合計", "未収金合計",
+  "社保", "国保", "労災", "自賠責", "公害",
+  "初診料", "再診料", "管理料", "在宅料",
+  "皮下", "筋肉", "処置行為", "手術", "検査", "病理診断",
+  "処方箋料", "画像診断", "その他",
+  "保険請求額内訳", "窓口負担額内訳",
+];
+
+function extractKeyRows(wb: XLSX.WorkBook): string {
   const lines: string[] = [];
+
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name];
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
-    lines.push(`\n=== ${name} ===`);
-    let count = 0;
+
+    lines.push(`\n【${name}シート】`);
+
     for (const row of rows) {
-      const cells = row.map((v) => (v == null ? "" : String(v)));
-      if (cells.some((c) => c !== "")) {
-        lines.push(cells.join("\t"));
-        if (++count >= 40) break;
+      const cells = row.map((v) => (v == null ? "" : String(v).trim()));
+      const rowStr = cells.filter((c) => c !== "").join(" | ");
+      if (!rowStr) continue;
+
+      if (KEYWORDS.some((kw) => rowStr.includes(kw))) {
+        lines.push(rowStr);
       }
     }
   }
+
   return lines.join("\n");
 }
 
@@ -70,7 +87,9 @@ export async function parseClinicExcel(file: File): Promise<ClinicMonthData> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array" });
 
-        const excelText = excelToText(wb);
+        const excelText = extractKeyRows(wb);
+        console.log("[parser] extracted text length:", excelText.length);
+        console.log("[parser] extracted text:", excelText.slice(0, 500));
 
         const res = await fetch("/api/parse-excel", {
           method: "POST",
@@ -78,17 +97,16 @@ export async function parseClinicExcel(file: File): Promise<ClinicMonthData> {
           body: JSON.stringify({ excelText, fileName: file.name }),
         });
 
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "サーバーエラー");
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "サーバーエラー");
         }
 
-        const { data: d } = await res.json();
-
-        const tv = (total: number, jihi: number, hoken: number): TripleValue => ({
-          total: total || 0,
-          jihi: jihi || 0,
-          hoken: hoken || 0,
+        const d = json.data;
+        const tv = (t: number, j: number, h: number): TripleValue => ({
+          total: t || 0,
+          jihi: j || 0,
+          hoken: h || 0,
         });
 
         resolve({
