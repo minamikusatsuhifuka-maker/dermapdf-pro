@@ -41,6 +41,7 @@ const selectClass =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
 
 const DEFAULT_FOLDERS = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
+const LOCK_FOLDER = "🔒 ロック済み";
 const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
 const FOLDER_ORDER_KEY = "dermapdf_folder_order";
 
@@ -419,13 +420,13 @@ export function AnalysisStockPanel() {
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
-  // 全フォルダリストを順序に従って並び替え
+  // 全フォルダリストを順序に従って並び替え（すべて・ロック済みは固定）
   const orderedFolders = useMemo(() => {
-    const all = ["すべて", ...allFolders];
-    if (folderOrder.length === 0) return all;
-    const ordered = folderOrder.filter((f) => all.includes(f));
-    const newFolders = all.filter((f) => !folderOrder.includes(f));
-    return [...ordered, ...newFolders];
+    const draggable = [...allFolders];
+    if (folderOrder.length === 0) return ["すべて", LOCK_FOLDER, ...draggable];
+    const ordered = folderOrder.filter((f) => draggable.includes(f));
+    const newFolders = draggable.filter((f) => !folderOrder.includes(f));
+    return ["すべて", LOCK_FOLDER, ...ordered, ...newFolders];
   }, [folderOrder, allFolders]);
 
   // ドラッグイベントハンドラ
@@ -446,14 +447,16 @@ export function AnalysisStockPanel() {
     const to = dragOverFolderRef.current;
     if (!from || !to || from === to) return;
 
-    const newOrder = [...orderedFolders];
-    const fromIdx = newOrder.indexOf(from);
-    const toIdx = newOrder.indexOf(to);
-    newOrder.splice(fromIdx, 1);
-    newOrder.splice(toIdx, 0, from);
+    // 固定フォルダを除いた並び順で操作
+    const draggableOrder = orderedFolders.filter((f) => f !== "すべて" && f !== LOCK_FOLDER);
+    const fromIdx = draggableOrder.indexOf(from);
+    const toIdx = draggableOrder.indexOf(to);
+    if (fromIdx === -1 || toIdx === -1) return;
+    draggableOrder.splice(fromIdx, 1);
+    draggableOrder.splice(toIdx, 0, from);
 
-    setFolderOrder(newOrder);
-    saveFolderOrder(newOrder);
+    setFolderOrder(draggableOrder);
+    saveFolderOrder(draggableOrder);
     dragFolderRef.current = null;
     dragOverFolderRef.current = null;
     setDraggingFolder(null);
@@ -476,13 +479,16 @@ export function AnalysisStockPanel() {
         counts[folder] = (counts[folder] || 0) + 1;
       }
     });
+    counts[LOCK_FOLDER] = records.filter((r) => r.locked).length;
     return counts;
   }, [records]);
 
   // フォルダフィルタ + 検索フィルタ
-  const folderFiltered = activeFolder
-    ? records.filter((r) => r.folder === activeFolder)
-    : records;
+  const folderFiltered = activeFolder === LOCK_FOLDER
+    ? records.filter((r) => r.locked)
+    : activeFolder
+      ? records.filter((r) => r.folder === activeFolder)
+      : records;
 
   const filtered = search
     ? folderFiltered.filter((r) => {
@@ -753,7 +759,9 @@ export function AnalysisStockPanel() {
       <div className="flex flex-wrap items-center gap-1.5 pb-1">
         {orderedFolders.map((folder) => {
           const isAll = folder === "すべて";
-          const isCustom = !isAll && !DEFAULT_FOLDERS.includes(folder);
+          const isLockFolder = folder === LOCK_FOLDER;
+          const isFixed = isAll || isLockFolder;
+          const isCustom = !isFixed && !DEFAULT_FOLDERS.includes(folder);
           const isEditing = editingFolderId === folder;
           const count = isAll ? records.length : (folderCounts[folder] || 0);
           const isActive = isAll ? activeFolder === null : activeFolder === folder;
@@ -779,11 +787,11 @@ export function AnalysisStockPanel() {
           return (
             <div
               key={folder}
-              draggable
-              onDragStart={() => handleFolderDragStart(folder)}
-              onDragOver={(e) => handleFolderDragOver(e, folder)}
-              onDrop={handleFolderDrop}
-              onDragEnd={handleFolderDragEnd}
+              draggable={!isFixed}
+              onDragStart={isFixed ? undefined : () => handleFolderDragStart(folder)}
+              onDragOver={isFixed ? undefined : (e) => handleFolderDragOver(e, folder)}
+              onDrop={isFixed ? undefined : handleFolderDrop}
+              onDragEnd={isFixed ? undefined : handleFolderDragEnd}
               className={`inline-flex items-center gap-0.5 rounded-full transition-all ${
                 draggingFolder === folder ? "opacity-40" : ""
               } ${
@@ -791,28 +799,38 @@ export function AnalysisStockPanel() {
                   ? "ring-2 ring-purple-400 scale-105"
                   : ""
               } ${
-                !isAll && count === 0 && !isActive ? "opacity-40" : ""
+                !isFixed && count === 0 && !isActive ? "opacity-40" : ""
               }`}
             >
-              <span
-                className="text-gray-300 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none px-0.5"
-                title="ドラッグして並び替え"
-              >
-                ⋮⋮
-              </span>
+              {!isFixed && (
+                <span
+                  className="text-gray-300 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none px-0.5"
+                  title="ドラッグして並び替え"
+                >
+                  ⋮⋮
+                </span>
+              )}
               <button
                 onClick={() => setActiveFolder(isAll ? null : (isActive ? null : folder))}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                  isActive
-                    ? "bg-purple-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  isLockFolder
+                    ? isActive
+                      ? "bg-amber-500 text-white"
+                      : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                    : isActive
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
                 <span>{isAll ? "📚 すべて" : folder}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  isActive
-                    ? "bg-white/20 text-white"
-                    : "bg-gray-200 text-gray-500"
+                  isLockFolder
+                    ? isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-amber-200 text-amber-800"
+                    : isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-gray-200 text-gray-500"
                 }`}>
                   {count}
                 </span>
@@ -1170,7 +1188,14 @@ export function AnalysisStockPanel() {
                     📋
                   </button>
                   <button
-                    onClick={() => { toggleLock(r.id); reload(); }}
+                    onClick={() => {
+                      const wasLocked = r.locked;
+                      toggleLock(r.id);
+                      reload();
+                      if (!wasLocked) {
+                        toastOk("🔒 ロックしました。「🔒 ロック済み」フォルダで確認できます");
+                      }
+                    }}
                     className={`rounded p-1 transition-colors ${
                       r.locked
                         ? "text-amber-500 hover:text-amber-600"
