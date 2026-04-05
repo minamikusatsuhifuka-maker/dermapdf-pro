@@ -215,7 +215,7 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
   const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
 
   const selectClass =
-    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
+    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200";
 
   const handleGenerate = async () => {
     const { summary, count } = buildSummaryData(period);
@@ -323,7 +323,7 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
       <button
         onClick={handleGenerate}
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f6272] hover:bg-[#3d5260] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -356,13 +356,13 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
             </button>
             <button
               onClick={handleSaveToStock}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-rose-400 to-purple-400 px-4 py-2 text-sm font-medium text-white shadow-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-2 text-sm font-medium text-white shadow-sm"
             >
               <BookmarkPlus className="h-3.5 w-3.5" /> ストックに保存
             </button>
             <button
               onClick={handleToGenspark}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 text-sm font-medium text-white shadow-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2 text-sm font-medium text-white shadow-sm"
             >
               <Sparkles className="h-3.5 w-3.5" /> Gensparkでスライド化
             </button>

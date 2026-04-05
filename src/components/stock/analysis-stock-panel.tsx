@@ -38,7 +38,7 @@ import {
 } from "@/lib/genspark-prompt-generator";
 
 const selectClass =
-  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200";
+  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200";
 
 const DEFAULT_FOLDERS = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
 const LOCK_FOLDER = "🔒 ロック済み";
@@ -116,7 +116,7 @@ function TagFolderEditor({
         <label className="mb-1 block text-xs font-medium text-gray-500">タグ</label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {tags.map((t) => (
-            <span key={t} className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+            <span key={t} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
               {t}
               <button onClick={() => removeTag(t)} className="hover:text-red-500">
                 <X className="h-2.5 w-2.5" />
@@ -133,11 +133,11 @@ function TagFolderEditor({
               if (e.key === "Enter") { e.preventDefault(); addTag(); }
             }}
             placeholder="タグを入力（Enterで追加）"
-            className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+            className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
           <button
             onClick={addTag}
-            className="rounded-lg bg-purple-100 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-200"
+            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -146,7 +146,7 @@ function TagFolderEditor({
 
       <button
         onClick={() => onSave(tags, folder)}
-        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-rose-400 to-purple-400 px-3 py-2 text-xs font-bold text-white shadow-sm"
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-2 text-xs font-bold text-white shadow-sm"
       >
         <Save className="h-3 w-3" /> 保存
       </button>
@@ -206,13 +206,13 @@ function InlineGensparkPanel({
   };
 
   return (
-    <div className="space-y-3 border-t border-purple-100 bg-purple-50/30 px-4 py-4">
+    <div className="space-y-3 border-t border-slate-100 bg-slate-50/30 px-4 py-4">
       <div className="flex items-center justify-between">
-        <h4 className="flex items-center gap-1.5 text-sm font-semibold text-purple-700">
+        <h4 className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
           <Sparkles className="h-4 w-4" /> Gensparkプロンプト生成
         </h4>
-        <button onClick={onClose} className="rounded p-1 hover:bg-purple-100">
-          <X className="h-3.5 w-3.5 text-purple-400" />
+        <button onClick={onClose} className="rounded p-1 hover:bg-slate-100">
+          <X className="h-3.5 w-3.5 text-slate-400" />
         </button>
       </div>
 
@@ -259,13 +259,13 @@ function InlineGensparkPanel({
           <p className="mb-1 text-[10px] font-medium text-gray-500">自動適用される技法：</p>
           <div className="flex flex-wrap gap-1.5">
             {appliesEmotion && (
-              <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] text-pink-700">感情の動線設計</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">感情の動線設計</span>
             )}
             {appliesCatch && (
-              <span className="rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] text-purple-700">1スライド1メッセージ</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">1スライド1メッセージ</span>
             )}
             {appliesBeforeAfter && (
-              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] text-rose-700">Before/After比較</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">Before/After比較</span>
             )}
           </div>
         </div>
@@ -274,7 +274,7 @@ function InlineGensparkPanel({
       <button
         onClick={handleGenerate}
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-opacity disabled:opacity-40"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-opacity disabled:opacity-40"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         {loading ? "生成中..." : "プロンプトを生成"}
@@ -282,11 +282,11 @@ function InlineGensparkPanel({
 
       {prompt && (
         <div className="space-y-2">
-          <textarea readOnly value={prompt} rows={8} className="w-full rounded-xl border border-purple-200 bg-white/80 px-3 py-2 text-sm" />
+          <textarea readOnly value={prompt} rows={8} className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm" />
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleCopyAndOpen}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-3 py-1.5 text-xs font-medium text-white shadow-sm"
             >
               <Copy className="h-3 w-3" /> コピーしてGensparkを開く <ExternalLink className="h-2.5 w-2.5" />
             </button>
@@ -673,8 +673,8 @@ export function AnalysisStockPanel() {
                 onClick={() => { setGlobalHeight(opt.value); setContentHeights({}); }}
                 className={`flex h-6 w-6 items-center justify-center rounded border text-[10px] font-bold transition-colors ${
                   globalHeight === opt.value
-                    ? "border-purple-400 bg-purple-50 text-purple-700"
-                    : "border-gray-200 text-gray-500 hover:border-purple-300"
+                    ? "border-slate-400 bg-slate-50 text-slate-700"
+                    : "border-gray-200 text-gray-500 hover:border-slate-300"
                 }`}
               >
                 {opt.label}
@@ -687,14 +687,14 @@ export function AnalysisStockPanel() {
             <span>文字</span>
             <button
               onClick={() => setFontSize((f) => Math.max(10, f - 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-purple-300"
+              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-slate-300"
             >
               A-
             </button>
             <span className="w-8 text-center">{fontSize}px</span>
             <button
               onClick={() => setFontSize((f) => Math.min(20, f + 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-purple-300"
+              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-slate-300"
             >
               A+
             </button>
@@ -773,7 +773,7 @@ export function AnalysisStockPanel() {
                   type="text"
                   defaultValue={folder}
                   autoFocus
-                  className="w-24 rounded-full border border-purple-400 px-2 py-1 text-xs outline-none"
+                  className="w-24 rounded-full border border-slate-400 px-2 py-1 text-xs outline-none"
                   onBlur={(e) => handleRenameFolder(folder, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleRenameFolder(folder, e.currentTarget.value);
@@ -796,7 +796,7 @@ export function AnalysisStockPanel() {
                 draggingFolder === folder ? "opacity-40" : ""
               } ${
                 draggingFolder && dragOverFolder === folder && draggingFolder !== folder
-                  ? "ring-2 ring-purple-400 scale-105"
+                  ? "ring-2 ring-slate-400 scale-105"
                   : ""
               } ${
                 !isFixed && count === 0 && !isActive ? "opacity-40" : ""
@@ -818,7 +818,7 @@ export function AnalysisStockPanel() {
                       ? "bg-amber-500 text-white"
                       : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
                     : isActive
-                      ? "bg-purple-600 text-white"
+                      ? "bg-[#4f6272] text-white"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
@@ -839,7 +839,7 @@ export function AnalysisStockPanel() {
                 <>
                   <button
                     onClick={() => setEditingFolderId(folder)}
-                    className="rounded p-0.5 text-gray-400 hover:text-purple-500 transition-colors"
+                    className="rounded p-0.5 text-gray-400 hover:text-slate-600 transition-colors"
                     title="フォルダ名を変更"
                   >
                     <Pencil className="h-2.5 w-2.5" />
@@ -865,15 +865,15 @@ export function AnalysisStockPanel() {
               onKeyDown={(e) => { if (e.key === "Enter") handleAddFolder(); if (e.key === "Escape") setShowAddFolder(false); }}
               placeholder="フォルダ名"
               autoFocus
-              className="w-24 rounded-full border border-gray-200 px-2 py-1 text-xs focus:border-purple-300 focus:outline-none"
+              className="w-24 rounded-full border border-gray-200 px-2 py-1 text-xs focus:border-slate-300 focus:outline-none"
             />
-            <button onClick={handleAddFolder} className="rounded-full bg-purple-100 px-2 py-1 text-xs text-purple-700 hover:bg-purple-200">追加</button>
+            <button onClick={handleAddFolder} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200">追加</button>
             <button onClick={() => setShowAddFolder(false)} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
           </div>
         ) : (
           <button
             onClick={() => setShowAddFolder(true)}
-            className="shrink-0 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-purple-300 hover:text-purple-500"
+            className="shrink-0 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-slate-300 hover:text-slate-600"
           >
             <Plus className="mr-0.5 inline h-3 w-3" /> フォルダ追加
           </button>
@@ -901,12 +901,12 @@ export function AnalysisStockPanel() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ファイル名・内容・分析タイプ・タグ・フォルダで検索..."
-            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
         </div>
         <button
           onClick={() => setShowTagList(!showTagList)}
-          className="flex items-center gap-1 px-3 py-2 text-xs border rounded-lg hover:border-purple-300 whitespace-nowrap"
+          className="flex items-center gap-1 px-3 py-2 text-xs border rounded-lg hover:border-slate-300 whitespace-nowrap"
         >
           🏷 タグ ({getTagsWithCount().length}種)
         </button>
@@ -916,9 +916,9 @@ export function AnalysisStockPanel() {
       {showTagList && (() => {
         const tagsWithCount = getTagsWithCount();
         return (
-          <div className="border border-purple-100 rounded-lg bg-purple-50 p-3 mb-3">
+          <div className="border border-slate-100 rounded-lg bg-slate-50 p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-purple-700">🏷 タグ一覧（五十音順）</span>
+              <span className="text-xs font-semibold text-slate-700">🏷 タグ一覧（五十音順）</span>
               <button onClick={() => setShowTagList(false)} className="text-gray-400 text-xs">✕ 閉じる</button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -929,9 +929,9 @@ export function AnalysisStockPanel() {
                     setSearch(tag);
                     setShowTagList(false);
                   }}
-                  className="flex items-center gap-1 px-2 py-1 bg-white border border-purple-200 rounded-full text-xs hover:bg-purple-100 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 rounded-full text-xs hover:bg-slate-100 transition-colors"
                 >
-                  <span className="text-purple-700">{tag}</span>
+                  <span className="text-slate-700">{tag}</span>
                   <span className="text-gray-400 text-[10px]">({count})</span>
                 </button>
               ))}
@@ -950,7 +950,7 @@ export function AnalysisStockPanel() {
             type="checkbox"
             checked={selectedIds.size === filtered.length && filtered.length > 0}
             onChange={toggleSelectAll}
-            className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+            className="h-4 w-4 rounded border-gray-300 text-[#4f6272] focus:ring-slate-400 cursor-pointer"
           />
           <span className="text-xs text-gray-500">
             {selectedIds.size > 0 ? `${selectedIds.size}件選択中` : "全選択"}
@@ -968,8 +968,8 @@ export function AnalysisStockPanel() {
 
       {/* 一括操作パネル */}
       {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 p-3">
-          <span className="text-xs font-semibold text-purple-700">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <span className="text-xs font-semibold text-slate-700">
             📋 {selectedIds.size}件を一括操作：
           </span>
 
@@ -980,7 +980,7 @@ export function AnalysisStockPanel() {
               onChange={(e) => {
                 if (e.target.value) bulkSetFolder(e.target.value);
               }}
-              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-purple-300"
+              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-slate-300"
             >
               <option value="">選択...</option>
               {allFolders.map((f) => (
@@ -994,7 +994,7 @@ export function AnalysisStockPanel() {
             <input
               type="text"
               placeholder="タグ名を入力してEnter"
-              className="w-32 rounded border border-gray-200 px-2 py-1 text-xs outline-none focus:border-purple-300"
+              className="w-32 rounded border border-gray-200 px-2 py-1 text-xs outline-none focus:border-slate-300"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.currentTarget.value.trim()) {
                   bulkAddTag(e.currentTarget.value.trim());
@@ -1068,7 +1068,7 @@ export function AnalysisStockPanel() {
                 key={r.id}
                 className={`overflow-hidden rounded-xl border ${
                   selectedIds.has(r.id)
-                    ? "border-purple-200 bg-purple-50"
+                    ? "border-slate-200 bg-slate-50"
                     : "border-gray-100 bg-white/60"
                 }`}
               >
@@ -1078,10 +1078,10 @@ export function AnalysisStockPanel() {
                     checked={selectedIds.has(r.id)}
                     onChange={() => toggleSelect(r.id)}
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#4f6272] focus:ring-slate-400"
                   />
                   <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
-                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 border border-slate-200">
                     {r.analysisLabel}
                   </span>
                   {r.folder && (
@@ -1106,7 +1106,7 @@ export function AnalysisStockPanel() {
                       defaultValue={getDisplayTitle(r)}
                       autoFocus
                       placeholder={r.fileName}
-                      className="flex-1 text-sm font-semibold border-b border-purple-400 outline-none bg-transparent w-full max-w-xs"
+                      className="flex-1 text-sm font-semibold border-b border-slate-400 outline-none bg-transparent w-full max-w-xs"
                       onBlur={(e) => {
                         updateAnalysisTitle(r.id, e.target.value);
                         setEditingId(null);
@@ -1126,7 +1126,7 @@ export function AnalysisStockPanel() {
                       {getDisplayTitle(r)}
                       <button
                         onClick={() => setEditingId(r.id)}
-                        className="ml-1 text-gray-400 hover:text-purple-500 transition-colors"
+                        className="ml-1 text-gray-400 hover:text-slate-600 transition-colors"
                         title="タイトルを編集"
                       >
                         ✏️
@@ -1147,7 +1147,7 @@ export function AnalysisStockPanel() {
                     onClick={() =>
                       setActiveGensparkId(isGensparkActive ? null : r.id)
                     }
-                    className="rounded bg-gradient-to-r from-purple-500 to-pink-500 px-2 py-1 text-[10px] font-semibold text-white transition-opacity hover:opacity-90"
+                    className="rounded bg-[#5c7a6e] hover:bg-[#4a6459] px-2 py-1 text-[10px] font-semibold text-white transition-opacity"
                   >
                     Gensparkへ
                   </button>
@@ -1169,10 +1169,10 @@ export function AnalysisStockPanel() {
                   </button>
                   <button
                     onClick={() => exportSingleAnalysisAsMarkdown(r)}
-                    className="rounded p-1 hover:bg-purple-50"
+                    className="rounded p-1 hover:bg-slate-50"
                     title="MD保存"
                   >
-                    <Download className="h-3.5 w-3.5 text-purple-400" />
+                    <Download className="h-3.5 w-3.5 text-slate-400" />
                   </button>
                   <button
                     onClick={() => {
@@ -1236,7 +1236,7 @@ export function AnalysisStockPanel() {
                 {(r.tags || []).length > 0 && (
                   <div className="flex flex-wrap gap-1 px-4 pb-1">
                     {r.tags.map((t) => (
-                      <span key={t} className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600">
+                      <span key={t} className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600 border border-stone-200">
                         {t}
                       </span>
                     ))}
@@ -1267,8 +1267,8 @@ export function AnalysisStockPanel() {
                             onClick={() => setCardHeight(r.id, opt.value)}
                             className={`rounded border px-1.5 py-0.5 transition-colors ${
                               current === opt.value
-                                ? "border-purple-400 bg-purple-50 text-purple-600"
-                                : "border-gray-200 hover:border-purple-300"
+                                ? "border-slate-400 bg-slate-50 text-[#4f6272]"
+                                : "border-gray-200 hover:border-slate-300"
                             }`}
                           >
                             {opt.label}({opt.value}px)
@@ -1282,7 +1282,7 @@ export function AnalysisStockPanel() {
                         <textarea
                           value={editingContent}
                           onChange={(e) => setEditingContent(e.target.value)}
-                          className="w-full rounded-lg border-2 border-purple-400 bg-white p-3 font-[inherit] resize-y focus:border-purple-500 focus:outline-none"
+                          className="w-full rounded-lg border-2 border-slate-400 bg-white p-3 font-[inherit] resize-y focus:border-slate-500 focus:outline-none"
                           style={{
                             minHeight: `${contentHeights[r.id] || globalHeight}px`,
                             fontSize: `${fontSize}px`,
@@ -1297,7 +1297,7 @@ export function AnalysisStockPanel() {
                               reload();
                               toastOk("内容を更新しました");
                             }}
-                            className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-purple-700"
+                            className="rounded-lg bg-[#4f6272] px-3 py-1.5 text-xs text-white transition-colors hover:bg-[#3d5260]"
                           >
                             ✅ 保存
                           </button>
@@ -1319,7 +1319,7 @@ export function AnalysisStockPanel() {
                             setEditingContent(r.content);
                             setEditingContentId(r.id);
                           }}
-                          className="absolute right-2 top-2 z-10 rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs transition-colors hover:border-purple-300 hover:text-purple-600"
+                          className="absolute right-2 top-2 z-10 rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs transition-colors hover:border-slate-300 hover:text-[#4f6272]"
                         >
                           ✏️ 編集
                         </button>
@@ -1347,7 +1347,7 @@ export function AnalysisStockPanel() {
                                   reload();
                                   toastOk("元の内容に戻しました");
                                 }}
-                                className="text-[10px] text-purple-500 underline hover:text-purple-700"
+                                className="text-[10px] text-slate-500 underline hover:text-slate-700"
                               >
                                 ↩️ 元に戻す
                               </button>
@@ -1436,7 +1436,7 @@ export function AnalysisStockPanel() {
               onKeyDown={(e) => e.key === "Enter" && confirmDelete()}
               placeholder="パスワードを入力"
               autoFocus
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 mb-2"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 mb-2"
             />
             {passwordError && (
               <p className="text-xs text-red-500 mb-2">❌ {passwordError}</p>

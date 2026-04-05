@@ -30,7 +30,7 @@ export default function RootLayout({
       lang="ja"
       className={`${notoSansJP.variable} ${zenMaruGothic.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-gradient-to-br from-rose-50 via-white to-purple-50 font-[family-name:var(--font-noto-sans-jp)]">
+      <body className="min-h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-stone-50 font-[family-name:var(--font-noto-sans-jp)]">
         {children}
         <Toaster position="top-right" richColors duration={8000} />
       </body>

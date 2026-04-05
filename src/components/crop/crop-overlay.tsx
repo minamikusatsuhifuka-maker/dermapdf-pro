@@ -127,7 +127,7 @@ export function CropOverlay({
           {/* 選択矩形 */}
           {rect && rect.width > 2 && rect.height > 2 && (
             <div
-              className="absolute border-2 border-dashed border-rose-400 bg-rose-400/10"
+              className="absolute border-2 border-dashed border-slate-400 bg-slate-400/10"
               style={{
                 left: rect.x,
                 top: rect.y,
@@ -146,7 +146,7 @@ export function CropOverlay({
               const nr = getNormalizedRect();
               if (nr) onCrop(nr);
             }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 to-rose-500 px-6 py-2.5 text-sm font-medium text-white shadow-lg transition-opacity disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#4f6272] hover:bg-[#3d5260] px-6 py-2.5 text-sm font-medium text-white shadow-lg transition-opacity disabled:opacity-40"
           >
             <Scissors className="h-4 w-4" /> トリミング
           </button>
@@ -157,7 +157,7 @@ export function CropOverlay({
                 const nr = getNormalizedRect();
                 if (nr) onCropAndRemoveBg(nr);
               }}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-400 to-purple-500 px-6 py-2.5 text-sm font-medium text-white shadow-lg transition-opacity disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-6 py-2.5 text-sm font-medium text-white shadow-lg transition-opacity disabled:opacity-40"
             >
               <Eraser className="h-4 w-4" /> トリミング＋背景除去
             </button>

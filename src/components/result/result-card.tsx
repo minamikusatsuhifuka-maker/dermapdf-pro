@@ -46,7 +46,7 @@ export function ResultCard({
           {onDownload && (
             <button
               onClick={onDownload}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-rose-400 to-rose-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:from-rose-500 hover:to-rose-600"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-1.5 text-xs font-medium text-white shadow-sm"
             >
               <Download className="h-3.5 w-3.5" /> ダウンロード
             </button>
@@ -54,7 +54,7 @@ export function ResultCard({
           {onSaveToDrive && (
             <button
               onClick={onSaveToDrive}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-400 to-purple-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:from-purple-500 hover:to-purple-600"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-3 py-1.5 text-xs font-medium text-white shadow-sm"
             >
               <HardDrive className="h-3.5 w-3.5" /> Drive保存
             </button>

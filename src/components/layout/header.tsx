@@ -78,7 +78,7 @@ export function Header({ apiStatus }: HeaderProps) {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="font-[family-name:var(--font-zen-maru)] text-2xl font-bold">
-                <span className="bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-slate-500 via-slate-600 to-slate-700 bg-clip-text text-transparent">
                   🌸 DermaPDF Pro
                 </span>
               </h1>
@@ -92,7 +92,7 @@ export function Header({ apiStatus }: HeaderProps) {
               <StatusBadge label="Gemini AI" active={status.gemini} />
               <button
                 onClick={handleForceCheck}
-                className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200"
                 title="クリックして最新モデルを再チェック"
               >
                 🤖 {CURRENT_MODEL.replace("gemini-", "Gemini ")}
@@ -101,7 +101,7 @@ export function Header({ apiStatus }: HeaderProps) {
                 href="https://www.genspark.ai/ai_slides?tab=explore"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200"
               >
                 <span>✨</span>
                 <span>Gensparkで資料作成</span>

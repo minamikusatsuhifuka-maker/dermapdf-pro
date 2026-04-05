@@ -179,7 +179,7 @@ export function WorkflowPanel({ onSelectAnalysisType }: WorkflowPanelProps) {
                       className="flex items-center justify-between rounded-lg bg-gray-50/60 px-3 py-2"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-rose-400 to-purple-400 text-xs font-bold text-white">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4f6272] text-xs font-bold text-white">
                           {i + 1}
                         </span>
                         <div>
@@ -195,7 +195,7 @@ export function WorkflowPanel({ onSelectAnalysisType }: WorkflowPanelProps) {
                         onClick={() =>
                           onSelectAnalysisType(step.analysisType)
                         }
-                        className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-purple-400 to-purple-500 px-3 py-1 text-xs font-medium text-white shadow-sm"
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-3 py-1 text-xs font-medium text-white shadow-sm"
                       >
                         <Play className="h-3 w-3" /> 実行
                       </button>

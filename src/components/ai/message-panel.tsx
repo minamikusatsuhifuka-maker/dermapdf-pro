@@ -77,7 +77,7 @@ export function MessagePanel({
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
       <h2 className="flex items-center gap-2 text-lg font-bold text-gray-700">
-        <MessageSquare className="h-5 w-5 text-purple-500" />
+        <MessageSquare className="h-5 w-5 text-[#4f6272]" />
         メッセージ生成
       </h2>
 
@@ -89,7 +89,7 @@ export function MessagePanel({
         <select
           value={messageType}
           onChange={(e) => setMessageType(e.target.value as MessageType)}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
         >
           {(Object.entries(MESSAGE_LABELS) as [MessageType, string][]).map(
             ([value, label]) => (
@@ -105,7 +105,7 @@ export function MessagePanel({
       <button
         onClick={handleGenerate}
         disabled={loading || !fileBase64}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-400 via-rose-500 to-purple-400 px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f6272] hover:bg-[#3d5260] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
