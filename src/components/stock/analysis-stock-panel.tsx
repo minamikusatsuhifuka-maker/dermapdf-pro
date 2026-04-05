@@ -151,6 +151,17 @@ function FolderTreeItem({
         }`}>
           {node.totalCount}
         </span>
+        {node.children.length > 0 && (
+          <span
+            className={`flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+              isActive ? "bg-white/20 text-white" : "bg-[#dbeafe] text-[#1d4ed8]"
+            }`}
+            title={`サブフォルダ ${node.children.length}個`}
+          >
+            <span>📁</span>
+            <span>{node.children.length}</span>
+          </span>
+        )}
       </button>
 
       {hasChildren && isOpen && (
