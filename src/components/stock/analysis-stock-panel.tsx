@@ -23,7 +23,6 @@ import {
   getDisplayTitle,
   getTagsWithCount,
   renameFolder,
-  deleteFolder,
   toggleLock,
   duplicateAnalysis,
   bulkToggleLock,
@@ -231,7 +230,15 @@ function FolderTreeItem({
                       <Pencil className="h-2 w-2" />
                     </button>
                     <button
-                      onClick={() => onDelete?.(child.path)}
+                      onClick={() => {
+                        const count = child.totalCount;
+                        const msg = count > 0
+                          ? `「${child.name}」を削除しますか？\n\nこのサブフォルダ内の${count}件のカードはフォルダなし（未分類）に移動されます。`
+                          : `「${child.name}」を削除しますか？`;
+                        if (window.confirm(msg)) {
+                          onDelete?.(child.path);
+                        }
+                      }}
                       className="text-gray-300 hover:text-red-400 transition-colors"
                       title="削除"
                     >
@@ -263,7 +270,16 @@ function FolderTreeItem({
             <Pencil className="h-2.5 w-2.5" />
           </button>
           <button
-            onClick={() => onDelete?.(node.path)}
+            onClick={() => {
+              const count = node.totalCount;
+              const subCount = node.children.length;
+              let msg = `「${node.name}」を削除しますか？`;
+              if (subCount > 0) msg += `\n\nサブフォルダ${subCount}個も一緒に削除されます。`;
+              if (count > 0) msg += `\n\nこのフォルダ内の${count}件のカードはフォルダなし（未分類）に移動されます。`;
+              if (window.confirm(msg)) {
+                onDelete?.(node.path);
+              }
+            }}
             className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
             title="フォルダを削除"
           >
@@ -768,11 +784,28 @@ export function AnalysisStockPanel() {
     setEditingFolderId(null);
   };
 
-  const handleDeleteFolder = (folderName: string) => {
-    deleteFolder(folderName);
-    const updated = customFolders.filter((f) => f !== folderName);
+  const handleDeleteFolder = (path: string) => {
+    // カスタムフォルダリストから削除（パス自身とサブフォルダも）
+    const updated = customFolders.filter((f) => f !== path && !f.startsWith(path + "/"));
     saveCustomFolders(updated);
-    if (activeFolder === folderName) setActiveFolder(null);
+
+    // このフォルダ配下のカードのfolderを''にリセット
+    const allRecords = loadAllAnalyses();
+    const updatedRecords = allRecords.map((r) => {
+      if (r.folder === path || (r.folder || "").startsWith(path + "/")) {
+        return { ...r, folder: "" };
+      }
+      return r;
+    });
+    localStorage.setItem("dermapdf_analysis_stock", JSON.stringify(updatedRecords));
+
+    // アクティブフォルダが削除対象なら解除
+    if (activeFolder === path || (activeFolder || "").startsWith(path + "/")) {
+      setActiveFolder(null);
+    }
+
+    // 再読み込み
+    setRecords(updatedRecords);
   };
 
   const handleDelete = (record: AnalysisRecord) => {
