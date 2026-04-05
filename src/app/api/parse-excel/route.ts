@@ -8,46 +8,57 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "API key missing" }, { status: 500 });
 
-    const prompt = `以下はクリニックの月次集計Excelをテキスト化したデータです。
-各項目の数値を正確に読み取り、JSONで返してください。
-数値が見つからない場合は0。小数は切り捨て整数に。
+    const prompt = `以下のExcelデータから数値を読み取ってください。
 
-${excelText}
+${(excelText as string).slice(0, 4000)}
 
-以下のJSON形式のみで返答（説明文・マークダウン不要）:
+JSONのみで回答してください：
 {
-  "yearMonth": "YYYY年M月",
-  "shiharaiGoukeiTotal": 0, "shiharaiGoukeiJihi": 0, "shiharaiGoukeiHoken": 0,
-  "genkinTotal": 0, "genkinJihi": 0, "genkinHoken": 0,
-  "creditTotal": 0, "creditJihi": 0, "creditHoken": 0,
-  "qrTotal": 0, "qrJihi": 0, "qrHoken": 0,
-  "emoneyTotal": 0, "emoneyJihi": 0, "emoneyHoken": 0,
-  "henkinTotal": 0, "henkinJihi": 0, "henkinHoken": 0,
-  "nyukinGoukeiTotal": 0, "nyukinGoukeiJihi": 0, "nyukinGoukeiHoken": 0,
-  "tensuGoukei": 0, "seikyuGoukei": 0, "madoGuchiGoukei": 0, "mishuGoukei": 0,
-  "shaHo": 0, "kokuHo": 0, "rosai": 0, "jibaiseki": 0, "kogai": 0, "sonotaHoken": 0,
-  "shoshinRyo": 0, "saishinRyo": 0, "kanriRyo": 0, "zaitakuRyo": 0,
-  "chusha": 0, "shochi": 0, "shujutsu": 0, "kensa": 0, "byori": 0,
-  "shohosenRyo": 0, "sonotaTensu": 0, "gazoShindan": 0
-}
-
-読み取りのヒント:
-- yearMonth: 「日付:」の後ろにある年月（例: 2026/03/01 → 2026年3月）
-- shiharaiGoukei: 「支払い合計(税込)」という行ラベルの隣にある合計・自費・保険の3つの数値。同名ラベルが複数ある場合は最大の合計値の行を使用
-- genkin: 「現金」行の合計・自費・保険
-- credit: 「クレジットカード」行の合計・自費・保険
-- qr: 「ＱＲ決済」または「QR決済」行の合計・自費・保険
-- emoney: 「電子マネー」行の合計・自費・保険
-- henkin: 「返金対応用」行の合計・自費・保険
-- nyukinGoukei: 「入金額合計」行の合計・自費・保険
-- tensuGoukei: 「保険点数合計」の数値（点数）
-- seikyuGoukei: 「保険請求額合計」の数値（円）
-- madoGuchiGoukei: 「窓口負担額合計」の数値（円）
-- mishuGoukei: 「未収金合計」の数値（円）
-- shaHo/kokuHo: 「社保」「国保」の金額
-- shoshinRyo〜shohosenRyo: 各点数項目
-- sonotaTensu: 「その他（リハビリ」を含む行の点数
-- gazoShindan: 「画像診断」の点数`;
+  "yearMonth": "年月（例: 2026年3月）",
+  "shiharaiGoukeiTotal": 支払い合計(税込)の合計欄の数値,
+  "shiharaiGoukeiJihi": 支払い合計(税込)の自費欄の数値,
+  "shiharaiGoukeiHoken": 支払い合計(税込)の保険欄の数値,
+  "genkinTotal": 現金の合計,
+  "genkinJihi": 現金の自費,
+  "genkinHoken": 現金の保険,
+  "creditTotal": クレジットカードの合計,
+  "creditJihi": クレジットカードの自費,
+  "creditHoken": クレジットカードの保険,
+  "qrTotal": QR決済の合計,
+  "qrJihi": QR決済の自費,
+  "qrHoken": QR決済の保険,
+  "emoneyTotal": 電子マネーの合計,
+  "emoneyJihi": 電子マネーの自費,
+  "emoneyHoken": 電子マネーの保険,
+  "henkinTotal": 返金対応用の合計,
+  "henkinJihi": 返金対応用の自費,
+  "henkinHoken": 返金対応用の保険,
+  "nyukinGoukeiTotal": 入金額合計の合計,
+  "nyukinGoukeiJihi": 入金額合計の自費,
+  "nyukinGoukeiHoken": 入金額合計の保険,
+  "tensuGoukei": 保険点数合計,
+  "seikyuGoukei": 保険請求額合計,
+  "madoGuchiGoukei": 窓口負担額合計,
+  "mishuGoukei": 未収金合計,
+  "shaHo": 社保,
+  "kokuHo": 国保,
+  "rosai": 労災,
+  "jibaiseki": 自賠責,
+  "kogai": 公害,
+  "sonotaHoken": その他（保険）,
+  "shoshinRyo": 初診料,
+  "saishinRyo": 再診料,
+  "kanriRyo": 管理料,
+  "zaitakuRyo": 在宅料,
+  "chusha": 皮下筋肉内注射,
+  "shochi": 処置行為,
+  "shujutsu": 手術,
+  "kensa": 検査,
+  "byori": 病理診断,
+  "shohosenRyo": 処方箋料,
+  "sonotaTensu": その他点数,
+  "gazoShindan": 画像診断
+}`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
@@ -63,7 +74,7 @@ ${excelText}
 
     if (!response.ok) {
       const err = await response.text();
-      console.error("Gemini error:", response.status, err);
+      console.error("[parse-excel] Gemini error:", response.status, err);
       return NextResponse.json({ error: `Gemini API error: ${response.status}` }, { status: 500 });
     }
 
@@ -74,17 +85,33 @@ ${excelText}
         ?.map((p: { text: string }) => p.text)
         ?.join("") ?? "";
 
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) {
-      console.error("No JSON in response:", text);
-      return NextResponse.json({ error: "JSON parse failed", raw: text }, { status: 500 });
+    console.log("[parse-excel] Gemini raw response:", text.slice(0, 500));
+
+    const cleaned = text
+      .replace(/^```json\s*/m, "")
+      .replace(/^```\s*/m, "")
+      .replace(/\s*```$/m, "")
+      .trim();
+
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end === -1) {
+      console.error("[parse-excel] No JSON found in:", cleaned);
+      return NextResponse.json({ error: "JSON not found", raw: cleaned.slice(0, 300) }, { status: 500 });
     }
 
-    const parsed = JSON.parse(match[0]);
+    const jsonStr = cleaned.slice(start, end + 1);
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error("[parse-excel] JSON parse error:", parseErr, jsonStr.slice(0, 200));
+      return NextResponse.json({ error: "JSON parse failed", raw: jsonStr.slice(0, 200) }, { status: 500 });
+    }
+
     return NextResponse.json({ success: true, data: parsed, fileName });
   } catch (e) {
-    console.error("parse-excel error:", e);
+    console.error("[parse-excel] error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }

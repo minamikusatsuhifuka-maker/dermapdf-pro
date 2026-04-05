@@ -49,11 +49,13 @@ function excelToText(wb: XLSX.WorkBook): string {
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name];
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
-    lines.push(`\n=== シート: ${name} ===`);
+    lines.push(`\n=== ${name} ===`);
+    let count = 0;
     for (const row of rows) {
-      const cells = row.map((v) => (v === null || v === undefined ? "" : String(v)));
-      if (cells.filter((v) => v !== "").length >= 1) {
+      const cells = row.map((v) => (v == null ? "" : String(v)));
+      if (cells.some((c) => c !== "")) {
         lines.push(cells.join("\t"));
+        if (++count >= 40) break;
       }
     }
   }
