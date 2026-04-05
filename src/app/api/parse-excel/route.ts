@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
     const jsonSchema = `{"yearMonth":"","shiharaiGoukeiTotal":0,"shiharaiGoukeiJihi":0,"shiharaiGoukeiHoken":0,"genkinTotal":0,"genkinJihi":0,"genkinHoken":0,"creditTotal":0,"creditJihi":0,"creditHoken":0,"qrTotal":0,"qrJihi":0,"qrHoken":0,"emoneyTotal":0,"emoneyJihi":0,"emoneyHoken":0,"henkinTotal":0,"henkinJihi":0,"henkinHoken":0,"nyukinGoukeiTotal":0,"nyukinGoukeiJihi":0,"nyukinGoukeiHoken":0,"tensuGoukei":0,"seikyuGoukei":0,"madoGuchiGoukei":0,"mishuGoukei":0,"shaHo":0,"kokuHo":0,"rosai":0,"jibaiseki":0,"kogai":0,"sonotaHoken":0,"shoshinRyo":0,"saishinRyo":0,"kanriRyo":0,"zaitakuRyo":0,"chusha":0,"shochi":0,"shujutsu":0,"kensa":0,"byori":0,"shohosenRyo":0,"sonotaTensu":0,"gazoShindan":0}`;
 
-    const instruction = `あなたはクリニック月次集計データを読み取るAIです。
+    const textInstruction = `あなたはクリニック月次集計データを読み取るAIです。
 画像またはテキストからデータを読み取り、以下のJSONのみで回答してください。
 説明文・マークダウン・コードブロックは一切不要です。JSONのみ返してください。
 
@@ -32,6 +32,19 @@ export async function POST(req: NextRequest) {
 
 JSON形式: ${jsonSchema}`;
 
+    const imageInstruction = `この画像はクリニックの月次集計表です。表から以下のデータを読み取り、JSONのみで回答してください。説明文不要。
+
+読み取る項目:
+- 日付（年月）
+- 入金方法別: 現金・クレジット・QR決済・電子マネー・返金・合計の金額
+- 集計内訳: 保険点数合計・保険請求額合計・窓口負担額合計・未収金合計
+- 保険請求額内訳: 社保・国保・労災・自賠責・公害・その他
+- 診療区分点数: 初診料・再診料・管理料・在宅料・皮下筋肉内注射・処置行為・手術・検査・病理診断・処方箋料・画像診断
+
+支払い合計(税込)がある場合はその合計・自費・保険も読み取る。
+
+JSON: ${jsonSchema}`;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let contents: any[];
 
@@ -40,18 +53,18 @@ JSON形式: ${jsonSchema}`;
         role: "user",
         parts: [
           { inline_data: { mime_type: body.mimeType || "image/png", data: body.imageBase64 } },
-          { text: instruction },
+          { text: imageInstruction },
         ],
       }];
     } else {
       contents = [{
         role: "user",
-        parts: [{ text: `${instruction}\n\nデータ:\n${body.excelText}` }],
+        parts: [{ text: `${textInstruction}\n\nデータ:\n${body.excelText}` }],
       }];
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
