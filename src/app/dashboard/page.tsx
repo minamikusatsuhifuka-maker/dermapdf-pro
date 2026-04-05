@@ -76,9 +76,9 @@ export default function DashboardPage() {
 
   const chartData = allData.slice(-12).map((d) => ({
     month: d.yearMonth.replace("年", "/").replace("月", ""),
-    売上合計: d.sheet1.totalPayment?.total ?? 0,
-    自費: d.sheet1.totalPayment?.jihi ?? 0,
-    保険: d.sheet1.totalPayment?.hoken ?? 0,
+    支払合計: d.sheet1.shiharaiGoukei?.total ?? 0,
+    自費: d.sheet1.shiharaiGoukei?.jihi ?? 0,
+    保険: d.sheet1.shiharaiGoukei?.hoken ?? 0,
     現金: d.sheet1.cash?.total ?? 0,
     クレジット: d.sheet1.credit?.total ?? 0,
     QR: d.sheet1.qr?.total ?? 0,
@@ -189,19 +189,19 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
                 {[
                   {
-                    label: "売上合計(税込)",
-                    value: fmtYen(latest.sheet1.totalPayment?.total ?? 0),
-                    change: prev ? pct(latest.sheet1.totalPayment?.total, prev.sheet1.totalPayment?.total) : null,
+                    label: "支払い合計(税込)",
+                    value: fmtYen(latest.sheet1.shiharaiGoukei?.total ?? 0),
+                    change: prev ? pct(latest.sheet1.shiharaiGoukei?.total, prev.sheet1.shiharaiGoukei?.total) : null,
                   },
                   {
                     label: "自費売上",
-                    value: fmtYen(latest.sheet1.totalPayment?.jihi ?? 0),
-                    change: prev ? pct(latest.sheet1.totalPayment?.jihi, prev.sheet1.totalPayment?.jihi) : null,
+                    value: fmtYen(latest.sheet1.shiharaiGoukei?.jihi ?? 0),
+                    change: prev ? pct(latest.sheet1.shiharaiGoukei?.jihi, prev.sheet1.shiharaiGoukei?.jihi) : null,
                   },
                   {
                     label: "保険収入",
-                    value: fmtYen(latest.sheet1.totalPayment?.hoken ?? 0),
-                    change: prev ? pct(latest.sheet1.totalPayment?.hoken, prev.sheet1.totalPayment?.hoken) : null,
+                    value: fmtYen(latest.sheet1.shiharaiGoukei?.hoken ?? 0),
+                    change: prev ? pct(latest.sheet1.shiharaiGoukei?.hoken, prev.sheet1.shiharaiGoukei?.hoken) : null,
                   },
                   {
                     label: "保険請求額",
@@ -372,9 +372,9 @@ export default function DashboardPage() {
                       const rows = allData.map((d) =>
                         [
                           d.yearMonth,
-                          d.sheet1.totalPayment?.total,
-                          d.sheet1.totalPayment?.jihi,
-                          d.sheet1.totalPayment?.hoken,
+                          d.sheet1.shiharaiGoukei?.total,
+                          d.sheet1.shiharaiGoukei?.jihi,
+                          d.sheet1.shiharaiGoukei?.hoken,
                           d.sheet1.cash?.total,
                           d.sheet1.credit?.total,
                           d.sheet1.qr?.total,
@@ -384,7 +384,7 @@ export default function DashboardPage() {
                           d.hoken.madoGuchiGoukei,
                         ].join(",")
                       );
-                      const header = "年月,売上合計,自費,保険,現金,クレジット,QR,電子マネー,保険点数,保険請求額,窓口負担額";
+                      const header = "年月,支払合計,自費,保険,現金,クレジット,QR,電子マネー,保険点数,保険請求額,窓口負担額";
                       const csv = "\uFEFF" + [header, ...rows].join("\n");
                       const a = document.createElement("a");
                       a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -400,7 +400,7 @@ export default function DashboardPage() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 text-gray-400">
-                        {["年月", "売上合計", "自費", "保険", "現金", "クレジット", "QR", "電子マネー", "保険請求額", "前月比"].map((h) => (
+                        {["年月", "支払合計", "自費", "保険", "現金", "クレジット", "QR", "電子マネー", "保険請求額", "前月比"].map((h) => (
                           <th key={h} className="px-3 py-2.5 text-left font-medium border-b border-gray-100 whitespace-nowrap">
                             {h}
                           </th>
@@ -410,7 +410,7 @@ export default function DashboardPage() {
                     <tbody>
                       {[...allData].reverse().map((d, i) => {
                         const p = [...allData].reverse()[i + 1];
-                        const ch = p ? pct(d.sheet1.totalPayment?.total, p.sheet1.totalPayment?.total) : null;
+                        const ch = p ? pct(d.sheet1.shiharaiGoukei?.total, p.sheet1.shiharaiGoukei?.total) : null;
                         return (
                           <tr
                             key={d.yearMonth}
@@ -419,9 +419,9 @@ export default function DashboardPage() {
                             <td className={`px-3 py-2.5 font-medium whitespace-nowrap ${i === 0 ? "text-[#185FA5]" : "text-gray-700"}`}>
                               {d.yearMonth}
                             </td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.totalPayment?.total ?? 0)}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.totalPayment?.jihi ?? 0)}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.totalPayment?.hoken ?? 0)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.shiharaiGoukei?.total ?? 0)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.shiharaiGoukei?.jihi ?? 0)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.shiharaiGoukei?.hoken ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.cash?.total ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.credit?.total ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.qr?.total ?? 0)}</td>

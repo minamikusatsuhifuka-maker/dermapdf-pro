@@ -4,7 +4,7 @@ export interface ClinicMonthData {
   yearMonth: string;
   fileName: string;
   sheet1: {
-    totalPayment: { total: number; jihi: number; hoken: number };
+    shiharaiGoukei: { total: number; jihi: number; hoken: number };
     cash: { total: number; jihi: number; hoken: number };
     credit: { total: number; jihi: number; hoken: number };
     qr: { total: number; jihi: number; hoken: number };
@@ -64,25 +64,28 @@ function parseSheet1(ws: XLSX.WorkSheet) {
   const data = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 }) as unknown[][];
 
   const LABELS = [
-    { label: "支払い合計(税込)", key: "totalPayment" },
-    { label: "現金", key: "cash" },
-    { label: "クレジットカード", key: "credit" },
-    { label: "ＱＲ決済", key: "qr" },
-    { label: "電子マネー", key: "emoney" },
-    { label: "返金対応用", key: "refund" },
+    { label: "支払い合計(税込)", key: "shiharaiGoukei", exact: true },
+    { label: "現金", key: "cash", exact: false },
+    { label: "クレジットカード", key: "credit", exact: false },
+    { label: "ＱＲ決済", key: "qr", exact: false },
+    { label: "電子マネー", key: "emoney", exact: false },
+    { label: "返金対応用", key: "refund", exact: false },
   ];
 
   const result: Record<string, { total: number; jihi: number; hoken: number }> = {};
 
   for (const row of data) {
     const cellB = String(row[1] ?? "").trim();
-    const matched = LABELS.find((l) => cellB.includes(l.label));
-    if (matched) {
-      result[matched.key] = {
-        total: Number(row[2]) || 0,
-        jihi: Number(row[3]) || 0,
-        hoken: Number(row[4]) || 0,
-      };
+    for (const l of LABELS) {
+      const isMatch = l.exact ? cellB === l.label : cellB.includes(l.label);
+      if (!isMatch) continue;
+      const total = Number(row[2]) || 0;
+      const jihi = Number(row[3]) || 0;
+      const hoken = Number(row[4]) || 0;
+      // 同じラベルが複数行にある場合、total値が最大の行を採用
+      if (!result[l.key] || total > result[l.key].total) {
+        result[l.key] = { total, jihi, hoken };
+      }
     }
   }
 
