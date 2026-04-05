@@ -10,6 +10,7 @@ export interface AnalysisRecord {
   title?: string;
   updatedAt?: string;
   originalContent?: string;
+  locked?: boolean;
 }
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
@@ -76,6 +77,38 @@ export function revertAnalysisContent(id: string): void {
 
 export function getDisplayTitle(record: AnalysisRecord): string {
   return record.title || record.fileName;
+}
+
+export function toggleLock(id: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    records[idx].locked = !records[idx].locked;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+const LOCK_PASSWORD_KEY = "dermapdf_lock_password";
+
+export function setDeletePassword(password: string): void {
+  const hash = btoa(encodeURIComponent(password + "_dermapdf_salt"));
+  localStorage.setItem(LOCK_PASSWORD_KEY, hash);
+}
+
+export function verifyDeletePassword(password: string): boolean {
+  const stored = localStorage.getItem(LOCK_PASSWORD_KEY);
+  if (!stored) return true;
+  const hash = btoa(encodeURIComponent(password + "_dermapdf_salt"));
+  return stored === hash;
+}
+
+export function hasDeletePassword(): boolean {
+  return !!localStorage.getItem(LOCK_PASSWORD_KEY);
+}
+
+export function removeDeletePassword(): void {
+  localStorage.removeItem(LOCK_PASSWORD_KEY);
 }
 
 export function deleteAnalysis(id: string): void {

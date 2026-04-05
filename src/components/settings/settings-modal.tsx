@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { toastOk } from "@/components/ui/toast-provider";
 import { loadFeatureFlags, saveFeatureFlags, type FeatureFlags } from "@/lib/feature-flags";
+import { hasDeletePassword, setDeletePassword, removeDeletePassword } from "@/lib/analysis-storage";
 
 const STORAGE_KEY = "dermapdf-clinic-settings";
 
@@ -109,13 +110,17 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ClinicSettings>(settings);
   const [flags, setFlags] = useState<FeatureFlags>({ staffKarute: true, monthlyReport: true, templatePanel: true });
+  const [hasPassword, setHasPassword] = useState(false);
 
   useEffect(() => {
     setForm(settings);
   }, [settings]);
 
   useEffect(() => {
-    if (open) setFlags(loadFeatureFlags());
+    if (open) {
+      setFlags(loadFeatureFlags());
+      setHasPassword(hasDeletePassword());
+    }
   }, [open]);
 
   const handleChange = (key: keyof ClinicSettings, value: string) => {
@@ -286,6 +291,63 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.templatePanel ? "translate-x-6" : "translate-x-1"}`} />
             </button>
           </div>
+        </div>
+
+        {/* 削除パスワード */}
+        <div className="border-t pt-4 mt-4">
+          <h3 className="text-sm font-bold text-gray-700 mb-1">🔐 削除パスワード</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            設定するとストック削除時にパスワードが必要になります
+          </p>
+
+          {hasPassword ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <span>🔒</span>
+                <span>削除パスワードが設定されています</span>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm("削除パスワードを解除しますか？")) {
+                    removeDeletePassword();
+                    setHasPassword(false);
+                  }
+                }}
+                className="text-xs text-red-500 underline hover:text-red-700"
+              >
+                パスワードを解除する
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="password"
+                placeholder="新しいパスワードを入力"
+                id="new-delete-password"
+                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
+              />
+              <input
+                type="password"
+                placeholder="パスワードを確認"
+                id="confirm-delete-password"
+                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
+              />
+              <button
+                onClick={() => {
+                  const p1 = (document.getElementById("new-delete-password") as HTMLInputElement).value;
+                  const p2 = (document.getElementById("confirm-delete-password") as HTMLInputElement).value;
+                  if (!p1) { alert("パスワードを入力してください"); return; }
+                  if (p1 !== p2) { alert("パスワードが一致しません"); return; }
+                  setDeletePassword(p1);
+                  setHasPassword(true);
+                  alert("✅ 削除パスワードを設定しました");
+                }}
+                className="w-full px-3 py-2 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                パスワードを設定する
+              </button>
+            </div>
+          )}
         </div>
 
         <button

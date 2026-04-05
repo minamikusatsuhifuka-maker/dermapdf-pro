@@ -20,6 +20,9 @@ import {
   getTagsWithCount,
   renameFolder,
   deleteFolder,
+  toggleLock,
+  hasDeletePassword,
+  verifyDeletePassword,
   type AnalysisRecord,
 } from "@/lib/analysis-storage";
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
@@ -327,6 +330,13 @@ export function AnalysisStockPanel() {
   const dragFolderRef = useRef<string | null>(null);
   const dragOverFolderRef = useRef<string | null>(null);
 
+  // パスワード確認モーダル
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isBulkDelete, setIsBulkDelete] = useState(false);
+
   // 一括選択
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -515,11 +525,22 @@ export function AnalysisStockPanel() {
     if (activeFolder === folderName) setActiveFolder(null);
   };
 
-  const handleDelete = (id: string) => {
-    deleteAnalysis(id);
-    if (activeGensparkId === id) setActiveGensparkId(null);
-    reload();
-    toastOk("削除しました");
+  const handleDelete = (record: AnalysisRecord) => {
+    if (record.locked) return;
+    if (hasDeletePassword()) {
+      setPendingDeleteId(record.id);
+      setIsBulkDelete(false);
+      setPasswordInput("");
+      setPasswordError("");
+      setShowPasswordModal(true);
+    } else {
+      if (confirm("削除しますか？")) {
+        deleteAnalysis(record.id);
+        if (activeGensparkId === record.id) setActiveGensparkId(null);
+        reload();
+        toastOk("削除しました");
+      }
+    }
   };
 
   const handleCopy = async (content: string) => {
@@ -570,12 +591,54 @@ export function AnalysisStockPanel() {
   };
 
   const bulkDelete = () => {
-    const count = selectedIds.size;
-    Array.from(selectedIds).forEach((id) => deleteAnalysis(id));
-    setSelectedIds(new Set());
-    setActiveGensparkId(null);
-    reload();
-    toastOk(`${count}件を削除しました`);
+    const deletableIds = Array.from(selectedIds).filter(
+      (id) => !records.find((r) => r.id === id)?.locked
+    );
+    if (deletableIds.length === 0) {
+      toastError("選択中のアイテムは全てロックされています");
+      return;
+    }
+    if (hasDeletePassword()) {
+      setIsBulkDelete(true);
+      setPendingDeleteId(null);
+      setPasswordInput("");
+      setPasswordError("");
+      setShowPasswordModal(true);
+    } else {
+      if (confirm(`${deletableIds.length}件を削除しますか？`)) {
+        deletableIds.forEach((id) => deleteAnalysis(id));
+        setSelectedIds(new Set());
+        setActiveGensparkId(null);
+        reload();
+        toastOk(`${deletableIds.length}件を削除しました`);
+      }
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!verifyDeletePassword(passwordInput)) {
+      setPasswordError("パスワードが違います");
+      setPasswordInput("");
+      return;
+    }
+    if (isBulkDelete) {
+      const deletableIds = Array.from(selectedIds).filter(
+        (id) => !records.find((r) => r.id === id)?.locked
+      );
+      deletableIds.forEach((id) => deleteAnalysis(id));
+      setSelectedIds(new Set());
+      setActiveGensparkId(null);
+      reload();
+      toastOk(`${deletableIds.length}件を削除しました`);
+    } else if (pendingDeleteId) {
+      deleteAnalysis(pendingDeleteId);
+      if (activeGensparkId === pendingDeleteId) setActiveGensparkId(null);
+      reload();
+      toastOk("削除しました");
+    }
+    setShowPasswordModal(false);
+    setPasswordInput("");
+    setPendingDeleteId(null);
   };
 
   return (
@@ -969,6 +1032,11 @@ export function AnalysisStockPanel() {
                       {r.folder}
                     </span>
                   )}
+                  {r.locked && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full border border-amber-200">
+                      🔒 ロック
+                    </span>
+                  )}
                   {editingId === r.id ? (
                     <input
                       type="text"
@@ -1044,10 +1112,27 @@ export function AnalysisStockPanel() {
                     <Download className="h-3.5 w-3.5 text-purple-400" />
                   </button>
                   <button
-                    onClick={() => handleDelete(r.id)}
-                    className="rounded p-1 hover:bg-red-50"
+                    onClick={() => { toggleLock(r.id); reload(); }}
+                    className={`rounded p-1 transition-colors ${
+                      r.locked
+                        ? "text-amber-500 hover:text-amber-600"
+                        : "text-gray-300 hover:text-gray-500"
+                    }`}
+                    title={r.locked ? "ロック解除" : "ロック"}
                   >
-                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                    {r.locked ? "🔒" : "🔓"}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(r)}
+                    disabled={r.locked}
+                    className={`rounded p-1 transition-colors ${
+                      r.locked
+                        ? "text-gray-200 cursor-not-allowed"
+                        : "hover:bg-red-50"
+                    }`}
+                    title={r.locked ? "ロック中のため削除できません" : "削除"}
+                  >
+                    <Trash2 className={`h-3.5 w-3.5 ${r.locked ? "text-gray-200" : "text-red-400"}`} />
                   </button>
                   <button
                     onClick={() =>
@@ -1245,6 +1330,49 @@ export function AnalysisStockPanel() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* パスワード確認モーダル */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 mx-4">
+            <div className="text-center mb-4">
+              <div className="text-3xl mb-2">🔐</div>
+              <h3 className="text-sm font-bold text-gray-800">削除の確認</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {isBulkDelete
+                  ? `${Array.from(selectedIds).filter((id) => !records.find((r) => r.id === id)?.locked).length}件を削除するにはパスワードを入力してください`
+                  : "削除するにはパスワードを入力してください"}
+              </p>
+            </div>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && confirmDelete()}
+              placeholder="パスワードを入力"
+              autoFocus
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 mb-2"
+            />
+            {passwordError && (
+              <p className="text-xs text-red-500 mb-2">❌ {passwordError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-3 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                削除する
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
