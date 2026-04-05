@@ -45,7 +45,7 @@ export default function DashboardPage() {
       const isExcel = file.name.match(/\.(xlsx|xls)$/i);
       if (!isPng && !isExcel) continue;
       try {
-        setError("🤖 AIがデータを解析中（10〜30秒かかります）...");
+        setError(`🤖 「${file.name}」をAIが解析中です（10〜30秒）...`);
         const parsed = isPng ? await parseClinicImage(file) : await parseClinicExcel(file);
         results.push(parsed);
       } catch (e) {
@@ -171,7 +171,10 @@ export default function DashboardPage() {
             <div className="text-5xl mb-4">📊</div>
             <h2 className="text-lg font-medium text-gray-700 mb-2">月報Excelをアップロード</h2>
             <p className="text-sm text-gray-400 mb-2">
-              Excelまたはスクリーンショット(PNG)からAIがデータを自動抽出します
+              Excelまたはスクリーンショット(PNG/JPEG)をアップロード
+            </p>
+            <p className="text-xs text-gray-400 mb-1">
+              AIが自動でデータを読み取ります
             </p>
             <p className="text-xs text-gray-300 mb-6">
               複数ファイルを一度にアップロード可能・データは自動保存されます
