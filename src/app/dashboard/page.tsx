@@ -43,6 +43,7 @@ export default function DashboardPage() {
     for (const file of Array.from(files)) {
       if (!file.name.match(/\.(xlsx|xls)$/i)) continue;
       try {
+        setError(`🤖 AIがExcelを解析中です（10〜30秒かかります）...`);
         const parsed = await parseClinicExcel(file);
         results.push(parsed);
       } catch (e) {
@@ -349,7 +350,7 @@ export default function DashboardPage() {
                     { label: "労災", val: latest.hoken.rosai },
                     { label: "自賠責", val: latest.hoken.jibaiseki },
                     { label: "公害", val: latest.hoken.kogai },
-                    { label: "その他", val: latest.hoken.sonota },
+                    { label: "その他", val: latest.hoken.sonotaHoken },
                   ].map((r) => (
                     <div key={r.label} className="flex justify-between py-2 border-b border-gray-50 text-xs last:border-0">
                       <span className="text-gray-500">{r.label}</span>
