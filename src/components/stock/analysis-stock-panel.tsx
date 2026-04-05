@@ -66,7 +66,6 @@ function FolderTreeItem({
   node,
   activeFolder,
   onSelect,
-  depth,
   onAddSubfolder,
   onEdit,
   onDelete,
@@ -77,7 +76,6 @@ function FolderTreeItem({
   node: FolderNode;
   activeFolder: string | null;
   onSelect: (folder: string | null) => void;
-  depth: number;
   onAddSubfolder: (parentPath: string) => void;
   onEdit?: (folder: string) => void;
   onDelete?: (folder: string) => void;
@@ -100,7 +98,7 @@ function FolderTreeItem({
 
   if (isEditing) {
     return (
-      <div style={{ paddingLeft: `${depth * 16}px` }} className="flex items-center gap-1 py-0.5">
+      <div className="flex items-center gap-1">
         <input
           type="text"
           defaultValue={node.name}
@@ -123,82 +121,136 @@ function FolderTreeItem({
   }
 
   return (
-    <div style={{ width: "100%" }}>
-      <div
-        className="flex items-center gap-1 py-0.5"
-        style={{ paddingLeft: `${depth * 16}px` }}
+    <div className="flex flex-wrap items-center gap-1.5 w-full">
+      {hasChildren && (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="text-gray-400 hover:text-gray-600 text-xs w-4 flex-shrink-0"
+        >
+          {isOpen ? "▾" : "▸"}
+        </button>
+      )}
+      {!hasChildren && <span className="w-4 flex-shrink-0" />}
+
+      <button
+        onClick={() => onSelect(isActive ? null : node.path)}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${
+          isActive
+            ? "bg-[#378ADD] text-white"
+            : node.totalCount === 0
+              ? "bg-gray-50 text-gray-400 opacity-50"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+        }`}
       >
-        {hasChildren ? (
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 text-xs"
-          >
-            {isOpen ? "▾" : "▸"}
-          </button>
-        ) : (
-          <span className="w-4" />
-        )}
-        <button
-          onClick={() => onSelect(isActive ? null : node.path)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-            isActive
-              ? "bg-[#378ADD] text-white"
-              : node.totalCount === 0
-                ? "bg-gray-50 text-gray-400 opacity-50"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          <span>{node.name}</span>
-          <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
-            isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
-          }`}>
-            {node.totalCount}
-          </span>
-        </button>
-        <button
-          onClick={() => onAddSubfolder(node.path)}
-          className="text-gray-300 hover:text-[#378ADD] text-xs transition-colors"
-          title="サブフォルダを追加"
-        >
-          +
-        </button>
-        {node.isCustom && (
-          <>
-            <button
-              onClick={() => onEdit?.(node.path)}
-              className="rounded p-0.5 text-gray-400 hover:text-[#378ADD] transition-colors"
-              title="フォルダ名を変更"
-            >
-              <Pencil className="h-2.5 w-2.5" />
-            </button>
-            <button
-              onClick={() => onDelete?.(node.path)}
-              className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors"
-              title="フォルダを削除"
-            >
-              <Trash2 className="h-2.5 w-2.5" />
-            </button>
-          </>
-        )}
-      </div>
+        <span>{node.name}</span>
+        <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
+          isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
+        }`}>
+          {node.totalCount}
+        </span>
+      </button>
+
       {hasChildren && isOpen && (
-        <div className="mt-0.5">
-          {node.children.map((child) => (
-            <FolderTreeItem
-              key={child.path}
-              node={child}
-              activeFolder={activeFolder}
-              onSelect={onSelect}
-              depth={depth + 1}
-              onAddSubfolder={onAddSubfolder}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              editingFolderId={editingFolderId}
-              onRename={onRename}
-              setEditingFolderId={setEditingFolderId}
-            />
-          ))}
-        </div>
+        <>
+          <span className="text-gray-200 text-sm flex-shrink-0">|</span>
+          {node.children.map((child) => {
+            const childActive = activeFolder === child.path;
+            const childEditing = editingFolderId === child.path;
+
+            if (childEditing) {
+              return (
+                <input
+                  key={child.path}
+                  type="text"
+                  defaultValue={child.name}
+                  autoFocus
+                  className="w-20 rounded-full border border-[#378ADD] px-2 py-0.5 text-xs outline-none"
+                  onBlur={(e) => {
+                    const parent = child.path.substring(0, child.path.lastIndexOf("/")) + "/";
+                    onRename(child.path, parent + e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const parent = child.path.substring(0, child.path.lastIndexOf("/")) + "/";
+                      onRename(child.path, parent + e.currentTarget.value);
+                    }
+                    if (e.key === "Escape") setEditingFolderId(null);
+                  }}
+                />
+              );
+            }
+
+            return (
+              <div key={child.path} className="inline-flex items-center gap-0.5 flex-shrink-0">
+                <button
+                  onClick={() => onSelect(childActive ? null : child.path)}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                    childActive
+                      ? "bg-[#378ADD] text-white"
+                      : child.totalCount === 0
+                        ? "bg-gray-50 text-gray-300 opacity-60"
+                        : "bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200"
+                  }`}
+                >
+                  <span>{child.name}</span>
+                  <span className={`text-[9px] px-1 rounded-full ${
+                    childActive ? "bg-white/20 text-white" : "text-gray-400"
+                  }`}>
+                    {child.totalCount}
+                  </span>
+                  {child.children.length > 0 && (
+                    <span className="text-[9px]">▸</span>
+                  )}
+                </button>
+                {child.isCustom && (
+                  <>
+                    <button
+                      onClick={() => onEdit?.(child.path)}
+                      className="text-gray-300 hover:text-[#378ADD] transition-colors"
+                      title="名前変更"
+                    >
+                      <Pencil className="h-2 w-2" />
+                    </button>
+                    <button
+                      onClick={() => onDelete?.(child.path)}
+                      className="text-gray-300 hover:text-red-400 transition-colors"
+                      title="削除"
+                    >
+                      <Trash2 className="h-2 w-2" />
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      <button
+        onClick={() => onAddSubfolder(node.path)}
+        className="text-gray-300 hover:text-[#378ADD] text-xs px-1 flex-shrink-0 transition-colors"
+        title={`「${node.name}」にサブフォルダを追加`}
+      >
+        +
+      </button>
+
+      {node.isCustom && (
+        <>
+          <button
+            onClick={() => onEdit?.(node.path)}
+            className="rounded p-0.5 text-gray-400 hover:text-[#378ADD] transition-colors flex-shrink-0"
+            title="フォルダ名を変更"
+          >
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+          <button
+            onClick={() => onDelete?.(node.path)}
+            className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+            title="フォルダを削除"
+          >
+            <Trash2 className="h-2.5 w-2.5" />
+          </button>
+        </>
       )}
     </div>
   );
@@ -962,7 +1014,6 @@ export function AnalysisStockPanel() {
               node={node}
               activeFolder={activeFolder}
               onSelect={setActiveFolder}
-              depth={0}
               onAddSubfolder={handleAddSubfolder}
               onEdit={(f) => setEditingFolderId(f)}
               onDelete={handleDeleteFolder}
