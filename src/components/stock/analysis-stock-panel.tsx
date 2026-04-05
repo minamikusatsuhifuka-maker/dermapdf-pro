@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
@@ -37,6 +37,20 @@ const selectClass =
 
 const DEFAULT_FOLDERS = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
 const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
+const FOLDER_ORDER_KEY = "dermapdf_folder_order";
+
+function saveFolderOrder(order: string[]): void {
+  localStorage.setItem(FOLDER_ORDER_KEY, JSON.stringify(order));
+}
+
+function loadFolderOrder(): string[] | null {
+  try {
+    const stored = localStorage.getItem(FOLDER_ORDER_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
 
 function TagFolderEditor({
   record,
@@ -306,6 +320,13 @@ export function AnalysisStockPanel() {
   const [staffLinkId, setStaffLinkId] = useState<string | null>(null);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
 
+  // フォルダ並び替え（D&D）
+  const [folderOrder, setFolderOrder] = useState<string[]>([]);
+  const [draggingFolder, setDraggingFolder] = useState<string | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const dragFolderRef = useRef<string | null>(null);
+  const dragOverFolderRef = useRef<string | null>(null);
+
   // 一括選択
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -364,6 +385,12 @@ export function AnalysisStockPanel() {
     };
   }, [reload]);
 
+  // フォルダ順序をlocalStorageから復元
+  useEffect(() => {
+    const savedOrder = loadFolderOrder();
+    if (savedOrder) setFolderOrder(savedOrder);
+  }, []);
+
   // フォントサイズをlocalStorageから復元・保存
   useEffect(() => {
     const saved = localStorage.getItem("dermapdf_stock_fontsize");
@@ -379,6 +406,54 @@ export function AnalysisStockPanel() {
   };
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
+
+  // 全フォルダリストを順序に従って並び替え
+  const orderedFolders = useMemo(() => {
+    const all = ["すべて", ...allFolders];
+    if (folderOrder.length === 0) return all;
+    const ordered = folderOrder.filter((f) => all.includes(f));
+    const newFolders = all.filter((f) => !folderOrder.includes(f));
+    return [...ordered, ...newFolders];
+  }, [folderOrder, allFolders]);
+
+  // ドラッグイベントハンドラ
+  const handleFolderDragStart = (folder: string) => {
+    dragFolderRef.current = folder;
+    setDraggingFolder(folder);
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folder: string) => {
+    e.preventDefault();
+    dragOverFolderRef.current = folder;
+    setDragOverFolder(folder);
+  };
+
+  const handleFolderDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const from = dragFolderRef.current;
+    const to = dragOverFolderRef.current;
+    if (!from || !to || from === to) return;
+
+    const newOrder = [...orderedFolders];
+    const fromIdx = newOrder.indexOf(from);
+    const toIdx = newOrder.indexOf(to);
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, from);
+
+    setFolderOrder(newOrder);
+    saveFolderOrder(newOrder);
+    dragFolderRef.current = null;
+    dragOverFolderRef.current = null;
+    setDraggingFolder(null);
+    setDragOverFolder(null);
+  };
+
+  const handleFolderDragEnd = () => {
+    dragFolderRef.current = null;
+    dragOverFolderRef.current = null;
+    setDraggingFolder(null);
+    setDragOverFolder(null);
+  };
 
   // フォルダごとの件数を計算
   const folderCounts = useMemo(() => {
@@ -611,39 +686,24 @@ export function AnalysisStockPanel() {
 
       {/* フォルダタブ */}
       <div className="flex flex-wrap items-center gap-1.5 pb-1">
-        <button
-          onClick={() => setActiveFolder(null)}
-          className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-            activeFolder === null
-              ? "bg-purple-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          <span>📚 すべて</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-            activeFolder === null
-              ? "bg-white/20 text-white"
-              : "bg-gray-200 text-gray-500"
-          }`}>
-            {records.length}
-          </span>
-        </button>
-        {allFolders.map((f) => {
-          const isCustom = !DEFAULT_FOLDERS.includes(f);
-          const isEditing = editingFolderId === f;
-          const count = folderCounts[f] || 0;
+        {orderedFolders.map((folder) => {
+          const isAll = folder === "すべて";
+          const isCustom = !isAll && !DEFAULT_FOLDERS.includes(folder);
+          const isEditing = editingFolderId === folder;
+          const count = isAll ? records.length : (folderCounts[folder] || 0);
+          const isActive = isAll ? activeFolder === null : activeFolder === folder;
 
           if (isEditing) {
             return (
-              <div key={f} className="inline-flex items-center gap-1">
+              <div key={folder} className="inline-flex items-center gap-1">
                 <input
                   type="text"
-                  defaultValue={f}
+                  defaultValue={folder}
                   autoFocus
                   className="w-24 rounded-full border border-purple-400 px-2 py-1 text-xs outline-none"
-                  onBlur={(e) => handleRenameFolder(f, e.target.value)}
+                  onBlur={(e) => handleRenameFolder(folder, e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRenameFolder(f, e.currentTarget.value);
+                    if (e.key === "Enter") handleRenameFolder(folder, e.currentTarget.value);
                     if (e.key === "Escape") setEditingFolderId(null);
                   }}
                 />
@@ -652,20 +712,40 @@ export function AnalysisStockPanel() {
           }
 
           return (
-            <div key={f} className={`inline-flex items-center gap-0.5 ${
-              count === 0 && activeFolder !== f ? "opacity-40" : ""
-            }`}>
+            <div
+              key={folder}
+              draggable
+              onDragStart={() => handleFolderDragStart(folder)}
+              onDragOver={(e) => handleFolderDragOver(e, folder)}
+              onDrop={handleFolderDrop}
+              onDragEnd={handleFolderDragEnd}
+              className={`inline-flex items-center gap-0.5 rounded-full transition-all ${
+                draggingFolder === folder ? "opacity-40" : ""
+              } ${
+                draggingFolder && dragOverFolder === folder && draggingFolder !== folder
+                  ? "ring-2 ring-purple-400 scale-105"
+                  : ""
+              } ${
+                !isAll && count === 0 && !isActive ? "opacity-40" : ""
+              }`}
+            >
+              <span
+                className="text-gray-300 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none px-0.5"
+                title="ドラッグして並び替え"
+              >
+                ⋮⋮
+              </span>
               <button
-                onClick={() => setActiveFolder(activeFolder === f ? null : f)}
+                onClick={() => setActiveFolder(isAll ? null : (isActive ? null : folder))}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                  activeFolder === f
+                  isActive
                     ? "bg-purple-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
-                <span>{f}</span>
+                <span>{isAll ? "📚 すべて" : folder}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  activeFolder === f
+                  isActive
                     ? "bg-white/20 text-white"
                     : "bg-gray-200 text-gray-500"
                 }`}>
@@ -675,14 +755,14 @@ export function AnalysisStockPanel() {
               {isCustom && (
                 <>
                   <button
-                    onClick={() => setEditingFolderId(f)}
+                    onClick={() => setEditingFolderId(folder)}
                     className="rounded p-0.5 text-gray-400 hover:text-purple-500 transition-colors"
                     title="フォルダ名を変更"
                   >
                     <Pencil className="h-2.5 w-2.5" />
                   </button>
                   <button
-                    onClick={() => handleDeleteFolder(f)}
+                    onClick={() => handleDeleteFolder(folder)}
                     className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors"
                     title="フォルダを削除"
                   >
@@ -713,6 +793,18 @@ export function AnalysisStockPanel() {
             className="shrink-0 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-purple-300 hover:text-purple-500"
           >
             <Plus className="mr-0.5 inline h-3 w-3" /> フォルダ追加
+          </button>
+        )}
+        {folderOrder.length > 0 && (
+          <button
+            onClick={() => {
+              setFolderOrder([]);
+              localStorage.removeItem(FOLDER_ORDER_KEY);
+            }}
+            className="text-[10px] text-gray-400 hover:text-gray-600 px-2 py-1 rounded transition-colors"
+            title="フォルダの並び順をリセット"
+          >
+            ↺ 順序リセット
           </button>
         )}
       </div>
