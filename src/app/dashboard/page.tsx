@@ -43,7 +43,6 @@ export default function DashboardPage() {
     for (const file of Array.from(files)) {
       if (!file.name.match(/\.(xlsx|xls)$/i)) continue;
       try {
-        setError(`🤖 AIがExcelを解析中です（10〜30秒かかります）...`);
         const parsed = await parseClinicExcel(file);
         results.push(parsed);
       } catch (e) {
