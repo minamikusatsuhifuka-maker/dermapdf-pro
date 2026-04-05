@@ -184,17 +184,15 @@ function FolderTreeItem({
               <div key={child.path} className="inline-flex items-center gap-0.5 flex-shrink-0">
                 <button
                   onClick={() => onSelect(childActive ? null : child.path)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${
                     childActive
                       ? "bg-[#378ADD] text-white"
-                      : child.totalCount === 0
-                        ? "bg-gray-50 text-gray-300 opacity-60"
-                        : "bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
                   }`}
                 >
                   <span>{child.name}</span>
-                  <span className={`text-[9px] px-1 rounded-full ${
-                    childActive ? "bg-white/20 text-white" : "text-gray-400"
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                    childActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
                   }`}>
                     {child.totalCount}
                   </span>
