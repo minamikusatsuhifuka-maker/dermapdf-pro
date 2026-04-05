@@ -79,8 +79,8 @@ function findTripleValues(rows: unknown[][], labels: string[]): TripleValue {
         const vals: number[] = [];
         for (let vc = c + 1; vc < row.length && vals.length < 3; vc++) {
           const v = row[vc];
-          if (v !== null && v !== undefined && v !== "") {
-            vals.push(toNum(v));
+          if (v !== null && v !== undefined && v !== "" && !isNaN(Number(v))) {
+            vals.push(Math.round(Number(v)));
           }
         }
         if (vals.length >= 1) {

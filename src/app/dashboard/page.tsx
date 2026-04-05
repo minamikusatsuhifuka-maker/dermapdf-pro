@@ -92,7 +92,26 @@ export default function DashboardPage() {
   const pct = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : 0);
 
   return (
-    <div className="min-h-screen bg-gray-50/50" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>
+    <div
+      className="min-h-screen bg-gray-50/50"
+      style={{ fontFamily: "'Noto Sans JP', sans-serif" }}
+      onDrop={onDrop}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+      }}
+    >
+      {/* D&Dオーバーレイ */}
+      {dragOver && (
+        <div className="fixed inset-0 z-50 bg-[#378ADD]/10 border-4 border-dashed border-[#378ADD] flex items-center justify-center pointer-events-none">
+          <div className="bg-white rounded-2xl px-8 py-6 text-center shadow-lg">
+            <div className="text-3xl mb-2">📂</div>
+            <div className="text-sm font-medium text-[#378ADD]">ここにドロップして追加</div>
+            <div className="text-xs text-gray-400 mt-1">Excel(.xlsx)ファイル対応</div>
+          </div>
+        </div>
+      )}
+
       {/* ヘッダー */}
       <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
