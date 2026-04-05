@@ -1266,7 +1266,10 @@ export function AnalysisStockPanel() {
                     : "border-gray-100 bg-white/60"
                 }`}
               >
-                <div className="flex items-start gap-2 px-4 py-3">
+                <div
+                  className="flex items-start gap-2 px-4 py-3 cursor-pointer select-none hover:bg-blue-50/30 transition-colors"
+                  onClick={() => editingId !== r.id && setExpandedId(isExpanded ? null : r.id)}
+                >
                   <input
                     type="checkbox"
                     checked={selectedIds.has(r.id)}
@@ -1300,6 +1303,7 @@ export function AnalysisStockPanel() {
                       defaultValue={getDisplayTitle(r)}
                       autoFocus
                       placeholder={r.fileName}
+                      onClick={(e) => e.stopPropagation()}
                       className="flex-1 text-sm font-semibold border-b border-[#378ADD] outline-none bg-transparent w-full max-w-xs"
                       onBlur={(e) => {
                         updateAnalysisTitle(r.id, e.target.value);
@@ -1319,7 +1323,7 @@ export function AnalysisStockPanel() {
                     <span className="flex-1 truncate text-sm font-medium text-gray-700">
                       {getDisplayTitle(r)}
                       <button
-                        onClick={() => setEditingId(r.id)}
+                        onClick={(e) => { e.stopPropagation(); setEditingId(r.id); }}
                         className="ml-1 text-gray-400 hover:text-[#378ADD] transition-colors"
                         title="タイトルを編集"
                       >
@@ -1331,23 +1335,21 @@ export function AnalysisStockPanel() {
                     {new Date(r.createdAt).toLocaleString("ja-JP")}
                   </span>
                   <button
-                    onClick={() => setEditingTagId(editingTagId === r.id ? null : r.id)}
+                    onClick={(e) => { e.stopPropagation(); setEditingTagId(editingTagId === r.id ? null : r.id); }}
                     className="rounded p-1 hover:bg-gray-100"
                     title="タグ・フォルダ編集"
                   >
                     <Tag className="h-3.5 w-3.5 text-gray-400" />
                   </button>
                   <button
-                    onClick={() =>
-                      setActiveGensparkId(isGensparkActive ? null : r.id)
-                    }
+                    onClick={(e) => { e.stopPropagation(); setActiveGensparkId(isGensparkActive ? null : r.id); }}
                     className="rounded bg-[#1D9E75] hover:bg-[#0F6E56] px-2 py-1 text-[10px] font-semibold text-white transition-opacity"
                   >
                     Gensparkへ
                   </button>
                   {staffProfiles.length > 0 && (
                     <button
-                      onClick={() => setStaffLinkId(staffLinkId === r.id ? null : r.id)}
+                      onClick={(e) => { e.stopPropagation(); setStaffLinkId(staffLinkId === r.id ? null : r.id); }}
                       className="rounded p-1 hover:bg-green-50"
                       title="スタッフカルテに記録"
                     >
@@ -1355,21 +1357,22 @@ export function AnalysisStockPanel() {
                     </button>
                   )}
                   <button
-                    onClick={() => handleCopy(r.content)}
+                    onClick={(e) => { e.stopPropagation(); handleCopy(r.content); }}
                     className="rounded p-1 hover:bg-gray-100"
                     title="コピー"
                   >
                     <Copy className="h-3.5 w-3.5 text-gray-400" />
                   </button>
                   <button
-                    onClick={() => exportSingleAnalysisAsMarkdown(r)}
+                    onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsMarkdown(r); }}
                     className="rounded p-1 hover:bg-[#E6F1FB]"
                     title="MD保存"
                   >
                     <Download className="h-3.5 w-3.5 text-[#378ADD]" />
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const copied = duplicateAnalysis(r.id);
                       if (copied) {
                         reload();
@@ -1382,7 +1385,8 @@ export function AnalysisStockPanel() {
                     📋
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const wasLocked = r.locked;
                       toggleLock(r.id);
                       reload();
@@ -1400,7 +1404,7 @@ export function AnalysisStockPanel() {
                     {r.locked ? "🔒" : "🔓"}
                   </button>
                   <button
-                    onClick={() => handleDelete(r)}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(r); }}
                     disabled={r.locked}
                     className={`rounded p-1 transition-colors ${
                       r.locked
@@ -1412,9 +1416,7 @@ export function AnalysisStockPanel() {
                     <Trash2 className={`h-3.5 w-3.5 ${r.locked ? "text-gray-200" : "text-red-400"}`} />
                   </button>
                   <button
-                    onClick={() =>
-                      setExpandedId(isExpanded ? null : r.id)
-                    }
+                    onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : r.id); }}
                     className="rounded p-1 hover:bg-gray-100"
                   >
                     {isExpanded ? (
