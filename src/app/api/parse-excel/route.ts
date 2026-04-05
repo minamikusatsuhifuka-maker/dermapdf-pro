@@ -1,119 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const { excelText, fileName } = await req.json();
+    const { excelText } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "API key missing" }, { status: 500 });
 
-    const prompt = `以下のクリニック月次集計データから数値を読み取り、JSONのみで回答してください。
+    const requestBody = {
+      system_instruction: {
+        parts: [{
+          text: "あなたはデータ抽出AIです。ユーザーから渡されたテキストデータを解析し、指定されたJSONフォーマットのみで回答してください。説明文、マークダウン、コードブロックは一切不要です。JSONオブジェクトのみを返してください。",
+        }],
+      },
+      contents: [{
+        role: "user",
+        parts: [{
+          text: `以下のクリニック月次集計データから数値を読み取り、JSONのみで返してください。
 
-データ:
 ${excelText}
 
-回答形式（JSONのみ・説明文不要）:
-{
-  "yearMonth": "2026年3月",
-  "shiharaiGoukeiTotal": 12889712,
-  "shiharaiGoukeiJihi": 7560692,
-  "shiharaiGoukeiHoken": 5329020,
-  "genkinTotal": 2101370,
-  "genkinJihi": 1699190,
-  "genkinHoken": 402180,
-  "creditTotal": 5665290,
-  "creditJihi": 5144040,
-  "creditHoken": 521250,
-  "qrTotal": 685020,
-  "qrJihi": 509670,
-  "qrHoken": 175350,
-  "emoneyTotal": 264530,
-  "emoneyJihi": 186790,
-  "emoneyHoken": 77740,
-  "henkinTotal": -8210,
-  "henkinJihi": 0,
-  "henkinHoken": -8210,
-  "nyukinGoukeiTotal": 8708000,
-  "nyukinGoukeiJihi": 7539690,
-  "nyukinGoukeiHoken": 1168310,
-  "tensuGoukei": 0,
-  "seikyuGoukei": 0,
-  "madoGuchiGoukei": 0,
-  "mishuGoukei": 0,
-  "shaHo": 0,
-  "kokuHo": 0,
-  "rosai": 0,
-  "jibaiseki": 0,
-  "kogai": 0,
-  "sonotaHoken": 0,
-  "shoshinRyo": 0,
-  "saishinRyo": 0,
-  "kanriRyo": 0,
-  "zaitakuRyo": 0,
-  "chusha": 0,
-  "shochi": 0,
-  "shujutsu": 0,
-  "kensa": 0,
-  "byori": 0,
-  "shohosenRyo": 0,
-  "sonotaTensu": 0,
-  "gazoShindan": 0
-}
+抽出ルール:
+- yearMonth: 「日付:」の後の年月 → "2026年3月" 形式
+- Sheet1の「現金」行: 最初の3つの数値が合計/自費/保険
+- Sheet1の「クレジットカード」行: 最初の3つの数値が合計/自費/保険
+- Sheet1の「ＱＲ決済」行: 最初の3つの数値が合計/自費/保険
+- Sheet1の「電子マネー」行: 最初の3つの数値が合計/自費/保険
+- Sheet1の「返金対応用」行: 最初の3つの数値が合計/自費/保険
+- Sheet1の「入金額合計」行: 最初の3つの数値が合計/自費/保険
+- Sheet1の「支払い合計(税込)」行（行頭にあるもの）: 最初の3つの数値が合計/自費/保険
+- 保険シートの「保険点数合計」の直後の数値
+- 保険シートの「保険請求額合計」の直後の数値
+- 保険シートの「窓口負担額合計」の直後の数値
+- 保険シートの「未収金合計」の直後の数値
+- 保険シートの「社保」「国保」「労災」「自賠責」「公害」の直後の数値
+- 保険シートの「初診料」「再診料」「管理料」「在宅料」の直後の数値
+- 保険シートの「皮下・筋肉内注射」「処置行為」「手術」「検査」「病理診断」「処方箋料」の直後の数値
 
-上記は例です。実際のデータから正しい数値を読み取ってください。
-「支払い合計(税込)」行の最初の3つの数値がTotal/自費/保険です。`;
+返答するJSONの形式:
+{"yearMonth":"","shiharaiGoukeiTotal":0,"shiharaiGoukeiJihi":0,"shiharaiGoukeiHoken":0,"genkinTotal":0,"genkinJihi":0,"genkinHoken":0,"creditTotal":0,"creditJihi":0,"creditHoken":0,"qrTotal":0,"qrJihi":0,"qrHoken":0,"emoneyTotal":0,"emoneyJihi":0,"emoneyHoken":0,"henkinTotal":0,"henkinJihi":0,"henkinHoken":0,"nyukinGoukeiTotal":0,"nyukinGoukeiJihi":0,"nyukinGoukeiHoken":0,"tensuGoukei":0,"seikyuGoukei":0,"madoGuchiGoukei":0,"mishuGoukei":0,"shaHo":0,"kokuHo":0,"rosai":0,"jibaiseki":0,"kogai":0,"sonotaHoken":0,"shoshinRyo":0,"saishinRyo":0,"kanriRyo":0,"zaitakuRyo":0,"chusha":0,"shochi":0,"shujutsu":0,"kensa":0,"byori":0,"shohosenRyo":0,"sonotaTensu":0,"gazoShindan":0}`,
+        }],
+      }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json",
+      },
+    };
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 1024 },
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
+    const raw = await response.text();
+    console.log("[parse-excel] status:", response.status);
+    console.log("[parse-excel] raw:", raw.slice(0, 300));
+
     if (!response.ok) {
-      const err = await response.text();
-      console.error("[parse-excel] Gemini error:", response.status, err);
-      return NextResponse.json({ error: `Gemini API error: ${response.status}` }, { status: 500 });
+      return NextResponse.json({ error: `Gemini error: ${response.status}`, raw: raw.slice(0, 500) }, { status: 500 });
     }
 
-    const data = await response.json();
-    const text =
-      data.candidates?.[0]?.content?.parts
-        ?.filter((p: { text?: string }) => p.text)
-        ?.map((p: { text: string }) => p.text)
-        ?.join("") ?? "";
+    const data = JSON.parse(raw);
+    const text = data.candidates?.[0]?.content?.parts
+      ?.map((p: { text?: string }) => p.text || "")
+      .join("") ?? "";
 
-    console.log("[parse-excel] Gemini raw response:", text.slice(0, 500));
+    console.log("[parse-excel] gemini text:", text.slice(0, 300));
 
-    const cleaned = text
-      .replace(/^```json\s*/m, "")
-      .replace(/^```\s*/m, "")
-      .replace(/\s*```$/m, "")
-      .trim();
-
+    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
+
     if (start === -1 || end === -1) {
-      console.error("[parse-excel] No JSON found in:", cleaned);
-      return NextResponse.json({ error: "JSON not found", raw: cleaned.slice(0, 300) }, { status: 500 });
+      console.error("[parse-excel] no JSON in:", cleaned);
+      return NextResponse.json({ error: "No JSON found", raw: cleaned.slice(0, 300) }, { status: 500 });
     }
 
-    const jsonStr = cleaned.slice(start, end + 1);
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      console.error("[parse-excel] JSON parse error:", parseErr, jsonStr.slice(0, 200));
-      return NextResponse.json({ error: "JSON parse failed", raw: jsonStr.slice(0, 200) }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, data: parsed, fileName });
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    return NextResponse.json({ success: true, data: parsed });
   } catch (e) {
     console.error("[parse-excel] error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
