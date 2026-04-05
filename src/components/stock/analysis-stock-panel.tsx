@@ -12,6 +12,7 @@ import {
   exportAnalysesAsDocx,
   exportAnalysesAsPdf,
   exportSingleAnalysisAsMarkdown,
+  exportSingleAnalysisAsPdf,
   updateAnalysisTitle,
   updateAnalysisTags,
   updateAnalysisContent,
@@ -914,6 +915,7 @@ export function AnalysisStockPanel() {
                     ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
                     : "border-gray-200 text-gray-500 hover:border-[#B5D4F4]"
                 }`}
+                title={`カードの高さを${opt.label === "S" ? "小" : opt.label === "M" ? "中" : opt.label === "L" ? "大" : "特大"}に設定`}
               >
                 {opt.label}
               </button>
@@ -926,6 +928,7 @@ export function AnalysisStockPanel() {
             <button
               onClick={() => setFontSize((f) => Math.max(10, f - 1))}
               className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+              title="本文の文字サイズを小さく"
             >
               A-
             </button>
@@ -933,6 +936,7 @@ export function AnalysisStockPanel() {
             <button
               onClick={() => setFontSize((f) => Math.min(20, f + 1))}
               className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+              title="本文の文字サイズを大きく"
             >
               A+
             </button>
@@ -944,6 +948,7 @@ export function AnalysisStockPanel() {
             <button
               onClick={() => setFolderFontSize((f) => Math.max(9, f - 1))}
               className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
+              title="フォルダタブの文字サイズを小さく"
             >
               A-
             </button>
@@ -951,6 +956,7 @@ export function AnalysisStockPanel() {
             <button
               onClick={() => setFolderFontSize((f) => Math.min(16, f + 1))}
               className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
+              title="フォルダタブの文字サイズを大きく"
             >
               A+
             </button>
@@ -960,6 +966,7 @@ export function AnalysisStockPanel() {
             onClick={exportAnalysesAsJSON}
             disabled={records.length === 0}
             className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+            title="全分析をJSONファイルでエクスポート"
           >
             <Download className="h-3 w-3" /> JSON
           </button>
@@ -967,6 +974,7 @@ export function AnalysisStockPanel() {
             onClick={exportAnalysesAsText}
             disabled={records.length === 0}
             className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+            title="全分析をテキストファイルでエクスポート"
           >
             <Download className="h-3 w-3" /> テキスト
           </button>
@@ -974,6 +982,7 @@ export function AnalysisStockPanel() {
             onClick={() => exportAnalysesAsDocx()}
             disabled={records.length === 0}
             className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+            title="全分析をWordファイルでエクスポート"
           >
             <Download className="h-3 w-3" /> Word
           </button>
@@ -981,6 +990,7 @@ export function AnalysisStockPanel() {
             onClick={() => exportAnalysesAsPdf()}
             disabled={records.length === 0}
             className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+            title="全分析をPDFファイルでエクスポート"
           >
             <Download className="h-3 w-3" /> PDF
           </button>
@@ -989,12 +999,14 @@ export function AnalysisStockPanel() {
               <button
                 onClick={handleClearAll}
                 className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white"
+                title="本当に全件削除する"
               >
                 本当に全削除
               </button>
               <button
                 onClick={() => setShowConfirmClear(false)}
                 className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600"
+                title="キャンセル"
               >
                 キャンセル
               </button>
@@ -1004,6 +1016,7 @@ export function AnalysisStockPanel() {
               onClick={() => setShowConfirmClear(true)}
               disabled={records.length === 0}
               className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm hover:bg-red-100 disabled:opacity-40"
+              title="保存済み分析を全て削除する"
             >
               <Trash2 className="h-3 w-3" /> 全削除
             </button>
@@ -1336,7 +1349,7 @@ export function AnalysisStockPanel() {
                       <button
                         onClick={(e) => { e.stopPropagation(); setEditingId(r.id); }}
                         className="ml-1 text-gray-400 hover:text-[#378ADD] transition-colors"
-                        title="タイトルを編集"
+                        title="タイトルを編集（クリックで変更）"
                       >
                         ✏️
                       </button>
@@ -1355,6 +1368,7 @@ export function AnalysisStockPanel() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setActiveGensparkId(isGensparkActive ? null : r.id); }}
                     className="rounded bg-[#1D9E75] hover:bg-[#0F6E56] px-2 py-1 text-[10px] font-semibold text-white transition-opacity"
+                    title="Gensparkでプレゼン資料を作成"
                   >
                     Gensparkへ
                   </button>
@@ -1370,16 +1384,23 @@ export function AnalysisStockPanel() {
                   <button
                     onClick={(e) => { e.stopPropagation(); handleCopy(r.content); }}
                     className="rounded p-1 hover:bg-gray-100"
-                    title="コピー"
+                    title="内容をクリップボードにコピー"
                   >
                     <Copy className="h-3.5 w-3.5 text-gray-400" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsMarkdown(r); }}
-                    className="rounded p-1 hover:bg-[#E6F1FB]"
-                    title="MD保存"
+                    className="rounded p-1 text-gray-400 hover:text-[#378ADD] transition-colors"
+                    title="Markdownファイルでダウンロード"
                   >
-                    <Download className="h-3.5 w-3.5 text-[#378ADD]" />
+                    <span className="text-xs font-bold">MD</span>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsPdf(r); }}
+                    className="rounded p-1 text-gray-400 hover:text-red-500 transition-colors"
+                    title="PDFファイルでダウンロード"
+                  >
+                    <span className="text-xs font-bold">PDF</span>
                   </button>
                   <button
                     onClick={(e) => {
@@ -1391,7 +1412,7 @@ export function AnalysisStockPanel() {
                       }
                     }}
                     className="rounded p-1 text-gray-300 hover:text-blue-500 transition-colors"
-                    title="複製"
+                    title="このカードを複製"
                   >
                     📋
                   </button>
@@ -1410,7 +1431,7 @@ export function AnalysisStockPanel() {
                         ? "text-amber-500 hover:text-amber-600"
                         : "text-gray-300 hover:text-gray-500"
                     }`}
-                    title={r.locked ? "ロック解除" : "ロック"}
+                    title={r.locked ? "ロックを解除する" : "ロックする（削除を防止）"}
                   >
                     {r.locked ? "🔒" : "🔓"}
                   </button>
@@ -1422,13 +1443,14 @@ export function AnalysisStockPanel() {
                         ? "text-gray-200 cursor-not-allowed"
                         : "hover:bg-red-50"
                     }`}
-                    title={r.locked ? "ロック中のため削除できません" : "削除"}
+                    title={r.locked ? "ロック中のため削除できません" : "削除する"}
                   >
                     <Trash2 className={`h-3.5 w-3.5 ${r.locked ? "text-gray-200" : "text-red-400"}`} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : r.id); }}
                     className="rounded p-1 hover:bg-gray-100"
+                    title={isExpanded ? "折りたたむ" : "展開して内容を表示"}
                   >
                     {isExpanded ? (
                       <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
