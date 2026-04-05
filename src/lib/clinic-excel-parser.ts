@@ -118,18 +118,46 @@ function extractYearMonth(fileName: string, rows: unknown[][]): string {
   return fileName.replace(/\.[^/.]+$/, "");
 }
 
+// Sheet1専用: 固定列インデックスでラベルを検索して3値を返す
+function findTripleByColIndex(
+  rows: unknown[][],
+  labels: string[],
+  labelCol: number,
+  totalCol: number,
+  jihiCol: number,
+  hokenCol: number
+): TripleValue {
+  let best: TripleValue = { total: 0, jihi: 0, hoken: 0 };
+  for (const row of rows) {
+    const cell = String(row[labelCol] ?? "").trim();
+    if (labels.some((l) => cell === l)) {
+      const total = Math.round(Number(row[totalCol]) || 0);
+      if (total > best.total) {
+        best = {
+          total,
+          jihi: Math.round(Number(row[jihiCol]) || 0),
+          hoken: Math.round(Number(row[hokenCol]) || 0),
+        };
+      }
+    }
+  }
+  return best;
+}
+
 function parseSheet1(ws: XLSX.WorkSheet): ClinicMonthData["sheet1"] {
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
+  // Sheet1: B列(1)=ラベル, C列(2)=合計, D列(3)=自費, E列(4)=保険
+  const find = (labels: string[]) => findTripleByColIndex(rows, labels, 1, 2, 3, 4);
 
   return {
-    shiharaiGoukei: findTripleValues(rows, ["支払い合計(税込)", "支払合計(税込)", "支払い合計（税込）"]),
-    genkin: findTripleValues(rows, ["現金"]),
-    credit: findTripleValues(rows, ["クレジットカード", "クレジット"]),
-    qr: findTripleValues(rows, ["ＱＲ決済", "QR決済", "QR"]),
-    emoney: findTripleValues(rows, ["電子マネー"]),
-    henkin: findTripleValues(rows, ["返金対応用", "返金"]),
-    nyukinGoukei: findTripleValues(rows, ["入金額合計", "入金合計"]),
-    uriaGeGoukei: findTripleValues(rows, ["売り上げ合計(税込)", "売上合計(税込)", "売上合計（税込）"]),
+    shiharaiGoukei: find(["支払い合計(税込)", "支払合計(税込)", "支払い合計（税込）"]),
+    genkin: find(["現金"]),
+    credit: find(["クレジットカード", "クレジット"]),
+    qr: find(["ＱＲ決済", "QR決済", "QR"]),
+    emoney: find(["電子マネー"]),
+    henkin: find(["返金対応用", "返金"]),
+    nyukinGoukei: find(["入金額合計", "入金合計"]),
+    uriaGeGoukei: find(["売り上げ合計(税込)", "売上合計(税込)", "売上合計（税込）"]),
   };
 }
 
