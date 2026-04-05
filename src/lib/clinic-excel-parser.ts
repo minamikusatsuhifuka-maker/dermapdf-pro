@@ -152,3 +152,61 @@ export async function parseClinicExcel(file: File): Promise<ClinicMonthData> {
     reader.readAsArrayBuffer(file);
   });
 }
+
+export async function parseClinicImage(file: File): Promise<ClinicMonthData> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const dataUrl = e.target?.result as string;
+        const base64 = dataUrl.split(",")[1];
+        const mimeType = file.type || "image/png";
+
+        const res = await fetch("/api/parse-excel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64, mimeType, fileName: file.name }),
+        });
+
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "サーバーエラー");
+        }
+
+        const d = json.data;
+        const tv = (t: number, j: number, h: number): TripleValue => ({
+          total: t || 0, jihi: j || 0, hoken: h || 0,
+        });
+
+        resolve({
+          yearMonth: d.yearMonth || file.name.replace(/\.[^/.]+$/, ""),
+          fileName: file.name,
+          sheet1: {
+            shiharaiGoukei: tv(d.shiharaiGoukeiTotal, d.shiharaiGoukeiJihi, d.shiharaiGoukeiHoken),
+            genkin: tv(d.genkinTotal, d.genkinJihi, d.genkinHoken),
+            credit: tv(d.creditTotal, d.creditJihi, d.creditHoken),
+            qr: tv(d.qrTotal, d.qrJihi, d.qrHoken),
+            emoney: tv(d.emoneyTotal, d.emoneyJihi, d.emoneyHoken),
+            henkin: tv(d.henkinTotal, d.henkinJihi, d.henkinHoken),
+            nyukinGoukei: tv(d.nyukinGoukeiTotal, d.nyukinGoukeiJihi, d.nyukinGoukeiHoken),
+          },
+          hoken: {
+            tensuGoukei: d.tensuGoukei || 0, seikyuGoukei: d.seikyuGoukei || 0,
+            madoGuchiGoukei: d.madoGuchiGoukei || 0, mishuGoukei: d.mishuGoukei || 0,
+            shaHo: d.shaHo || 0, kokuHo: d.kokuHo || 0, rosai: d.rosai || 0,
+            jibaiseki: d.jibaiseki || 0, kogai: d.kogai || 0, sonotaHoken: d.sonotaHoken || 0,
+            shoshinRyo: d.shoshinRyo || 0, saishinRyo: d.saishinRyo || 0,
+            kanriRyo: d.kanriRyo || 0, zaitakuRyo: d.zaitakuRyo || 0,
+            chusha: d.chusha || 0, shochi: d.shochi || 0, shujutsu: d.shujutsu || 0,
+            kensa: d.kensa || 0, byori: d.byori || 0, shohosenRyo: d.shohosenRyo || 0,
+            sonotaTensu: d.sonotaTensu || 0, gazoShindan: d.gazoShindan || 0,
+          },
+        });
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("画像読み込みエラー"));
+    reader.readAsDataURL(file);
+  });
+}

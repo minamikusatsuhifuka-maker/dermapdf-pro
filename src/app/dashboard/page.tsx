@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { parseClinicExcel, type ClinicMonthData } from "@/lib/clinic-excel-parser";
+import { parseClinicExcel, parseClinicImage, type ClinicMonthData } from "@/lib/clinic-excel-parser";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area, Legend,
@@ -41,10 +41,12 @@ export default function DashboardPage() {
     setError(null);
     const results: ClinicMonthData[] = [];
     for (const file of Array.from(files)) {
-      if (!file.name.match(/\.(xlsx|xls)$/i)) continue;
+      const isPng = file.name.match(/\.(png|jpg|jpeg)$/i);
+      const isExcel = file.name.match(/\.(xlsx|xls)$/i);
+      if (!isPng && !isExcel) continue;
       try {
-        setError("🤖 AIがExcelを解析中...");
-        const parsed = await parseClinicExcel(file);
+        setError("🤖 AIがデータを解析中（10〜30秒かかります）...");
+        const parsed = isPng ? await parseClinicImage(file) : await parseClinicExcel(file);
         results.push(parsed);
       } catch (e) {
         setError(`${file.name}: ${e instanceof Error ? e.message : "解析失敗"}`);
@@ -108,7 +110,7 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl px-8 py-6 text-center shadow-lg">
             <div className="text-3xl mb-2">📂</div>
             <div className="text-sm font-medium text-[#378ADD]">ここにドロップして追加</div>
-            <div className="text-xs text-gray-400 mt-1">Excel(.xlsx)ファイル対応</div>
+            <div className="text-xs text-gray-400 mt-1">Excel(.xlsx)・画像(PNG/JPEG)対応</div>
           </div>
         </div>
       )}
@@ -143,7 +145,7 @@ export default function DashboardPage() {
             📂 月報をアップロード
             <input
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx,.xls,.png,.jpg,.jpeg"
               multiple
               className="hidden"
               onChange={(e) => e.target.files && handleFiles(e.target.files)}
@@ -169,7 +171,7 @@ export default function DashboardPage() {
             <div className="text-5xl mb-4">📊</div>
             <h2 className="text-lg font-medium text-gray-700 mb-2">月報Excelをアップロード</h2>
             <p className="text-sm text-gray-400 mb-2">
-              「Sheet1」タブと「保険」タブのデータを自動抽出します
+              Excelまたはスクリーンショット(PNG)からAIがデータを自動抽出します
             </p>
             <p className="text-xs text-gray-300 mb-6">
               複数ファイルを一度にアップロード可能・データは自動保存されます
@@ -178,7 +180,7 @@ export default function DashboardPage() {
               📂 ファイルを選択（複数可）
               <input
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx,.xls,.png,.jpg,.jpeg"
                 multiple
                 className="hidden"
                 onChange={(e) => e.target.files && handleFiles(e.target.files)}
@@ -188,9 +190,9 @@ export default function DashboardPage() {
             {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
             <div className="mt-8 bg-gray-50 rounded-xl p-4 max-w-sm mx-auto text-left">
               <p className="text-xs font-medium text-gray-500 mb-2">📋 対応ファイル形式</p>
-              <p className="text-xs text-gray-400">・ファイル名: 2026年3月.xlsx など</p>
-              <p className="text-xs text-gray-400">・Sheet1タブ: 支払い・決済データ</p>
-              <p className="text-xs text-gray-400">・保険タブ: 保険点数・請求額データ</p>
+              <p className="text-xs text-gray-400">・Excel: 2026年3月.xlsx（Sheet1+保険タブ）</p>
+              <p className="text-xs text-gray-400">・画像: PNG/JPEGのスクリーンショット</p>
+              <p className="text-xs text-gray-400">・Gemini AIが画像を読み取って自動抽出</p>
             </div>
           </div>
         )}
