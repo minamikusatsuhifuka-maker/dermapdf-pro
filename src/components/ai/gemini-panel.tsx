@@ -631,12 +631,12 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
   };
 
   const selectClass =
-    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200";
+    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]";
 
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
       <h2 className="flex items-center gap-2 text-lg font-bold text-gray-700">
-        <BrainCircuit className="h-5 w-5 text-slate-500" />
+        <BrainCircuit className="h-5 w-5 text-[#378ADD]" />
         Gemini AI分析
       </h2>
 
@@ -652,7 +652,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               const t = templates.find((t) => t.id === e.target.value);
               if (t) handleApplyTemplateToGemini(t);
             }}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           >
             <option value="">-- テンプレートを選択 --</option>
             {templates.map((t) => (
@@ -672,7 +672,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         <select
           value={analysisType}
           onChange={(e) => setAnalysisType(e.target.value as AnalysisType)}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
         >
           {ANALYSIS_GROUPS.map((group) => (
             <optgroup key={group.label} label={group.label}>
@@ -696,7 +696,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           onChange={(e) => setPurpose(e.target.value)}
           placeholder="分析の目的や追加の指示を入力..."
           rows={2}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
         />
       </div>
 
@@ -718,7 +718,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         <button
           onClick={handleAnalyze}
           disabled={loading || (isTextMode ? !inputText?.trim() : !fileBase64)}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#4f6272] hover:bg-[#3d5260] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -729,7 +729,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         </button>
         <button
           onClick={() => setShowSaveTemplate(true)}
-          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          className="inline-flex items-center gap-1 rounded-xl border border-[#B5D4F4] bg-white px-3 py-3 text-sm font-medium text-[#185FA5] hover:bg-[#E6F1FB]"
         >
           <Save className="h-4 w-4" /> テンプレート保存
         </button>
@@ -737,9 +737,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
       {/* テンプレート保存モーダル */}
       {showSaveTemplate && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+        <div className="rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">テンプレートとして保存</span>
+            <span className="text-xs font-semibold text-[#185FA5]">テンプレートとして保存</span>
             <button onClick={() => setShowSaveTemplate(false)} className="text-gray-400 hover:text-gray-600">
               <X className="h-3.5 w-3.5" />
             </button>
@@ -751,12 +751,12 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             onKeyDown={(e) => { if (e.key === "Enter") handleSaveTemplate(); }}
             placeholder="テンプレート名（例：管理職研修用）"
             autoFocus
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           />
           <button
             onClick={handleSaveTemplate}
             disabled={!templateName.trim()}
-            className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+            className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
           >
             <Save className="h-3 w-3" /> 保存
           </button>
@@ -765,7 +765,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
       {/* 書き起こし進捗 */}
       {transcriptionProgress && (
-        <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-2 flex items-center gap-2">
+        <div className="text-xs text-[#185FA5] bg-[#E6F1FB] border border-[#B5D4F4] rounded-lg px-3 py-2 mt-2 flex items-center gap-2">
           <span className="animate-spin">⚙️</span>
           <span>{transcriptionProgress}</span>
         </div>
@@ -782,7 +782,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                     setEditedResult(result);
                     setIsEditingResult(true);
                   }}
-                  className="rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs backdrop-blur-sm transition-colors hover:border-slate-300 hover:text-[#4f6272]"
+                  className="rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs backdrop-blur-sm transition-colors hover:border-[#B5D4F4] hover:text-[#378ADD]"
                 >
                   ✏️ 編集
                 </button>
@@ -795,7 +795,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                       setIsEditingResult(false);
                       toastOk("分析結果を更新しました");
                     }}
-                    className="rounded-lg bg-[#4f6272] px-3 py-1 text-xs text-white transition-colors hover:bg-[#3d5260]"
+                    className="rounded-lg bg-[#378ADD] px-3 py-1 text-xs text-white transition-colors hover:bg-[#185FA5]"
                   >
                     ✅ 保存
                   </button>
@@ -813,7 +813,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               <textarea
                 value={editedResult}
                 onChange={(e) => setEditedResult(e.target.value)}
-                className="w-full min-h-[400px] rounded-lg border-2 border-slate-400 bg-white p-3 text-sm leading-relaxed resize-y font-[inherit] focus:border-slate-500 focus:outline-none"
+                className="w-full min-h-[400px] rounded-lg border-2 border-[#378ADD] bg-white p-3 text-sm leading-relaxed resize-y font-[inherit] focus:border-[#378ADD] focus:outline-none"
               />
             ) : (
               <div className="prose prose-sm max-w-none text-gray-700 pr-16">
@@ -837,7 +837,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             </button>
             <button
               onClick={handleDownloadMarkdown}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-slate-300 hover:text-[#4f6272] transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-[#B5D4F4] hover:text-[#378ADD] transition-colors"
             >
               <Download className="h-3.5 w-3.5" /> MD保存
             </button>
@@ -856,7 +856,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 });
                 toastOk("ストックに保存しました");
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-2 text-sm font-medium text-white shadow-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-2 text-sm font-medium text-white shadow-sm"
             >
               <BookmarkPlus className="h-3.5 w-3.5" /> ストックに保存
             </button>
@@ -866,9 +866,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
       {/* Genspark プレゼン資料生成 */}
       {result && (
-        <div className="w-full space-y-4 rounded-2xl border border-slate-200 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
+        <div className="w-full space-y-4 rounded-2xl border border-[#B5D4F4] bg-white/40 p-6 shadow-lg backdrop-blur-xl">
           <h3 className="flex items-center gap-2 text-base font-bold text-gray-700">
-            <Sparkles className="h-5 w-5 text-slate-500" />
+            <Sparkles className="h-5 w-5 text-[#378ADD]" />
             Gensparkプレゼン資料を作成
           </h3>
 
@@ -960,17 +960,17 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               <p className="mb-1.5 text-xs font-medium text-gray-500">自動適用される技法：</p>
               <div className="mb-3 flex flex-wrap gap-2">
                 {appliesEmotion && (
-                  <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-xs text-stone-600">
+                  <span className="rounded-full border border-[#B5D4F4] bg-[#E6F1FB] px-2 py-1 text-xs text-[#185FA5]">
                     感情の動線設計
                   </span>
                 )}
                 {appliesCatch && (
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                  <span className="rounded-full border border-[#B5D4F4] bg-[#E6F1FB] px-2 py-1 text-xs text-[#185FA5]">
                     1スライド1メッセージ
                   </span>
                 )}
                 {appliesBeforeAfter && (
-                  <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-xs text-stone-600">
+                  <span className="rounded-full border border-[#B5D4F4] bg-[#E6F1FB] px-2 py-1 text-xs text-[#185FA5]">
                     Before/After比較
                   </span>
                 )}
@@ -982,7 +982,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             <button
               onClick={handleGensparkGenerate}
               disabled={gsLoading}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
             >
               {gsLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -993,7 +993,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             </button>
             <button
               onClick={() => setShowGsSaveTemplate(true)}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="inline-flex items-center gap-1 rounded-xl border border-[#B5D4F4] bg-white px-3 py-3 text-sm font-medium text-[#185FA5] hover:bg-[#E6F1FB]"
             >
               <Save className="h-4 w-4" /> 設定を保存
             </button>
@@ -1001,9 +1001,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
           {/* Genspark テンプレート保存モーダル */}
           {showGsSaveTemplate && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <div className="rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-700">テンプレートとして保存</span>
+                <span className="text-xs font-semibold text-[#185FA5]">テンプレートとして保存</span>
                 <button onClick={() => setShowGsSaveTemplate(false)} className="text-gray-400 hover:text-gray-600">
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -1015,12 +1015,12 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 onKeyDown={(e) => { if (e.key === "Enter") handleGsSaveTemplate(); }}
                 placeholder="テンプレート名（例：管理職研修用）"
                 autoFocus
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
               />
               <button
                 onClick={handleGsSaveTemplate}
                 disabled={!gsTemplateName.trim()}
-                className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+                className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
               >
                 <Save className="h-3 w-3" /> 保存
               </button>
@@ -1033,12 +1033,12 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 readOnly
                 value={gsPrompt}
                 rows={12}
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm"
+                className="w-full rounded-xl border border-[#B5D4F4] bg-white/80 px-4 py-3 text-sm"
               />
               <div className="flex gap-2">
                 <button
                   onClick={handleGsCopyAndOpen}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2 text-sm font-medium text-white shadow-sm"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-2 text-sm font-medium text-white shadow-sm"
                 >
                   <Copy className="h-3.5 w-3.5" /> コピーしてGensparkを開く
                   <ExternalLink className="h-3 w-3" />
@@ -1053,7 +1053,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                   href="https://www.genspark.ai/ai_slides?tab=explore"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
                 >
                   Gensparkで資料作成
                 </a>

@@ -93,7 +93,7 @@ export function TemplatePanel() {
                     type="text"
                     defaultValue={t.name}
                     autoFocus
-                    className="flex-1 text-sm font-semibold border-b border-slate-400 outline-none bg-transparent max-w-xs"
+                    className="flex-1 text-sm font-semibold border-b border-[#378ADD] outline-none bg-transparent max-w-xs"
                     onBlur={(e) => handleRename(t.id, e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleRename(t.id, e.currentTarget.value);
@@ -105,7 +105,7 @@ export function TemplatePanel() {
                     {t.name}
                     <button
                       onClick={() => setEditingId(t.id)}
-                      className="ml-1.5 text-gray-400 hover:text-slate-500 transition-colors"
+                      className="ml-1.5 text-gray-400 hover:text-[#378ADD] transition-colors"
                       title="名前を編集"
                     >
                       <Pencil className="inline h-3 w-3" />
@@ -117,14 +117,14 @@ export function TemplatePanel() {
                 </span>
                 <button
                   onClick={() => handleApplyGemini(t)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                  className="inline-flex items-center gap-1 rounded-lg bg-[#E6F1FB] px-2 py-1 text-[10px] font-medium text-[#185FA5] hover:bg-[#E6F1FB]"
                   title="Gemini分析に適用"
                 >
                   <BrainCircuit className="h-3 w-3" /> Gemini分析に適用
                 </button>
                 <button
                   onClick={() => handleApplyGenspark(t)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-stone-50 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-stone-100"
+                  className="inline-flex items-center gap-1 rounded-lg bg-[#E6F1FB] px-2 py-1 text-[10px] font-medium text-[#185FA5] hover:bg-[#E6F1FB]"
                   title="Genspark設定に適用"
                 >
                   <Sparkles className="h-3 w-3" /> Genspark設定に適用

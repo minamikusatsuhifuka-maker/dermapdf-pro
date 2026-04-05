@@ -38,7 +38,7 @@ const RECORD_TYPE_OPTIONS: { value: StaffRecord["type"]; label: string }[] = [
 ];
 
 const selectClass =
-  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200";
+  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]";
 
 // スタッフ追加/編集フォーム
 function StaffForm({
@@ -99,7 +99,7 @@ function StaffForm({
               onClick={() => toggleNeed(n.value)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 dominantNeeds.includes(n.value)
-                  ? "bg-[#4f6272] text-white"
+                  ? "bg-[#378ADD] text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
@@ -126,7 +126,7 @@ function StaffForm({
           <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} className={selectClass} />
         </div>
       </div>
-      <button onClick={handleSubmit} className="w-full rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-2 text-sm font-bold text-white">
+      <button onClick={handleSubmit} className="w-full rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-2 text-sm font-bold text-white">
         {initial ? "更新" : "追加"}
       </button>
     </div>
@@ -315,7 +315,7 @@ ${philosophyContext}
           {staff.dominantNeeds.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {staff.dominantNeeds.map((n) => (
-                <span key={n} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                <span key={n} className="rounded-full bg-[#E6F1FB] px-2 py-0.5 text-[10px] font-medium text-[#185FA5]">
                   {NEEDS_OPTIONS.find((o) => o.value === n)?.label || n}
                 </span>
               ))}
@@ -323,7 +323,7 @@ ${philosophyContext}
           )}
           <button
             onClick={() => setEditing(true)}
-            className="mt-2 text-xs text-slate-500 hover:underline"
+            className="mt-2 text-xs text-[#378ADD] hover:underline"
           >
             プロフィールを編集
           </button>
@@ -352,7 +352,7 @@ ${philosophyContext}
               onClick={() => setActiveTab(t.id)}
               className={`px-4 py-2 text-xs font-medium transition-colors ${
                 activeTab === t.id
-                  ? "border-b-2 border-[#4f6272] text-slate-700"
+                  ? "border-b-2 border-[#378ADD] text-[#185FA5]"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -366,7 +366,7 @@ ${philosophyContext}
           <div className="space-y-3">
             <button
               onClick={() => setShowAddRecord(!showAddRecord)}
-              className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+              className="inline-flex items-center gap-1 rounded-lg bg-[#E6F1FB] px-3 py-1.5 text-xs font-medium text-[#185FA5] hover:bg-[#E6F1FB]"
             >
               <Plus className="h-3 w-3" /> 記録を追加
             </button>
@@ -402,7 +402,7 @@ ${philosophyContext}
                     ))}
                   </select>
                 </div>
-                <button onClick={handleAddRecord} className="w-full rounded-lg bg-[#4f6272] px-3 py-2 text-xs font-bold text-white">
+                <button onClick={handleAddRecord} className="w-full rounded-lg bg-[#378ADD] px-3 py-2 text-xs font-bold text-white">
                   保存
                 </button>
               </div>
@@ -421,7 +421,7 @@ ${philosophyContext}
                       <p className="text-xs text-gray-400 mb-0.5">{r.date}</p>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{r.content}</p>
                       {r.analysisId && (
-                        <p className="mt-1 text-[10px] text-slate-500">
+                        <p className="mt-1 text-[10px] text-[#378ADD]">
                           紐付き分析: {getDisplayTitle(analyses.find((a) => a.id === r.analysisId) as AnalysisRecord) || r.analysisId}
                         </p>
                       )}
@@ -439,7 +439,7 @@ ${philosophyContext}
               <button
                 onClick={handleGenerate1on1}
                 disabled={aiLoading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
               >
                 {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                 1on1アジェンダをAIで生成
@@ -447,7 +447,7 @@ ${philosophyContext}
               <button
                 onClick={handleGenerateCheer}
                 disabled={aiLoading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D9E75] hover:bg-[#0F6E56] px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
               >
                 {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                 目標応援メッセージを生成
@@ -455,7 +455,7 @@ ${philosophyContext}
             </div>
 
             {aiResult && (
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/30 p-4">
+              <div className="space-y-2 rounded-xl border border-[#B5D4F4] bg-[#E6F1FB]/30 p-4">
                 <div className="prose prose-sm max-w-none text-gray-700">
                   <ReactMarkdown>{aiResult}</ReactMarkdown>
                 </div>
@@ -463,7 +463,7 @@ ${philosophyContext}
                   <button onClick={handleCopyAi} className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80">
                     <Copy className="h-3 w-3" /> コピー
                   </button>
-                  <button onClick={handleSaveAiToStock} className="inline-flex items-center gap-1 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-1.5 text-xs font-medium text-white shadow-sm">
+                  <button onClick={handleSaveAiToStock} className="inline-flex items-center gap-1 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-3 py-1.5 text-xs font-medium text-white shadow-sm">
                     <BookmarkPlus className="h-3 w-3" /> ストックに保存
                   </button>
                 </div>
@@ -480,7 +480,7 @@ ${philosophyContext}
               {staff.dominantNeeds.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {staff.dominantNeeds.map((n) => (
-                    <span key={n} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                    <span key={n} className="rounded-full bg-[#E6F1FB] px-3 py-1 text-xs font-medium text-[#185FA5]">
                       {NEEDS_OPTIONS.find((o) => o.value === n)?.label || n}
                     </span>
                   ))}
@@ -600,7 +600,7 @@ export function StaffPanel({ clinicSettings }: StaffPanelProps) {
           </button>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+            className="inline-flex items-center gap-1 rounded-lg bg-[#E6F1FB] px-3 py-1.5 text-xs font-medium text-[#185FA5] hover:bg-[#E6F1FB]"
           >
             <Plus className="h-3 w-3" /> スタッフを追加
           </button>
@@ -634,7 +634,7 @@ export function StaffPanel({ clinicSettings }: StaffPanelProps) {
               {p.dominantNeeds.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {p.dominantNeeds.map((n) => (
-                    <span key={n} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                    <span key={n} className="rounded-full bg-[#E6F1FB] px-2 py-0.5 text-[10px] font-medium text-[#185FA5]">
                       {NEEDS_OPTIONS.find((o) => o.value === n)?.label || n}
                     </span>
                   ))}
@@ -648,7 +648,7 @@ export function StaffPanel({ clinicSettings }: StaffPanelProps) {
               )}
               <button
                 onClick={() => setSelectedStaffId(p.id)}
-                className="inline-flex items-center gap-1 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-3 py-1.5 text-xs font-bold text-white"
+                className="inline-flex items-center gap-1 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-3 py-1.5 text-xs font-bold text-white"
               >
                 カルテを開く
               </button>

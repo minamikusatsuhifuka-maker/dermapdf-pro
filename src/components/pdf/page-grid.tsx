@@ -81,7 +81,7 @@ export function PageGrid({ pdfUrl, onExtract, onCrop }: PageGridProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#B5D4F4] border-t-transparent" />
         <span className="ml-3 text-sm text-gray-500">PDF読み込み中...</span>
       </div>
     );
@@ -110,14 +110,14 @@ export function PageGrid({ pdfUrl, onExtract, onCrop }: PageGridProps) {
           <button
             disabled={selected.size === 0}
             onClick={() => onExtract?.(selectedArray)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
           >
             <Scissors className="h-3.5 w-3.5" /> 選択ページ抽出
           </button>
           <button
             disabled={selected.size === 0}
             onClick={() => onCrop?.(selectedArray)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
           >
             <Crop className="h-3.5 w-3.5" /> トリミング
           </button>
@@ -135,8 +135,8 @@ export function PageGrid({ pdfUrl, onExtract, onCrop }: PageGridProps) {
               className={cn(
                 "group relative overflow-hidden rounded-xl border-2 bg-white shadow-sm transition-all",
                 isSelected
-                  ? "border-slate-400 ring-2 ring-slate-200"
-                  : "border-transparent hover:border-slate-200"
+                  ? "border-[#378ADD] ring-2 ring-slate-200"
+                  : "border-transparent hover:border-[#B5D4F4]"
               )}
             >
               <img
@@ -149,7 +149,7 @@ export function PageGrid({ pdfUrl, onExtract, onCrop }: PageGridProps) {
                 className={cn(
                   "absolute top-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-md border-2 text-white transition-colors",
                   isSelected
-                    ? "border-slate-500 bg-slate-500"
+                    ? "border-[#378ADD] bg-[#378ADD]"
                     : "border-gray-300 bg-white/80"
                 )}
               >

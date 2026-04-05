@@ -226,7 +226,7 @@ export default function Home() {
                     .getElementById("analysis-stock")
                     ?.scrollIntoView({ behavior: "smooth" })
                 }
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                className="inline-flex items-center gap-2 rounded-full border border-[#B5D4F4] bg-[#E6F1FB] px-4 py-1.5 text-xs font-semibold text-[#185FA5] transition-colors hover:bg-[#E6F1FB]"
               >
                 保存済み分析 ({stockCount}件) ↓
               </button>
@@ -243,8 +243,8 @@ export default function Home() {
 
         {/* テキスト入力モード時のヒント */}
         {inputMode === "text" && !inputText.trim() && (
-          <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-6 text-center">
-            <p className="text-sm text-slate-500 font-medium">
+          <section className="rounded-2xl border border-[#B5D4F4] bg-[#E6F1FB]/50 p-6 text-center">
+            <p className="text-sm text-[#378ADD] font-medium">
               ✏️ テキストを入力してください
             </p>
             <p className="mt-1 text-xs text-gray-400">

@@ -52,12 +52,12 @@ export function PdfActions({
         {/* 圧縮 */}
         <div className="rounded-xl border border-gray-100 bg-white/60 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <FileDown className="h-4 w-4 text-stone-600" /> 圧縮
+            <FileDown className="h-4 w-4 text-[#185FA5]" /> 圧縮
           </div>
           <select
             value={quality}
             onChange={(e) => setQuality(e.target.value as CompressionQuality)}
-            className="mb-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="mb-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           >
             {QUALITY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -67,7 +67,7 @@ export function PdfActions({
           </select>
           <button
             onClick={() => onCompress?.(quality)}
-            className="w-full rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-2 text-sm font-medium text-white shadow-sm"
+            className="w-full rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-2 text-sm font-medium text-white shadow-sm"
           >
             圧縮実行
           </button>
@@ -76,12 +76,12 @@ export function PdfActions({
         {/* リサイズ */}
         <div className="rounded-xl border border-gray-100 bg-white/60 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <Maximize className="h-4 w-4 text-stone-600" /> 用紙リサイズ
+            <Maximize className="h-4 w-4 text-[#185FA5]" /> 用紙リサイズ
           </div>
           <select
             value={paperSize}
             onChange={(e) => setPaperSize(e.target.value as PaperSize)}
-            className="mb-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="mb-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           >
             {PAPER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -91,7 +91,7 @@ export function PdfActions({
           </select>
           <button
             onClick={() => onResize?.(paperSize)}
-            className="w-full rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-2 text-sm font-medium text-white shadow-sm"
+            className="w-full rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-2 text-sm font-medium text-white shadow-sm"
           >
             リサイズ実行
           </button>
@@ -102,19 +102,19 @@ export function PdfActions({
       <div className="flex flex-wrap gap-2">
         <button
           onClick={onGemini}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2.5 text-sm font-medium text-white shadow-sm"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-2.5 text-sm font-medium text-white shadow-sm"
         >
           <BrainCircuit className="h-4 w-4" /> Gemini AI分析
         </button>
         <button
           onClick={onPresentation}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2.5 text-sm font-medium text-white shadow-sm"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-2.5 text-sm font-medium text-white shadow-sm"
         >
           <Presentation className="h-4 w-4" /> プレゼン生成
         </button>
         <button
           onClick={onMessage}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2.5 text-sm font-medium text-white shadow-sm"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-2.5 text-sm font-medium text-white shadow-sm"
         >
           <MessageSquare className="h-4 w-4" /> メッセージ生成
         </button>

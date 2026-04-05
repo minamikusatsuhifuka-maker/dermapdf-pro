@@ -81,7 +81,7 @@ export function GensparkPanel({
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
       <h2 className="flex items-center gap-2 text-lg font-bold text-gray-700">
-        <Presentation className="h-5 w-5 text-[#4f6272]" />
+        <Presentation className="h-5 w-5 text-[#378ADD]" />
         Genspark プレゼン生成
       </h2>
 
@@ -93,7 +93,7 @@ export function GensparkPanel({
         <select
           value={preset}
           onChange={(e) => setPreset(e.target.value as GensparkPreset)}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
         >
           {PRESETS.map((p) => (
             <option key={p.value} value={p.value}>
@@ -107,7 +107,7 @@ export function GensparkPanel({
       <button
         onClick={handleGenerate}
         disabled={loading || !sourceContent}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#5c7a6e] hover:bg-[#4a6459] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -124,12 +124,12 @@ export function GensparkPanel({
             value={generatedPrompt}
             onChange={(e) => setGeneratedPrompt(e.target.value)}
             rows={8}
-            className="w-full rounded-xl border border-gray-200 bg-white/80 px-4 py-3 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-xl border border-gray-200 bg-white/80 px-4 py-3 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           />
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleCopyAndOpen}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#4f6272] hover:bg-[#3d5260] px-6 py-3 text-sm font-bold text-white shadow-lg"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg"
             >
               <Copy className="h-4 w-4" /> Gensparkにコピー
               <ExternalLink className="h-3.5 w-3.5" />
@@ -138,7 +138,7 @@ export function GensparkPanel({
               href="https://www.genspark.ai/ai_slides?tab=explore"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-2 text-sm font-semibold text-white transition-opacity"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-2 text-sm font-semibold text-white transition-opacity"
             >
               Gensparkで資料作成
             </a>

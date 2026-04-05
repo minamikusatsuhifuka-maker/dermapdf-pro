@@ -153,7 +153,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
   ];
 
   const inputClass =
-    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200";
+    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -203,7 +203,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
             <button
               type="button"
               onClick={() => setForm((prev) => ({ ...prev, choiceTheoryEnabled: !prev.choiceTheoryEnabled }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.choiceTheoryEnabled ? "bg-[#4f6272]" : "bg-gray-300"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.choiceTheoryEnabled ? "bg-[#378ADD]" : "bg-gray-300"}`}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.choiceTheoryEnabled ? "translate-x-6" : "translate-x-1"}`}
@@ -222,7 +222,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
                       type="checkbox"
                       checked={form.priorityNeeds.includes(opt.value)}
                       onChange={() => handleToggleNeed(opt.value)}
-                      className="rounded border-gray-300 text-[#4f6272] focus:ring-slate-300"
+                      className="rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
                     />
                     {opt.label}
                   </label>
@@ -258,7 +258,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
             <button
               type="button"
               onClick={() => setFlags((prev) => ({ ...prev, staffKarute: !prev.staffKarute }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.staffKarute ? "bg-[#4f6272]" : "bg-gray-300"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.staffKarute ? "bg-[#378ADD]" : "bg-gray-300"}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.staffKarute ? "translate-x-6" : "translate-x-1"}`} />
             </button>
@@ -272,7 +272,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
             <button
               type="button"
               onClick={() => setFlags((prev) => ({ ...prev, monthlyReport: !prev.monthlyReport }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.monthlyReport ? "bg-[#4f6272]" : "bg-gray-300"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.monthlyReport ? "bg-[#378ADD]" : "bg-gray-300"}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.monthlyReport ? "translate-x-6" : "translate-x-1"}`} />
             </button>
@@ -286,7 +286,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
             <button
               type="button"
               onClick={() => setFlags((prev) => ({ ...prev, templatePanel: !prev.templatePanel }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.templatePanel ? "bg-[#4f6272]" : "bg-gray-300"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flags.templatePanel ? "bg-[#378ADD]" : "bg-gray-300"}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${flags.templatePanel ? "translate-x-6" : "translate-x-1"}`} />
             </button>
@@ -324,13 +324,13 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
                 type="password"
                 placeholder="新しいパスワードを入力"
                 id="new-delete-password"
-                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-slate-400"
+                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#378ADD]"
               />
               <input
                 type="password"
                 placeholder="パスワードを確認"
                 id="confirm-delete-password"
-                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-slate-400"
+                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#378ADD]"
               />
               <button
                 onClick={() => {
@@ -342,7 +342,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
                   setHasPassword(true);
                   alert("✅ 削除パスワードを設定しました");
                 }}
-                className="w-full px-3 py-2 text-xs bg-[#4f6272] text-white rounded-lg hover:bg-[#3d5260] transition-colors"
+                className="w-full px-3 py-2 text-xs bg-[#378ADD] text-white rounded-lg hover:bg-[#185FA5] transition-colors"
               >
                 パスワードを設定する
               </button>
@@ -352,7 +352,7 @@ export function SettingsModal({ settings, onSave }: SettingsModalProps) {
 
         <button
           onClick={handleSave}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f6272] hover:bg-[#3d5260] px-6 py-3 text-sm font-bold text-white shadow-lg"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg"
         >
           <Save className="h-4 w-4" /> 保存
         </button>
@@ -366,14 +366,14 @@ export function PhilosophyBanner({ settings }: { settings: ClinicSettings }) {
   if (!hasContent) return null;
 
   return (
-    <div className="rounded-2xl border border-white/40 bg-gradient-to-r from-slate-50 to-stone-50 p-4 shadow-sm">
+    <div className="rounded-2xl border border-white/40 bg-gradient-to-r from-[#E6F1FB] to-white p-4 shadow-sm">
       {settings.clinicName && (
         <p className="font-[family-name:var(--font-zen-maru)] text-sm font-bold text-gray-700">
           {settings.clinicName}
         </p>
       )}
       {settings.slogan && (
-        <p className="mt-1 bg-gradient-to-r from-slate-500 to-slate-600 bg-clip-text text-xs font-medium text-transparent">
+        <p className="mt-1 bg-gradient-to-r from-[#378ADD] to-[#185FA5] bg-clip-text text-xs font-medium text-transparent">
           {settings.slogan}
         </p>
       )}

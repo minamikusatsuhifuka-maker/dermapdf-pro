@@ -24,14 +24,14 @@ export interface QuickAction {
 
 const DEFAULT_ACTIONS: QuickAction[] = [
   // 編集ツール
-  { id: "compress", label: "圧縮", icon: <FileDown className="h-4 w-4" />, category: "edit", color: "from-[#4f6272] to-[#3d5260]" },
-  { id: "resize", label: "リサイズ", icon: <Maximize className="h-4 w-4" />, category: "edit", color: "from-[#4f6272] to-[#3d5260]" },
-  { id: "crop", label: "トリミング", icon: <Crop className="h-4 w-4" />, category: "edit", color: "from-[#4f6272] to-[#3d5260]" },
-  { id: "remove-bg", label: "背景除去", icon: <Eraser className="h-4 w-4" />, category: "edit", color: "from-[#4f6272] to-[#3d5260]" },
+  { id: "compress", label: "圧縮", icon: <FileDown className="h-4 w-4" />, category: "edit", color: "from-[#378ADD] to-[#185FA5]" },
+  { id: "resize", label: "リサイズ", icon: <Maximize className="h-4 w-4" />, category: "edit", color: "from-[#378ADD] to-[#185FA5]" },
+  { id: "crop", label: "トリミング", icon: <Crop className="h-4 w-4" />, category: "edit", color: "from-[#378ADD] to-[#185FA5]" },
+  { id: "remove-bg", label: "背景除去", icon: <Eraser className="h-4 w-4" />, category: "edit", color: "from-[#378ADD] to-[#185FA5]" },
   // AI活用
-  { id: "gemini", label: "Gemini AI分析", icon: <BrainCircuit className="h-4 w-4" />, category: "ai", color: "from-[#5c7a6e] to-[#4a6459]" },
-  { id: "presentation", label: "プレゼン生成", icon: <Presentation className="h-4 w-4" />, category: "ai", color: "from-[#5c7a6e] to-[#4a6459]" },
-  { id: "message", label: "メッセージ生成", icon: <MessageSquare className="h-4 w-4" />, category: "ai", color: "from-[#5c7a6e] to-[#4a6459]" },
+  { id: "gemini", label: "Gemini AI分析", icon: <BrainCircuit className="h-4 w-4" />, category: "ai", color: "from-[#1D9E75] to-[#0F6E56]" },
+  { id: "presentation", label: "プレゼン生成", icon: <Presentation className="h-4 w-4" />, category: "ai", color: "from-[#1D9E75] to-[#0F6E56]" },
+  { id: "message", label: "メッセージ生成", icon: <MessageSquare className="h-4 w-4" />, category: "ai", color: "from-[#1D9E75] to-[#0F6E56]" },
 ];
 
 interface QuickActionsProps {

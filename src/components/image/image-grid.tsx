@@ -62,21 +62,21 @@ export function ImageGrid({
           <button
             disabled={selected.size === 0}
             onClick={() => onRemoveBg?.(selectedArray)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
           >
             <Eraser className="h-3.5 w-3.5" /> 一括背景除去
           </button>
           <button
             disabled={selected.size === 0}
             onClick={() => onMergePdf?.(selectedArray)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#5c7a6e] hover:bg-[#4a6459] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
           >
             <FileOutput className="h-3.5 w-3.5" /> PDFに統合
           </button>
           <button
             disabled={selected.size === 0}
             onClick={() => onMergePdfAndAnalyze?.(selectedArray)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f6272] hover:bg-[#3d5260] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
           >
             <BrainCircuit className="h-3.5 w-3.5" /> PDF統合してAI分析
           </button>
@@ -94,8 +94,8 @@ export function ImageGrid({
               className={cn(
                 "group relative aspect-square overflow-hidden rounded-xl border-2 bg-white shadow-sm transition-all",
                 isSelected
-                  ? "border-slate-400 ring-2 ring-slate-200"
-                  : "border-transparent hover:border-slate-200"
+                  ? "border-[#378ADD] ring-2 ring-slate-200"
+                  : "border-transparent hover:border-[#B5D4F4]"
               )}
             >
               <img
@@ -108,7 +108,7 @@ export function ImageGrid({
                 className={cn(
                   "absolute top-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-md border-2 text-white transition-colors",
                   isSelected
-                    ? "border-slate-500 bg-slate-500"
+                    ? "border-[#378ADD] bg-[#378ADD]"
                     : "border-gray-300 bg-white/80"
                 )}
               >
