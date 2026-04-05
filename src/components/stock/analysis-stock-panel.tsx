@@ -72,6 +72,7 @@ function FolderTreeItem({
   editingFolderId,
   onRename,
   setEditingFolderId,
+  folderFontSize,
 }: {
   node: FolderNode;
   activeFolder: string | null;
@@ -82,6 +83,7 @@ function FolderTreeItem({
   editingFolderId: string | null;
   onRename: (oldName: string, newName: string) => void;
   setEditingFolderId: (id: string | null) => void;
+  folderFontSize: number;
 }) {
   const [isOpen, setIsOpen] = useState(
     activeFolder === node.path || (activeFolder || "").startsWith(node.path + "/")
@@ -134,17 +136,18 @@ function FolderTreeItem({
 
       <button
         onClick={() => onSelect(isActive ? null : node.path)}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium transition-colors flex-shrink-0 ${
           isActive
-            ? "bg-[#378ADD] text-white"
+            ? "bg-[#378ADD] text-white border border-[#378ADD]"
             : node.totalCount === 0
-              ? "bg-gray-50 text-gray-400 opacity-50"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              ? "bg-[#F0F7FD] text-[#7BAED4] border border-[#D4E8F7]"
+              : "bg-[#E6F1FB] text-[#185FA5] border border-[#B5D4F4] hover:bg-[#d0e8f8] hover:border-[#85B7EB]"
         }`}
+        style={{ fontSize: `${folderFontSize}px` }}
       >
         <span>{node.name}</span>
         <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
-          isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
+          isActive ? "bg-white/25 text-white" : "bg-[#B5D4F4] text-[#185FA5]"
         }`}>
           {node.totalCount}
         </span>
@@ -184,15 +187,18 @@ function FolderTreeItem({
               <div key={child.path} className="inline-flex items-center gap-0.5 flex-shrink-0">
                 <button
                   onClick={() => onSelect(childActive ? null : child.path)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-medium transition-colors flex-shrink-0 ${
                     childActive
-                      ? "bg-[#378ADD] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+                      ? "bg-[#1D9E75] text-white border border-[#1D9E75]"
+                      : child.totalCount === 0
+                        ? "bg-[#F0FAF5] text-[#6DB89A] border border-[#C5E8D8]"
+                        : "bg-[#E1F5EE] text-[#0F6E56] border border-[#9FE1CB] hover:bg-[#c8ede2] hover:border-[#5DCAA5]"
                   }`}
+                  style={{ fontSize: `${folderFontSize}px` }}
                 >
                   <span>{child.name}</span>
                   <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                    childActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
+                    childActive ? "bg-white/25 text-white" : "bg-[#9FE1CB] text-[#0F6E56]"
                   }`}>
                     {child.totalCount}
                   </span>
@@ -556,6 +562,7 @@ export function AnalysisStockPanel() {
 
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
+  const [folderFontSize, setFolderFontSize] = useState(12);
   const [globalHeight, setGlobalHeight] = useState(240);
   const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
 
@@ -611,6 +618,15 @@ export function AnalysisStockPanel() {
   useEffect(() => {
     localStorage.setItem("dermapdf_stock_fontsize", String(fontSize));
   }, [fontSize]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("dermapdf_folder_fontsize");
+    if (saved) setFolderFontSize(Number(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dermapdf_folder_fontsize", String(folderFontSize));
+  }, [folderFontSize]);
 
   const setCardHeight = (id: string, h: number) => {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
@@ -911,6 +927,24 @@ export function AnalysisStockPanel() {
             </button>
           </div>
 
+          {/* フォルダフォントサイズ */}
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span className="text-gray-400">📁</span>
+            <button
+              onClick={() => setFolderFontSize((f) => Math.max(9, f - 1))}
+              className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
+            >
+              A-
+            </button>
+            <span className="w-7 text-center text-[10px]">{folderFontSize}px</span>
+            <button
+              onClick={() => setFolderFontSize((f) => Math.min(16, f + 1))}
+              className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
+            >
+              A+
+            </button>
+          </div>
+
           <button
             onClick={exportAnalysesAsJSON}
             disabled={records.length === 0}
@@ -972,26 +1006,28 @@ export function AnalysisStockPanel() {
         <div className="flex flex-wrap items-center gap-1.5 mb-1">
           <button
             onClick={() => setActiveFolder(null)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
               activeFolder === null
-                ? "bg-[#378ADD] text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                ? "bg-[#888780] text-white"
+                : "bg-[#F1EFE8] text-[#5F5E5A] border border-[#D3D1C7] hover:bg-[#E8E6DF]"
             }`}
+            style={{ fontSize: `${folderFontSize}px` }}
           >
             <span>📚 すべて</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-              activeFolder === null ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
+              activeFolder === null ? "bg-white/25 text-white" : "bg-[#D3D1C7] text-[#5F5E5A]"
             }`}>
               {records.length}
             </span>
           </button>
           <button
             onClick={() => setActiveFolder(activeFolder === LOCK_FOLDER ? null : LOCK_FOLDER)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
               activeFolder === LOCK_FOLDER
                 ? "bg-amber-500 text-white"
                 : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
             }`}
+            style={{ fontSize: `${folderFontSize}px` }}
           >
             <span>🔒 ロック済み</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
@@ -1018,6 +1054,7 @@ export function AnalysisStockPanel() {
               editingFolderId={editingFolderId}
               onRename={handleRenameFolder}
               setEditingFolderId={setEditingFolderId}
+              folderFontSize={folderFontSize}
             />
           ))}
         </div>
