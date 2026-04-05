@@ -39,17 +39,33 @@ export default function DashboardPage() {
   const handleFiles = useCallback(async (files: FileList) => {
     setLoading(true);
     setError(null);
+
+    let apiKey = "";
+    try {
+      const r = await fetch("/api/get-gemini-key");
+      const d = await r.json();
+      apiKey = d.key || "";
+    } catch { /* ignore */ }
+
+    if (!apiKey) {
+      setError("Gemini APIキーが設定されていません");
+      setLoading(false);
+      return;
+    }
+
     const results: ClinicMonthData[] = [];
     for (const file of Array.from(files)) {
       if (!file.name.match(/\.(xlsx|xls)$/i)) continue;
       try {
-        const parsed = await parseClinicExcel(file);
+        setError(`🤖 「${file.name}」をAIで解析中...（30秒ほどかかる場合があります）`);
+        const parsed = await parseClinicExcel(file, apiKey);
         results.push(parsed);
       } catch (e) {
         setError(`${file.name}: ${e instanceof Error ? e.message : "解析失敗"}`);
       }
     }
     if (results.length > 0) {
+      setError(null);
       setAllData((prev) => {
         const merged = [...prev];
         for (const r of results) {
@@ -79,7 +95,7 @@ export default function DashboardPage() {
     支払合計: d.sheet1.shiharaiGoukei?.total ?? 0,
     自費: d.sheet1.shiharaiGoukei?.jihi ?? 0,
     保険: d.sheet1.shiharaiGoukei?.hoken ?? 0,
-    現金: d.sheet1.cash?.total ?? 0,
+    現金: d.sheet1.genkin?.total ?? 0,
     クレジット: d.sheet1.credit?.total ?? 0,
     QR: d.sheet1.qr?.total ?? 0,
     保険点数: d.hoken.tensuGoukei ?? 0,
@@ -269,11 +285,11 @@ export default function DashboardPage() {
                 <div className="bg-white rounded-xl border border-gray-100 p-5">
                   <div className="text-sm font-medium text-gray-700 mb-3">決済方法別（{latest.yearMonth}）</div>
                   {[
-                    { label: "現金", data: latest.sheet1.cash },
+                    { label: "現金", data: latest.sheet1.genkin },
                     { label: "クレジットカード", data: latest.sheet1.credit },
                     { label: "QR決済", data: latest.sheet1.qr },
                     { label: "電子マネー", data: latest.sheet1.emoney },
-                    { label: "返金対応用", data: latest.sheet1.refund },
+                    { label: "返金対応用", data: latest.sheet1.henkin },
                   ].map((item) => (
                     <div key={item.label} className="mb-3">
                       <div className="flex justify-between text-xs mb-1">
@@ -349,7 +365,7 @@ export default function DashboardPage() {
                     { label: "手術", val: latest.hoken.shujutsu },
                     { label: "検査", val: latest.hoken.kensa },
                     { label: "病理診断", val: latest.hoken.byori },
-                    { label: "処方箋料", val: latest.hoken.shohosen },
+                    { label: "処方箋料", val: latest.hoken.shohosenRyo },
                   ].map((r) => (
                     <div key={r.label} className="flex justify-between py-1.5 border-b border-gray-50 text-xs last:border-0">
                       <span className="text-gray-500">{r.label}</span>
@@ -375,7 +391,7 @@ export default function DashboardPage() {
                           d.sheet1.shiharaiGoukei?.total,
                           d.sheet1.shiharaiGoukei?.jihi,
                           d.sheet1.shiharaiGoukei?.hoken,
-                          d.sheet1.cash?.total,
+                          d.sheet1.genkin?.total,
                           d.sheet1.credit?.total,
                           d.sheet1.qr?.total,
                           d.sheet1.emoney?.total,
@@ -422,7 +438,7 @@ export default function DashboardPage() {
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.shiharaiGoukei?.total ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.shiharaiGoukei?.jihi ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.shiharaiGoukei?.hoken ?? 0)}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.cash?.total ?? 0)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.genkin?.total ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.credit?.total ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.qr?.total ?? 0)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{fmtYen(d.sheet1.emoney?.total ?? 0)}</td>
