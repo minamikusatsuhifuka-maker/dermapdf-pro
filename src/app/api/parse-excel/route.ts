@@ -8,16 +8,64 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "API key missing" }, { status: 500 });
 
-    const prompt = `以下はクリニック月次集計Excelの重要行データです。
-数値を読み取りJSONで回答してください。数値不明は0。
+    const prompt = `以下のクリニック月次集計データから数値を読み取り、JSONのみで回答してください。
 
+データ:
 ${excelText}
 
-回答はJSONのみ（説明不要）:
-{"yearMonth":"2026年3月","shiharaiGoukeiTotal":0,"shiharaiGoukeiJihi":0,"shiharaiGoukeiHoken":0,"genkinTotal":0,"genkinJihi":0,"genkinHoken":0,"creditTotal":0,"creditJihi":0,"creditHoken":0,"qrTotal":0,"qrJihi":0,"qrHoken":0,"emoneyTotal":0,"emoneyJihi":0,"emoneyHoken":0,"henkinTotal":0,"henkinJihi":0,"henkinHoken":0,"nyukinGoukeiTotal":0,"nyukinGoukeiJihi":0,"nyukinGoukeiHoken":0,"tensuGoukei":0,"seikyuGoukei":0,"madoGuchiGoukei":0,"mishuGoukei":0,"shaHo":0,"kokuHo":0,"rosai":0,"jibaiseki":0,"kogai":0,"sonotaHoken":0,"shoshinRyo":0,"saishinRyo":0,"kanriRyo":0,"zaitakuRyo":0,"chusha":0,"shochi":0,"shujutsu":0,"kensa":0,"byori":0,"shohosenRyo":0,"sonotaTensu":0,"gazoShindan":0}`;
+回答形式（JSONのみ・説明文不要）:
+{
+  "yearMonth": "2026年3月",
+  "shiharaiGoukeiTotal": 12889712,
+  "shiharaiGoukeiJihi": 7560692,
+  "shiharaiGoukeiHoken": 5329020,
+  "genkinTotal": 2101370,
+  "genkinJihi": 1699190,
+  "genkinHoken": 402180,
+  "creditTotal": 5665290,
+  "creditJihi": 5144040,
+  "creditHoken": 521250,
+  "qrTotal": 685020,
+  "qrJihi": 509670,
+  "qrHoken": 175350,
+  "emoneyTotal": 264530,
+  "emoneyJihi": 186790,
+  "emoneyHoken": 77740,
+  "henkinTotal": -8210,
+  "henkinJihi": 0,
+  "henkinHoken": -8210,
+  "nyukinGoukeiTotal": 8708000,
+  "nyukinGoukeiJihi": 7539690,
+  "nyukinGoukeiHoken": 1168310,
+  "tensuGoukei": 0,
+  "seikyuGoukei": 0,
+  "madoGuchiGoukei": 0,
+  "mishuGoukei": 0,
+  "shaHo": 0,
+  "kokuHo": 0,
+  "rosai": 0,
+  "jibaiseki": 0,
+  "kogai": 0,
+  "sonotaHoken": 0,
+  "shoshinRyo": 0,
+  "saishinRyo": 0,
+  "kanriRyo": 0,
+  "zaitakuRyo": 0,
+  "chusha": 0,
+  "shochi": 0,
+  "shujutsu": 0,
+  "kensa": 0,
+  "byori": 0,
+  "shohosenRyo": 0,
+  "sonotaTensu": 0,
+  "gazoShindan": 0
+}
+
+上記は例です。実際のデータから正しい数値を読み取ってください。
+「支払い合計(税込)」行の最初の3つの数値がTotal/自費/保険です。`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
