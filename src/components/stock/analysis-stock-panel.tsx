@@ -21,6 +21,8 @@ import {
   renameFolder,
   deleteFolder,
   toggleLock,
+  duplicateAnalysis,
+  bulkToggleLock,
   hasDeletePassword,
   verifyDeletePassword,
   type AnalysisRecord,
@@ -984,6 +986,44 @@ export function AnalysisStockPanel() {
             />
           </div>
 
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                bulkToggleLock(Array.from(selectedIds), true);
+                reload();
+                toastOk(`${selectedIds.size}件をロックしました`);
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
+            >
+              🔒 一括ロック
+            </button>
+            <button
+              onClick={() => {
+                bulkToggleLock(Array.from(selectedIds), false);
+                reload();
+                toastOk(`${selectedIds.size}件のロックを解除しました`);
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              🔓 一括解除
+            </button>
+          </div>
+
+          <button
+            onClick={() => {
+              let count = 0;
+              Array.from(selectedIds).forEach((id) => {
+                if (duplicateAnalysis(id)) count++;
+              });
+              setSelectedIds(new Set());
+              reload();
+              toastOk(`${count}件を複製しました`);
+            }}
+            className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+          >
+            📋 一括複製
+          </button>
+
           <button
             onClick={bulkDelete}
             className="ml-auto rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50"
@@ -1035,6 +1075,11 @@ export function AnalysisStockPanel() {
                   {r.locked && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full border border-amber-200">
                       🔒 ロック
+                    </span>
+                  )}
+                  {(r.title || r.fileName).includes("(コピー)") && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-400 rounded-full border border-blue-100">
+                      📋 コピー
                     </span>
                   )}
                   {editingId === r.id ? (
@@ -1110,6 +1155,19 @@ export function AnalysisStockPanel() {
                     title="MD保存"
                   >
                     <Download className="h-3.5 w-3.5 text-purple-400" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const copied = duplicateAnalysis(r.id);
+                      if (copied) {
+                        reload();
+                        toastOk(`「${copied.title}」を複製しました`);
+                      }
+                    }}
+                    className="rounded p-1 text-gray-300 hover:text-blue-500 transition-colors"
+                    title="複製"
+                  >
+                    📋
                   </button>
                   <button
                     onClick={() => { toggleLock(r.id); reload(); }}

@@ -111,6 +111,36 @@ export function removeDeletePassword(): void {
   localStorage.removeItem(LOCK_PASSWORD_KEY);
 }
 
+export function duplicateAnalysis(id: string): AnalysisRecord | null {
+  const records = loadAllAnalyses();
+  const original = records.find((r) => r.id === id);
+  if (!original) return null;
+
+  const duplicated: AnalysisRecord = {
+    ...original,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    title: (original.title || original.fileName) + " (コピー)",
+    locked: false,
+    updatedAt: undefined,
+    originalContent: undefined,
+  };
+
+  records.splice(records.findIndex((r) => r.id === id) + 1, 0, duplicated);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records.slice(0, 100)));
+  window.dispatchEvent(new Event("analysisStockUpdated"));
+  return duplicated;
+}
+
+export function bulkToggleLock(ids: string[], locked: boolean): void {
+  const records = loadAllAnalyses();
+  records.forEach((r) => {
+    if (ids.includes(r.id)) r.locked = locked;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  window.dispatchEvent(new Event("analysisStockUpdated"));
+}
+
 export function deleteAnalysis(id: string): void {
   const records = loadAllAnalyses().filter((r) => r.id !== id);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
