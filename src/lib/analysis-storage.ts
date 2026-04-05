@@ -193,6 +193,113 @@ export function updateAnalysisTags(id: string, tags: string[], folder: string): 
   }
 }
 
+// フォルダパスユーティリティ
+export function getParentFolder(folderPath: string): string {
+  const parts = folderPath.split("/");
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+}
+
+export function getFolderName(folderPath: string): string {
+  const parts = folderPath.split("/");
+  return parts[parts.length - 1];
+}
+
+export function getFolderDepth(folderPath: string): number {
+  if (!folderPath) return 0;
+  return folderPath.split("/").length - 1;
+}
+
+export interface FolderNode {
+  path: string;
+  name: string;
+  count: number;
+  totalCount: number;
+  children: FolderNode[];
+  isCustom: boolean;
+}
+
+const DEFAULT_FOLDERS_LIST = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
+
+export function buildFolderTree(
+  records: AnalysisRecord[],
+  customFolders: string[]
+): FolderNode[] {
+  const allPaths = new Set<string>();
+  records.forEach((r) => {
+    if (r.folder) {
+      const parts = r.folder.split("/");
+      parts.forEach((_, i) => {
+        allPaths.add(parts.slice(0, i + 1).join("/"));
+      });
+    }
+  });
+  customFolders.forEach((f) => {
+    const parts = f.split("/");
+    parts.forEach((_, i) => {
+      allPaths.add(parts.slice(0, i + 1).join("/"));
+    });
+  });
+
+  const countMap: Record<string, number> = {};
+  records.forEach((r) => {
+    if (r.folder) countMap[r.folder] = (countMap[r.folder] || 0) + 1;
+  });
+
+  const buildNode = (path: string): FolderNode => {
+    const children = Array.from(allPaths)
+      .filter((p) => {
+        const parts = p.split("/");
+        const pathParts = path.split("/");
+        return parts.length === pathParts.length + 1 && p.startsWith(path + "/");
+      })
+      .sort((a, b) => a.localeCompare(b, "ja"))
+      .map(buildNode);
+
+    const directCount = countMap[path] || 0;
+    const totalCount = directCount + children.reduce((s, c) => s + c.totalCount, 0);
+
+    return {
+      path,
+      name: getFolderName(path),
+      count: directCount,
+      totalCount,
+      children,
+      isCustom: !DEFAULT_FOLDERS_LIST.includes(path.split("/")[0]),
+    };
+  };
+
+  const rootPaths = Array.from(allPaths)
+    .filter((p) => !p.includes("/"))
+    .sort((a, b) => {
+      const aIdx = DEFAULT_FOLDERS_LIST.indexOf(a);
+      const bIdx = DEFAULT_FOLDERS_LIST.indexOf(b);
+      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+      if (aIdx !== -1) return -1;
+      if (bIdx !== -1) return 1;
+      return a.localeCompare(b, "ja");
+    });
+  return rootPaths.map(buildNode);
+}
+
+export interface FlatFolder {
+  path: string;
+  displayName: string;
+  depth: number;
+}
+
+export function getFlatFolderList(tree: FolderNode[]): FlatFolder[] {
+  const result: FlatFolder[] = [];
+  const walk = (nodes: FolderNode[], depth: number) => {
+    for (const node of nodes) {
+      const prefix = depth > 0 ? "　".repeat(depth - 1) + "└ " : "";
+      result.push({ path: node.path, displayName: prefix + node.name, depth });
+      walk(node.children, depth + 1);
+    }
+  };
+  walk(tree, 0);
+  return result;
+}
+
 export function getAllFolders(): string[] {
   const records = loadAllAnalyses();
   const folders = new Set(records.map((r) => r.folder).filter(Boolean));

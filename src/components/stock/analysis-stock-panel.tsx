@@ -25,7 +25,11 @@ import {
   bulkToggleLock,
   hasDeletePassword,
   verifyDeletePassword,
+  buildFolderTree,
+  getFlatFolderList,
+  getFolderName,
   type AnalysisRecord,
+  type FolderNode,
 } from "@/lib/analysis-storage";
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
 import {
@@ -58,14 +62,158 @@ function loadFolderOrder(): string[] | null {
   }
 }
 
+function FolderTreeItem({
+  node,
+  activeFolder,
+  onSelect,
+  depth,
+  onAddSubfolder,
+  onEdit,
+  onDelete,
+  editingFolderId,
+  onRename,
+  setEditingFolderId,
+}: {
+  node: FolderNode;
+  activeFolder: string | null;
+  onSelect: (folder: string | null) => void;
+  depth: number;
+  onAddSubfolder: (parentPath: string) => void;
+  onEdit?: (folder: string) => void;
+  onDelete?: (folder: string) => void;
+  editingFolderId: string | null;
+  onRename: (oldName: string, newName: string) => void;
+  setEditingFolderId: (id: string | null) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(
+    activeFolder === node.path || (activeFolder || "").startsWith(node.path + "/")
+  );
+  const hasChildren = node.children.length > 0;
+  const isActive = activeFolder === node.path;
+  const isEditing = editingFolderId === node.path;
+
+  useEffect(() => {
+    if (activeFolder === node.path || (activeFolder || "").startsWith(node.path + "/")) {
+      setIsOpen(true);
+    }
+  }, [activeFolder, node.path]);
+
+  if (isEditing) {
+    return (
+      <div style={{ paddingLeft: `${depth * 16}px` }} className="flex items-center gap-1 py-0.5">
+        <input
+          type="text"
+          defaultValue={node.name}
+          autoFocus
+          className="w-24 rounded-full border border-[#378ADD] px-2 py-1 text-xs outline-none"
+          onBlur={(e) => {
+            const parent = node.path.includes("/") ? node.path.substring(0, node.path.lastIndexOf("/")) + "/" : "";
+            onRename(node.path, parent + e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const parent = node.path.includes("/") ? node.path.substring(0, node.path.lastIndexOf("/")) + "/" : "";
+              onRename(node.path, parent + e.currentTarget.value);
+            }
+            if (e.key === "Escape") setEditingFolderId(null);
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%" }}>
+      <div
+        className="flex items-center gap-1 py-0.5"
+        style={{ paddingLeft: `${depth * 16}px` }}
+      >
+        {hasChildren ? (
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 text-xs"
+          >
+            {isOpen ? "▾" : "▸"}
+          </button>
+        ) : (
+          <span className="w-4" />
+        )}
+        <button
+          onClick={() => onSelect(isActive ? null : node.path)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+            isActive
+              ? "bg-[#378ADD] text-white"
+              : node.totalCount === 0
+                ? "bg-gray-50 text-gray-400 opacity-50"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <span>{node.name}</span>
+          <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
+            isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
+          }`}>
+            {node.totalCount}
+          </span>
+        </button>
+        <button
+          onClick={() => onAddSubfolder(node.path)}
+          className="text-gray-300 hover:text-[#378ADD] text-xs transition-colors"
+          title="サブフォルダを追加"
+        >
+          +
+        </button>
+        {node.isCustom && (
+          <>
+            <button
+              onClick={() => onEdit?.(node.path)}
+              className="rounded p-0.5 text-gray-400 hover:text-[#378ADD] transition-colors"
+              title="フォルダ名を変更"
+            >
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+            <button
+              onClick={() => onDelete?.(node.path)}
+              className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+              title="フォルダを削除"
+            >
+              <Trash2 className="h-2.5 w-2.5" />
+            </button>
+          </>
+        )}
+      </div>
+      {hasChildren && isOpen && (
+        <div className="mt-0.5">
+          {node.children.map((child) => (
+            <FolderTreeItem
+              key={child.path}
+              node={child}
+              activeFolder={activeFolder}
+              onSelect={onSelect}
+              depth={depth + 1}
+              onAddSubfolder={onAddSubfolder}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              editingFolderId={editingFolderId}
+              onRename={onRename}
+              setEditingFolderId={setEditingFolderId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TagFolderEditor({
   record,
   allFolders,
+  folderTree,
   onSave,
   onClose,
 }: {
   record: AnalysisRecord;
   allFolders: string[];
+  folderTree: FolderNode[];
   onSave: (tags: string[], folder: string) => void;
   onClose: () => void;
 }) {
@@ -73,7 +221,7 @@ function TagFolderEditor({
   const [tags, setTags] = useState<string[]>(record.tags || []);
   const [tagInput, setTagInput] = useState("");
 
-  const folderOptions = Array.from(new Set([...DEFAULT_FOLDERS, ...allFolders]));
+  const flatFolders = getFlatFolderList(folderTree);
 
   const addTag = () => {
     const trimmed = tagInput.trim();
@@ -106,8 +254,8 @@ function TagFolderEditor({
           className={selectClass}
         >
           <option value="">未分類</option>
-          {folderOptions.map((f) => (
-            <option key={f} value={f}>{f}</option>
+          {flatFolders.map((f) => (
+            <option key={f.path} value={f.path}>{f.displayName}</option>
           ))}
         </select>
       </div>
@@ -420,6 +568,9 @@ export function AnalysisStockPanel() {
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
+  // フォルダツリー構築
+  const folderTree = useMemo(() => buildFolderTree(records, customFolders), [records, customFolders]);
+
   // 全フォルダリストを順序に従って並び替え（すべて・ロック済みは固定）
   const orderedFolders = useMemo(() => {
     const draggable = [...allFolders];
@@ -483,11 +634,11 @@ export function AnalysisStockPanel() {
     return counts;
   }, [records]);
 
-  // フォルダフィルタ + 検索フィルタ
+  // フォルダフィルタ + 検索フィルタ（サブフォルダも含む）
   const folderFiltered = activeFolder === LOCK_FOLDER
     ? records.filter((r) => r.locked)
     : activeFolder
-      ? records.filter((r) => r.folder === activeFolder)
+      ? records.filter((r) => r.folder === activeFolder || (r.folder || "").startsWith(activeFolder + "/"))
       : records;
 
   const filtered = search
@@ -511,6 +662,16 @@ export function AnalysisStockPanel() {
     }
     setNewFolderName("");
     setShowAddFolder(false);
+  };
+
+  const handleAddSubfolder = (parentPath: string) => {
+    const name = prompt(`「${getFolderName(parentPath)}」にサブフォルダ名を入力：`);
+    if (!name?.trim()) return;
+    const newPath = `${parentPath}/${name.trim()}`;
+    if (!customFolders.includes(newPath)) {
+      saveCustomFolders([...customFolders, newPath]);
+    }
+    setActiveFolder(newPath);
   };
 
   const handleRenameFolder = (oldName: string, newName: string) => {
@@ -755,141 +916,88 @@ export function AnalysisStockPanel() {
         </div>
       </div>
 
-      {/* フォルダタブ */}
-      <div className="flex flex-wrap items-center gap-1.5 pb-1">
-        {orderedFolders.map((folder) => {
-          const isAll = folder === "すべて";
-          const isLockFolder = folder === LOCK_FOLDER;
-          const isFixed = isAll || isLockFolder;
-          const isCustom = !isFixed && !DEFAULT_FOLDERS.includes(folder);
-          const isEditing = editingFolderId === folder;
-          const count = isAll ? records.length : (folderCounts[folder] || 0);
-          const isActive = isAll ? activeFolder === null : activeFolder === folder;
+      {/* フォルダツリー */}
+      <div className="space-y-1 pb-2">
+        {/* 固定タブ: すべて + ロック済み */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+          <button
+            onClick={() => setActiveFolder(null)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+              activeFolder === null
+                ? "bg-[#378ADD] text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            <span>📚 すべて</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeFolder === null ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
+            }`}>
+              {records.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveFolder(activeFolder === LOCK_FOLDER ? null : LOCK_FOLDER)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+              activeFolder === LOCK_FOLDER
+                ? "bg-amber-500 text-white"
+                : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+            }`}
+          >
+            <span>🔒 ロック済み</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeFolder === LOCK_FOLDER
+                ? "bg-white/20 text-white"
+                : "bg-amber-200 text-amber-800"
+            }`}>
+              {folderCounts[LOCK_FOLDER] || 0}
+            </span>
+          </button>
+        </div>
 
-          if (isEditing) {
-            return (
-              <div key={folder} className="inline-flex items-center gap-1">
-                <input
-                  type="text"
-                  defaultValue={folder}
-                  autoFocus
-                  className="w-24 rounded-full border border-[#378ADD] px-2 py-1 text-xs outline-none"
-                  onBlur={(e) => handleRenameFolder(folder, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRenameFolder(folder, e.currentTarget.value);
-                    if (e.key === "Escape") setEditingFolderId(null);
-                  }}
-                />
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={folder}
-              draggable={!isFixed}
-              onDragStart={isFixed ? undefined : () => handleFolderDragStart(folder)}
-              onDragOver={isFixed ? undefined : (e) => handleFolderDragOver(e, folder)}
-              onDrop={isFixed ? undefined : handleFolderDrop}
-              onDragEnd={isFixed ? undefined : handleFolderDragEnd}
-              className={`inline-flex items-center gap-0.5 rounded-full transition-all ${
-                draggingFolder === folder ? "opacity-40" : ""
-              } ${
-                draggingFolder && dragOverFolder === folder && draggingFolder !== folder
-                  ? "ring-2 ring-slate-400 scale-105"
-                  : ""
-              } ${
-                !isFixed && count === 0 && !isActive ? "opacity-40" : ""
-              }`}
-            >
-              {!isFixed && (
-                <span
-                  className="text-gray-300 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none px-0.5"
-                  title="ドラッグして並び替え"
-                >
-                  ⋮⋮
-                </span>
-              )}
-              <button
-                onClick={() => setActiveFolder(isAll ? null : (isActive ? null : folder))}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                  isLockFolder
-                    ? isActive
-                      ? "bg-amber-500 text-white"
-                      : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
-                    : isActive
-                      ? "bg-[#378ADD] text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                <span>{isAll ? "📚 すべて" : folder}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  isLockFolder
-                    ? isActive
-                      ? "bg-white/20 text-white"
-                      : "bg-amber-200 text-amber-800"
-                    : isActive
-                      ? "bg-white/20 text-white"
-                      : "bg-gray-200 text-gray-500"
-                }`}>
-                  {count}
-                </span>
-              </button>
-              {isCustom && (
-                <>
-                  <button
-                    onClick={() => setEditingFolderId(folder)}
-                    className="rounded p-0.5 text-gray-400 hover:text-[#378ADD] transition-colors"
-                    title="フォルダ名を変更"
-                  >
-                    <Pencil className="h-2.5 w-2.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteFolder(folder)}
-                    className="rounded p-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                    title="フォルダを削除"
-                  >
-                    <Trash2 className="h-2.5 w-2.5" />
-                  </button>
-                </>
-              )}
-            </div>
-          );
-        })}
-        {showAddFolder ? (
-          <div className="inline-flex shrink-0 items-center gap-1">
-            <input
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleAddFolder(); if (e.key === "Escape") setShowAddFolder(false); }}
-              placeholder="フォルダ名"
-              autoFocus
-              className="w-24 rounded-full border border-gray-200 px-2 py-1 text-xs focus:border-[#B5D4F4] focus:outline-none"
+        {/* 階層フォルダツリー */}
+        <div className="space-y-0.5">
+          {folderTree.map((node) => (
+            <FolderTreeItem
+              key={node.path}
+              node={node}
+              activeFolder={activeFolder}
+              onSelect={setActiveFolder}
+              depth={0}
+              onAddSubfolder={handleAddSubfolder}
+              onEdit={(f) => setEditingFolderId(f)}
+              onDelete={handleDeleteFolder}
+              editingFolderId={editingFolderId}
+              onRename={handleRenameFolder}
+              setEditingFolderId={setEditingFolderId}
             />
-            <button onClick={handleAddFolder} className="rounded-full bg-[#E6F1FB] px-2 py-1 text-xs text-[#185FA5] hover:bg-[#E6F1FB]">追加</button>
-            <button onClick={() => setShowAddFolder(false)} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowAddFolder(true)}
-            className="shrink-0 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-[#B5D4F4] hover:text-[#378ADD]"
-          >
-            <Plus className="mr-0.5 inline h-3 w-3" /> フォルダ追加
-          </button>
-        )}
-        {folderOrder.length > 0 && (
-          <button
-            onClick={() => {
-              setFolderOrder([]);
-              localStorage.removeItem(FOLDER_ORDER_KEY);
-            }}
-            className="text-[10px] text-gray-400 hover:text-gray-600 px-2 py-1 rounded transition-colors"
-            title="フォルダの並び順をリセット"
-          >
-            ↺ 順序リセット
-          </button>
-        )}
+          ))}
+        </div>
+
+        {/* フォルダ追加 */}
+        <div className="flex items-center gap-1.5 pt-1">
+          {showAddFolder ? (
+            <div className="inline-flex shrink-0 items-center gap-1">
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddFolder(); if (e.key === "Escape") setShowAddFolder(false); }}
+                placeholder="フォルダ名"
+                autoFocus
+                className="w-24 rounded-full border border-gray-200 px-2 py-1 text-xs focus:border-[#B5D4F4] focus:outline-none"
+              />
+              <button onClick={handleAddFolder} className="rounded-full bg-[#E6F1FB] px-2 py-1 text-xs text-[#185FA5] hover:bg-[#E6F1FB]">追加</button>
+              <button onClick={() => setShowAddFolder(false)} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddFolder(true)}
+              className="shrink-0 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-400 hover:border-[#B5D4F4] hover:text-[#378ADD]"
+            >
+              <Plus className="mr-0.5 inline h-3 w-3" /> フォルダ追加
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 検索 + タグ一覧ボタン */}
@@ -983,8 +1091,8 @@ export function AnalysisStockPanel() {
               className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#B5D4F4]"
             >
               <option value="">選択...</option>
-              {allFolders.map((f) => (
-                <option key={f} value={f}>{f}</option>
+              {getFlatFolderList(folderTree).map((f) => (
+                <option key={f.path} value={f.path}>{f.displayName}</option>
               ))}
             </select>
           </div>
@@ -1363,6 +1471,7 @@ export function AnalysisStockPanel() {
                   <TagFolderEditor
                     record={r}
                     allFolders={allFolders}
+                    folderTree={folderTree}
                     onSave={(tags, folder) => {
                       updateAnalysisTags(r.id, tags, folder);
                       setEditingTagId(null);
