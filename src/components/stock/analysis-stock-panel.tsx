@@ -13,8 +13,9 @@ import {
   exportAnalysesAsPdf,
   exportSingleAnalysisAsMarkdown,
   exportSingleAnalysisAsPdf,
-  bulkExportAsSingleMarkdown,
+  bulkExportAsMarkdown,
   bulkExportAsText,
+  bulkExportAsPdf,
   updateAnalysisTitle,
   updateAnalysisTags,
   updateAnalysisContent,
@@ -1274,10 +1275,10 @@ export function AnalysisStockPanel() {
             <button
               onClick={() => {
                 const selected = records.filter((r) => selectedIds.has(r.id));
-                bulkExportAsSingleMarkdown(selected);
+                bulkExportAsMarkdown(selected);
               }}
               className="flex items-center gap-1 text-xs px-2 py-1 bg-[#E6F1FB] border border-[#B5D4F4] text-[#185FA5] rounded-lg hover:bg-[#d0e8f8] transition-colors"
-              title={`選択した${selectedIds.size}件を1つのMDファイルでダウンロード`}
+              title={`選択した${selectedIds.size}件を個別のMDファイルとしてダウンロード`}
             >
               ⬇️ MD一括
             </button>
@@ -1287,9 +1288,19 @@ export function AnalysisStockPanel() {
                 bulkExportAsText(selected);
               }}
               className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-              title={`選択した${selectedIds.size}件を1つのテキストファイルでダウンロード`}
+              title={`選択した${selectedIds.size}件を個別のテキストファイルとしてダウンロード`}
             >
               ⬇️ テキスト一括
+            </button>
+            <button
+              onClick={() => {
+                const selected = records.filter((r) => selectedIds.has(r.id));
+                bulkExportAsPdf(selected);
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+              title={`選択した${selectedIds.size}件を個別のPDFファイルとしてダウンロード`}
+            >
+              ⬇️ PDF一括
             </button>
 
             <span className="flex-1" />
