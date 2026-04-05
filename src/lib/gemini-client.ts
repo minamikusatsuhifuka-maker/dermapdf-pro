@@ -14,6 +14,26 @@ interface GeminiResult {
   error?: string;
 }
 
+const systemInstruction = '【重要な出力ルール】\n前置き・挨拶・「承知いたしました」などの導入文は一切出力しないでください。\n分析結果の本文のみを、見出し・箇条書き・Markdown形式で直接出力してください。\n\n';
+
+/** 冒頭の定型文パターンを除去するクリーンアップ関数 */
+function cleanAnalysisResult(text: string): string {
+  const patterns = [
+    /^(はい、?|承知いたしました。?|かしこまりました。?)[^\n]*\n+/,
+    /^(以下のように|以下に|下記に)[^\n]*\n+/,
+    /^ご依頼[^\n]*\n+/,
+    /^ご指定[^\n]*\n+/,
+    /^---+\n+/,
+    /^```[^\n]*\n+/,
+  ];
+
+  let cleaned = text;
+  for (const pattern of patterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  return cleaned.trim();
+}
+
 let cachedKey: string | null = null;
 
 async function getGeminiKey(): Promise<string> {
@@ -69,7 +89,7 @@ export async function analyzeWithGemini(
                     data: base64,
                   },
                 },
-                { text: prompt },
+                { text: systemInstruction + prompt },
               ],
             },
           ],
@@ -113,7 +133,7 @@ export async function analyzeWithGemini(
     const analysis =
       responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
-    return { success: true, analysis };
+    return { success: true, analysis: cleanAnalysisResult(analysis) };
   };
 
   try {
@@ -138,9 +158,10 @@ export async function analyzeTextWithGemini(
   prompt: string,
   text?: string
 ): Promise<GeminiResult> {
-  const fullPrompt = text
+  const basePrompt = text
     ? `以下のテキストを分析してください。\n\n【テキスト内容】\n${text}\n\n【分析指示】\n${prompt}`
     : prompt;
+  const fullPrompt = systemInstruction + basePrompt;
 
   const callGemini = async (): Promise<GeminiResult> => {
     const apiKey = await getGeminiKey();
@@ -187,7 +208,7 @@ export async function analyzeTextWithGemini(
     }
 
     const analysis = responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    return { success: true, analysis };
+    return { success: true, analysis: cleanAnalysisResult(analysis) };
   };
 
   try {
