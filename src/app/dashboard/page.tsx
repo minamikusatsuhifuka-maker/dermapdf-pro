@@ -39,26 +39,11 @@ export default function DashboardPage() {
   const handleFiles = useCallback(async (files: FileList) => {
     setLoading(true);
     setError(null);
-
-    let apiKey = "";
-    try {
-      const r = await fetch("/api/get-gemini-key");
-      const d = await r.json();
-      apiKey = d.key || "";
-    } catch { /* ignore */ }
-
-    if (!apiKey) {
-      setError("Gemini APIキーが設定されていません");
-      setLoading(false);
-      return;
-    }
-
     const results: ClinicMonthData[] = [];
     for (const file of Array.from(files)) {
       if (!file.name.match(/\.(xlsx|xls)$/i)) continue;
       try {
-        setError(`🤖 「${file.name}」をAIで解析中...（30秒ほどかかる場合があります）`);
-        const parsed = await parseClinicExcel(file, apiKey);
+        const parsed = await parseClinicExcel(file);
         results.push(parsed);
       } catch (e) {
         setError(`${file.name}: ${e instanceof Error ? e.message : "解析失敗"}`);

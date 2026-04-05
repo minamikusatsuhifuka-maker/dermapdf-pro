@@ -1,16 +1,23 @@
 import * as XLSX from "xlsx";
 
+export interface TripleValue {
+  total: number;
+  jihi: number;
+  hoken: number;
+}
+
 export interface ClinicMonthData {
   yearMonth: string;
   fileName: string;
   sheet1: {
-    shiharaiGoukei: { total: number; jihi: number; hoken: number };
-    genkin: { total: number; jihi: number; hoken: number };
-    credit: { total: number; jihi: number; hoken: number };
-    qr: { total: number; jihi: number; hoken: number };
-    emoney: { total: number; jihi: number; hoken: number };
-    henkin: { total: number; jihi: number; hoken: number };
-    nyukinGoukei: { total: number; jihi: number; hoken: number };
+    shiharaiGoukei: TripleValue;
+    genkin: TripleValue;
+    credit: TripleValue;
+    qr: TripleValue;
+    emoney: TripleValue;
+    henkin: TripleValue;
+    nyukinGoukei: TripleValue;
+    uriaGeGoukei: TripleValue;
   };
   hoken: {
     tensuGoukei: number;
@@ -38,144 +45,149 @@ export interface ClinicMonthData {
   };
 }
 
-function sheetToText(ws: XLSX.WorkSheet, sheetName: string): string {
+const toNum = (v: unknown): number => {
+  if (v === null || v === undefined || v === "") return 0;
+  const n = Number(v);
+  return isNaN(n) ? 0 : Math.round(n);
+};
+
+// ラベルを含む行から最初の数値を返す
+function findRowValues(rows: unknown[][], labels: string[]): number {
+  for (const row of rows) {
+    for (let c = 0; c < row.length; c++) {
+      const cell = String(row[c] ?? "").trim();
+      if (labels.some((l) => cell === l || cell.includes(l))) {
+        for (let vc = c + 1; vc < Math.min(c + 4, row.length); vc++) {
+          const val = toNum(row[vc]);
+          if (val !== 0) return val;
+        }
+        return 0;
+      }
+    }
+  }
+  return 0;
+}
+
+// ラベル行から total/jihi/hoken の3値を返す（最大値の行を採用）
+function findTripleValues(rows: unknown[][], labels: string[]): TripleValue {
+  let best: TripleValue = { total: 0, jihi: 0, hoken: 0 };
+
+  for (const row of rows) {
+    for (let c = 0; c < row.length; c++) {
+      const cell = String(row[c] ?? "").trim();
+      if (labels.some((l) => cell === l)) {
+        const vals: number[] = [];
+        for (let vc = c + 1; vc < row.length && vals.length < 3; vc++) {
+          const v = row[vc];
+          if (v !== null && v !== undefined && v !== "") {
+            vals.push(toNum(v));
+          }
+        }
+        if (vals.length >= 1) {
+          const candidate: TripleValue = {
+            total: vals[0] ?? 0,
+            jihi: vals[1] ?? 0,
+            hoken: vals[2] ?? 0,
+          };
+          if (candidate.total > best.total) {
+            best = candidate;
+          }
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function extractYearMonth(fileName: string, rows: unknown[][]): string {
+  const m1 = fileName.match(/(\d{4})年(\d{1,2})月/);
+  if (m1) return `${m1[1]}年${m1[2]}月`;
+  const m2 = fileName.match(/(\d{4})[_\-](\d{2})/);
+  if (m2) return `${m2[1]}年${parseInt(m2[2])}月`;
+
+  for (const row of rows.slice(0, 10)) {
+    for (const cell of row) {
+      if (!cell) continue;
+      const s = String(cell);
+      const md = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-]\d{1,2}/);
+      if (md) return `${md[1]}年${parseInt(md[2])}月`;
+      const md2 = s.match(/(\d{4})年(\d{1,2})月/);
+      if (md2) return `${md2[1]}年${parseInt(md2[2])}月`;
+    }
+  }
+  return fileName.replace(/\.[^/.]+$/, "");
+}
+
+function parseSheet1(ws: XLSX.WorkSheet): ClinicMonthData["sheet1"] {
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
-  const lines: string[] = [`=== シート: ${sheetName} ===`];
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const nonEmpty = row.filter((v) => v !== "" && v !== null && v !== undefined);
-    if (nonEmpty.length > 0) {
-      lines.push(`行${i + 1}: ${row.map((v) => v ?? "").join("\t")}`);
-    }
-  }
-  return lines.join("\n");
-}
 
-const ZERO3 = { total: 0, jihi: 0, hoken: 0 };
-
-function makeDefaultData(): { sheet1: ClinicMonthData["sheet1"]; hoken: ClinicMonthData["hoken"] } {
   return {
-    sheet1: {
-      shiharaiGoukei: { ...ZERO3 },
-      genkin: { ...ZERO3 },
-      credit: { ...ZERO3 },
-      qr: { ...ZERO3 },
-      emoney: { ...ZERO3 },
-      henkin: { ...ZERO3 },
-      nyukinGoukei: { ...ZERO3 },
-    },
-    hoken: {
-      tensuGoukei: 0, seikyuGoukei: 0, madoGuchiGoukei: 0, mishuGoukei: 0,
-      shaHo: 0, kokuHo: 0, rosai: 0, jibaiseki: 0, kogai: 0, sonota: 0,
-      shoshinRyo: 0, saishinRyo: 0, kanriRyo: 0, zaitakuRyo: 0,
-      chusha: 0, shochi: 0, shujutsu: 0, kensa: 0, byori: 0,
-      shohosenRyo: 0, sonotaTensu: 0, gazoShindan: 0,
-    },
+    shiharaiGoukei: findTripleValues(rows, ["支払い合計(税込)", "支払合計(税込)", "支払い合計（税込）"]),
+    genkin: findTripleValues(rows, ["現金"]),
+    credit: findTripleValues(rows, ["クレジットカード", "クレジット"]),
+    qr: findTripleValues(rows, ["ＱＲ決済", "QR決済", "QR"]),
+    emoney: findTripleValues(rows, ["電子マネー"]),
+    henkin: findTripleValues(rows, ["返金対応用", "返金"]),
+    nyukinGoukei: findTripleValues(rows, ["入金額合計", "入金合計"]),
+    uriaGeGoukei: findTripleValues(rows, ["売り上げ合計(税込)", "売上合計(税込)", "売上合計（税込）"]),
   };
 }
 
-async function extractWithGemini(
-  sheetTexts: Record<string, string>,
-  apiKey: string
-): Promise<{ yearMonth: string; sheet1: ClinicMonthData["sheet1"]; hoken: ClinicMonthData["hoken"] }> {
-  const prompt = `以下はクリニックの月次集計Excelのデータです。
-各シートのテキスト表現から、指定の項目を探して数値を抽出してJSON形式で返してください。
-数値が見つからない場合は0を返してください。
-ラベルの表記が多少異なっても、意味が同じなら抽出してください。
-
-${Object.values(sheetTexts).join("\n\n")}
-
-以下のJSON形式で返してください（他のテキストは一切不要）:
-{
-  "yearMonth": "YYYY年M月（日付情報から）",
-  "sheet1": {
-    "shiharaiGoukei": { "total": 0, "jihi": 0, "hoken": 0 },
-    "genkin": { "total": 0, "jihi": 0, "hoken": 0 },
-    "credit": { "total": 0, "jihi": 0, "hoken": 0 },
-    "qr": { "total": 0, "jihi": 0, "hoken": 0 },
-    "emoney": { "total": 0, "jihi": 0, "hoken": 0 },
-    "henkin": { "total": 0, "jihi": 0, "hoken": 0 },
-    "nyukinGoukei": { "total": 0, "jihi": 0, "hoken": 0 }
-  },
-  "hoken": {
-    "tensuGoukei": 0, "seikyuGoukei": 0, "madoGuchiGoukei": 0, "mishuGoukei": 0,
-    "shaHo": 0, "kokuHo": 0, "rosai": 0, "jibaiseki": 0, "kogai": 0, "sonota": 0,
-    "shoshinRyo": 0, "saishinRyo": 0, "kanriRyo": 0, "zaitakuRyo": 0,
-    "chusha": 0, "shochi": 0, "shujutsu": 0, "kensa": 0, "byori": 0,
-    "shohosenRyo": 0, "sonotaTensu": 0, "gazoShindan": 0
-  }
-}
-
-抽出のヒント:
-- shiharaiGoukei: 「支払い合計(税込)」または「支払合計」のラベルに隣接する数値（合計/自費/保険の3列）
-- genkin: 「現金」ラベルに隣接する数値
-- credit: 「クレジットカード」または「クレジット」
-- qr: 「QR」または「ＱＲ」
-- emoney: 「電子マネー」
-- henkin: 「返金」
-- nyukinGoukei: 「入金額合計」または「入金合計」
-- tensuGoukei: 「保険点数合計」
-- seikyuGoukei: 「保険請求額合計」
-- madoGuchiGoukei: 「窓口負担額合計」
-- mishuGoukei: 「未収金合計」
-- shaHo: 「社保」の金額
-- kokuHo: 「国保」の金額
-- shoshinRyo: 「初診料」の点数
-- saishinRyo: 「再診料」の点数
-- 小数点以下は切り捨てて整数で返す`;
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 2000 },
-      }),
-    }
-  );
-
-  const data = await response.json();
-  const text =
-    data.candidates?.[0]?.content?.parts
-      ?.filter((p: { text?: string }) => p.text)
-      ?.map((p: { text: string }) => p.text)
-      ?.join("") ?? "";
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("AIからの応答をJSONとして解析できませんでした");
-
-  const parsed = JSON.parse(jsonMatch[0]);
-  const defaults = makeDefaultData();
+function parseHoken(ws: XLSX.WorkSheet): ClinicMonthData["hoken"] {
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
 
   return {
-    yearMonth: parsed.yearMonth || "",
-    sheet1: { ...defaults.sheet1, ...parsed.sheet1 },
-    hoken: { ...defaults.hoken, ...parsed.hoken },
+    tensuGoukei: findRowValues(rows, ["保険点数合計"]),
+    seikyuGoukei: findRowValues(rows, ["保険請求額合計"]),
+    madoGuchiGoukei: findRowValues(rows, ["窓口負担額合計"]),
+    mishuGoukei: findRowValues(rows, ["未収金合計"]),
+    shaHo: findRowValues(rows, ["社保"]),
+    kokuHo: findRowValues(rows, ["国保"]),
+    rosai: findRowValues(rows, ["労災"]),
+    jibaiseki: findRowValues(rows, ["自賠責"]),
+    kogai: findRowValues(rows, ["公害"]),
+    sonota: findRowValues(rows, ["その他"]),
+    shoshinRyo: findRowValues(rows, ["初診料"]),
+    saishinRyo: findRowValues(rows, ["再診料"]),
+    kanriRyo: findRowValues(rows, ["管理料"]),
+    zaitakuRyo: findRowValues(rows, ["在宅料"]),
+    chusha: findRowValues(rows, ["皮下・筋肉内注射", "皮下筋肉内注射"]),
+    shochi: findRowValues(rows, ["処置行為"]),
+    shujutsu: findRowValues(rows, ["手術"]),
+    kensa: findRowValues(rows, ["検査"]),
+    byori: findRowValues(rows, ["病理診断"]),
+    shohosenRyo: findRowValues(rows, ["処方箋料"]),
+    sonotaTensu: findRowValues(rows, ["その他（リハビリ", "その他(リハビリ"]),
+    gazoShindan: findRowValues(rows, ["画像診断"]),
   };
 }
 
-export async function parseClinicExcel(file: File, apiKey: string): Promise<ClinicMonthData> {
+export async function parseClinicExcel(file: File): Promise<ClinicMonthData> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array" });
 
-        const sheetTexts: Record<string, string> = {};
-        for (const name of wb.SheetNames) {
-          sheetTexts[name] = sheetToText(wb.Sheets[name], name);
-        }
+        const s1Name =
+          wb.SheetNames.find((n) => n.toLowerCase() === "sheet1" || n === "Sheet1") ??
+          wb.SheetNames.find((n) => !n.includes("保険")) ??
+          wb.SheetNames[0];
 
-        const extracted = await extractWithGemini(sheetTexts, apiKey);
+        const hName = wb.SheetNames.find((n) => n.includes("保険"));
+
+        const ws1 = wb.Sheets[s1Name];
+        const wsH = hName ? wb.Sheets[hName] : null;
+
+        const rows1 = XLSX.utils.sheet_to_json<unknown[]>(ws1, { header: 1, defval: "" }) as unknown[][];
+        const yearMonth = extractYearMonth(file.name, rows1);
 
         resolve({
-          yearMonth: extracted.yearMonth || file.name.replace(/\.[^/.]+$/, ""),
+          yearMonth,
           fileName: file.name,
-          sheet1: extracted.sheet1,
-          hoken: extracted.hoken,
+          sheet1: parseSheet1(ws1),
+          hoken: wsH ? parseHoken(wsH) : ({} as ClinicMonthData["hoken"]),
         });
       } catch (err) {
         reject(err);
