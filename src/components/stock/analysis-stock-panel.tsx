@@ -718,27 +718,28 @@ export function AnalysisStockPanel() {
   // 展開コンテンツ上の mouseup でフローティングツールバーを表示
   const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
     e.stopPropagation();
-    e.preventDefault(); // デフォルト動作を止める
+    // ※ e.preventDefault() は呼ばない — 呼ぶと選択が確定せずrectが0になる
 
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
-    const text = selection.toString().trim();
-    if (text.length < 2) return;
+    // setTimeout で選択確定を待ってからrectを取得
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+      const text = selection.toString().trim();
+      if (text.length < 2) return;
 
-    // 選択範囲のBoundingRectを使って正確な位置を取得
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
 
-    const toolbarW = 320;
-    // 選択範囲の中央上に表示
-    let finalX = rect.left + rect.width / 2;
-    if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
-    if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
+      // rect が無効（選択が取得できなかった場合）はスキップ
+      if (rect.width === 0 && rect.height === 0) return;
 
-    // 選択範囲の上端（rect.top）を使う。スクロール位置は不要（fixedなのでclientY相当）
-    const finalY = rect.top;
+      const toolbarW = 320;
+      let finalX = rect.left + rect.width / 2;
+      if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
+      if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
-    setFloatingToolbar({ x: finalX, y: finalY, height: 0, text, recordId });
+      setFloatingToolbar({ x: finalX, y: rect.top, height: rect.height, text, recordId });
+    }, 10);
   }, []);
 
   // ツールバー外のクリックで閉じる（ツールバー・メモポップアップ自身は除外）
@@ -1929,20 +1930,24 @@ export function AnalysisStockPanel() {
                 const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
                 window.dispatchEvent(new Event("memo-updated"));
 
-                // メモポップアップをツールバー位置（選択範囲の上）の近くに表示
-                // ツールバーは y - (ツールバー高さ+8px) に出るので、その上に重ねる
-                // 画面内に収まるよう top を clamp する
-                const popupH = memoPopupSize.h;
+                // メモポップアップを選択範囲の上（ツールバーがあった場所）に表示
+                // ツールバーの高さ約30px + gap 8px = 38px 分上にある
                 const popupW = memoPopupSize.w;
-                const rawTop = floatingToolbar.y - 48; // 選択範囲の上端より少し上
-                const clampedTop = Math.max(10, Math.min(rawTop, window.innerHeight - popupH - 10));
-                const rawLeft = floatingToolbar.x - 20;
-                const clampedLeft = Math.max(10, Math.min(rawLeft, window.innerWidth - popupW - 10));
+                const popupH = memoPopupSize.h;
+                let popupX = floatingToolbar.x - popupW / 2; // 中央揃え
+                let popupY = floatingToolbar.y - popupH - 46; // ツールバーの上
+                // 上に入らない場合は選択範囲の下に表示
+                if (popupY < 10) {
+                  popupY = floatingToolbar.y + (floatingToolbar.height || 20) + 8;
+                }
+                // 画面内にclamp
+                popupX = Math.max(10, Math.min(popupX, window.innerWidth - popupW - 10));
+                popupY = Math.max(10, Math.min(popupY, window.innerHeight - popupH - 10));
                 setMemoPopup({
                   content: updatedSheet?.content || "",
                   sheetName: updatedSheet?.name || "メモ",
-                  x: clampedLeft,
-                  y: clampedTop,
+                  x: popupX,
+                  y: popupY,
                 });
               }
               setFloatingToolbar(null);
