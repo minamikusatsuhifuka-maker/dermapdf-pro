@@ -636,6 +636,11 @@ export function AnalysisStockPanel() {
   });
   const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pendingDragRef = useRef<{
+    type: "toolbar" | "memo";
+    startX: number; startY: number;
+    elLeft: number; elTop: number;
+  } | null>(null);
 
   // メモポップアップサイズ（設定画面から変更可能、localStorageで永続化）
   const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>(() => {
@@ -793,7 +798,27 @@ export function AnalysisStockPanel() {
 
   // ドラッグ移動ハンドラ
   useEffect(() => {
+    const THRESH = 5;
     const onMouseMove = (e: MouseEvent) => {
+      // pending状態: 閾値超えたら本ドラッグ開始
+      if (pendingDragRef.current && !isDraggingRef.current) {
+        const dx = Math.abs(e.clientX - pendingDragRef.current.startX);
+        const dy = Math.abs(e.clientY - pendingDragRef.current.startY);
+        if (dx > THRESH || dy > THRESH) {
+          const p = pendingDragRef.current;
+          isDraggingRef.current = p.type;
+          dragOffsetRef.current = { x: p.startX - p.elLeft, y: p.startY - p.elTop };
+          // 現在のマウス位置から逆算（ジャンプ防止）
+          const ix = e.clientX - dragOffsetRef.current.x;
+          const iy = e.clientY - dragOffsetRef.current.y;
+          if (p.type === "toolbar") { setToolbarPos({ x: ix, y: iy }); setToolbarDragged(true); }
+          else { setMemoPopupPos({ x: ix, y: iy }); }
+          document.body.style.userSelect = "none";
+          document.body.style.cursor = "grabbing";
+          pendingDragRef.current = null;
+        }
+        return;
+      }
       if (!isDraggingRef.current) return;
       e.preventDefault();
       const nx = e.clientX - dragOffsetRef.current.x;
@@ -807,6 +832,7 @@ export function AnalysisStockPanel() {
       }
     };
     const onMouseUp = () => {
+      pendingDragRef.current = null;
       if (isDraggingRef.current) {
         isDraggingRef.current = null;
         document.body.style.userSelect = "";
@@ -823,25 +849,16 @@ export function AnalysisStockPanel() {
 
   const startDrag = useCallback((type: "toolbar" | "memo", e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    // ドラッグ対象要素の実際の画面位置を getBoundingClientRect() で取得
     const el = (type === "toolbar"
       ? document.querySelector("[data-floating-toolbar]")
       : document.querySelector("[data-memo-popup]")) as HTMLElement | null;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    isDraggingRef.current = type;
-    // 要素内のクリック位置（左上からの相対座標）を保存
-    dragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    // 実際のレンダリング位置をセット（transform を外して自由配置モードに切り替え）
-    if (type === "toolbar") {
-      setToolbarPos({ x: rect.left, y: rect.top });
-      setToolbarDragged(true);
-    } else {
-      setMemoPopupPos({ x: rect.left, y: rect.top });
-    }
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "grabbing";
+    // 即座にドラッグ開始せずpendingに登録（クリックだけでは動かない）
+    pendingDragRef.current = {
+      type, startX: e.clientX, startY: e.clientY,
+      elLeft: rect.left, elTop: rect.top,
+    };
   }, []);
 
   // ボタンからツールバーを表示（テキスト未選択でも可）
@@ -2193,6 +2210,12 @@ export function AnalysisStockPanel() {
             top: memoPopupPos?.y ?? memoPopup.y,
             width: `${memoPopupSize.w}px`,
             height: `${memoPopupSize.h}px`,
+            cursor: "grab",
+          }}
+          onMouseDown={(e) => {
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === "BUTTON" || tag === "INPUT") return;
+            startDrag("memo", e);
           }}
         >
           {/* ヘッダー（ドラッグ可能） */}
