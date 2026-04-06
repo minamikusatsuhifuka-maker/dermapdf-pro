@@ -624,6 +624,17 @@ export function AnalysisStockPanel() {
     y: number;
   } | null>(null);
 
+  // ドラッグ移動用state
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
+  const [memoPopupPos, setMemoPopupPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem("dermapdf_memo_popup_pos");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+  const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // メモポップアップサイズ（設定画面から変更可能、localStorageで永続化）
   const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>(() => {
     try {
@@ -746,6 +757,7 @@ export function AnalysisStockPanel() {
         if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
         // rect.top / rect.bottom はviewport座標（fixed配置にそのまま使える）
+        setToolbarPos(null); // テキスト選択時はドラッグ位置をリセット
         setFloatingToolbar({ x: finalX, y: rect.top, height: rect.height, text, recordId });
       });
     };
@@ -776,6 +788,135 @@ export function AnalysisStockPanel() {
     document.addEventListener("mousedown", hide);
     return () => document.removeEventListener("mousedown", hide);
   }, []);
+
+  // ドラッグ移動ハンドラ
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      e.preventDefault();
+      const nx = e.clientX - dragOffsetRef.current.x;
+      const ny = e.clientY - dragOffsetRef.current.y;
+      if (isDraggingRef.current === "toolbar") {
+        setToolbarPos({ x: nx, y: ny });
+      } else {
+        const pos = { x: nx, y: ny };
+        setMemoPopupPos(pos);
+        localStorage.setItem("dermapdf_memo_popup_pos", JSON.stringify(pos));
+      }
+    };
+    const onMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = null;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      }
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  const startDrag = useCallback((type: "toolbar" | "memo", e: React.MouseEvent, elRect: DOMRect) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = type;
+    dragOffsetRef.current = { x: e.clientX - elRect.left, y: e.clientY - elRect.top };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+  }, []);
+
+  // ボタンからツールバーを表示（テキスト未選択でも可）
+  const showToolbarForCard = useCallback((recordId: string, buttonEl: HTMLElement) => {
+    const rect = buttonEl.getBoundingClientRect();
+    setToolbarPos(null); // ドラッグ位置リセット
+    setFloatingToolbar({
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+      height: 0,
+      text: window.getSelection()?.toString().trim() || "",
+      recordId,
+    });
+  }, []);
+
+  // ボタンからメモ欄を表示
+  const showMemoForCard = useCallback((buttonEl: HTMLElement) => {
+    if (memoPopup) { setMemoPopup(null); return; } // トグル
+    const sheets = loadMemoSheets();
+    const activeSheet = sheets[0];
+    if (!activeSheet) return;
+    const popupW = memoPopupSize.w;
+    const popupH = memoPopupSize.h;
+    // 保存済み位置があればそちらを使う
+    if (memoPopupPos) {
+      setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: memoPopupPos.x, y: memoPopupPos.y });
+      return;
+    }
+    const rect = buttonEl.getBoundingClientRect();
+    let px = rect.left - popupW / 2;
+    let py = rect.bottom + 8;
+    px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
+    py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
+    setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
+  }, [memoPopup, memoPopupSize, memoPopupPos]);
+
+  // キーボードショートカット: m で同時表示、Escape で閉じる
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Escapeでツールバー・メモ両方閉じる
+      if (e.key === "Escape") {
+        setFloatingToolbar(null);
+        setMemoPopup(null);
+        setToolbarPos(null);
+        return;
+      }
+      // mキーでツールバー+メモ同時表示（input/textarea/contenteditable以外で）
+      if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) return;
+        const text = selection.toString().trim();
+        if (text.length < 2) return;
+        const anchor = selection.anchorNode;
+        const stockEl = (anchor as Element)?.closest?.("[data-stock-content]")
+          ?? (anchor?.parentElement as Element)?.closest?.("[data-stock-content]");
+        if (!stockEl) return;
+        e.preventDefault();
+        const recordId = stockEl.getAttribute("data-record-id") ?? "";
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+        const toolbarW = 320;
+        let fx = rect.left + rect.width / 2;
+        if (fx - toolbarW / 2 < 10) fx = toolbarW / 2 + 10;
+        if (fx + toolbarW / 2 > window.innerWidth - 10) fx = window.innerWidth - toolbarW / 2 - 10;
+        setToolbarPos(null);
+        setFloatingToolbar({ x: fx, y: rect.top, height: rect.height, text, recordId });
+        // メモ欄も表示
+        const sheets = loadMemoSheets();
+        const activeSheet = sheets[0];
+        if (activeSheet) {
+          const popupW = memoPopupSize.w;
+          const popupH = memoPopupSize.h;
+          if (memoPopupPos) {
+            setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: memoPopupPos.x, y: memoPopupPos.y });
+          } else {
+            let px = fx - popupW / 2;
+            let py = rect.top - 46 - popupH - 8;
+            if (py < 10) py = rect.bottom + 8;
+            px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
+            py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
+            setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
+          }
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [memoPopupSize, memoPopupPos]);
 
   // 書式適用後にコンテンツを保存
   const applyFormat = useCallback((command: string, value?: string) => {
@@ -1709,6 +1850,30 @@ export function AnalysisStockPanel() {
                   >
                     <Trash2 className={`h-3.5 w-3.5 ${r.locked ? "text-gray-200" : "text-red-400"}`} />
                   </button>
+                  {isExpanded && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showToolbarForCard(r.id, e.currentTarget);
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-[#378ADD] transition-colors"
+                        title="ツールバーを表示"
+                      >
+                        ✏️ ツール
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showMemoForCard(e.currentTarget);
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-[#378ADD] transition-colors"
+                        title="メモ欄を表示"
+                      >
+                        📝 メモ
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : r.id); }}
                     className="rounded p-1 hover:bg-gray-100"
@@ -1885,62 +2050,72 @@ export function AnalysisStockPanel() {
         <div
           data-floating-toolbar="true"
           className="fixed z-[9999] flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs select-none"
-          style={{
+          style={toolbarPos ? {
+            left: toolbarPos.x,
+            top: toolbarPos.y,
+          } : {
             left: floatingToolbar.x,
             top: floatingToolbar.y,
             transform: "translate(-50%, calc(-100% - 8px))",
           }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          {/* 書式ボタン */}
-          <button
-            onMouseDown={(e) => { e.preventDefault(); applyFormat("bold"); }}
-            className="w-6 h-6 font-bold hover:bg-gray-700 rounded flex items-center justify-center"
+          {/* ドラッグハンドル */}
+          <span
+            className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white px-0.5 select-none"
+            onMouseDown={(e) => {
+              const el = (e.currentTarget.parentElement as HTMLElement);
+              startDrag("toolbar", e, el.getBoundingClientRect());
+            }}
+            title="ドラッグで移動"
           >
-            B
-          </button>
-          <button
-            onMouseDown={(e) => { e.preventDefault(); applyFormat("italic"); }}
-            className="w-6 h-6 italic hover:bg-gray-700 rounded flex items-center justify-center"
-          >
-            I
-          </button>
-          <button
-            onMouseDown={(e) => { e.preventDefault(); applyFormat("underline"); }}
-            className="w-6 h-6 underline hover:bg-gray-700 rounded flex items-center justify-center"
-          >
-            U
-          </button>
+            ⠿
+          </span>
           <span className="w-px h-4 bg-gray-600 mx-0.5" />
-          {/* 文字色 */}
-          {FLOAT_COLORS.map(({ color, label }) => (
-            <button
-              key={color}
-              onMouseDown={(e) => { e.preventDefault(); applyFormat("foreColor", color); }}
-              className="w-4 h-4 rounded-full border border-gray-500 hover:scale-125 transition-transform"
-              style={{ background: color }}
-              title={`文字色: ${label}`}
-            />
-          ))}
-          <span className="w-px h-4 bg-gray-600 mx-0.5" />
-          {/* ハイライト */}
-          {FLOAT_HIGHLIGHTS.map(({ color, label }) => (
-            <button
-              key={color}
-              onMouseDown={(e) => { e.preventDefault(); applyFormat("backColor", color); }}
-              className="w-4 h-4 rounded-full border border-gray-500 hover:scale-125 transition-transform"
-              style={{ background: color }}
-              title={`ハイライト: ${label}`}
-            />
-          ))}
-          <span className="w-px h-4 bg-gray-600 mx-0.5" />
-          {/* 書式クリア */}
-          <button
-            onMouseDown={(e) => { e.preventDefault(); applyFormat("removeFormat"); }}
-            className="px-1.5 h-6 text-[10px] text-gray-300 hover:bg-gray-700 rounded"
-          >
-            ✕
-          </button>
+          {/* 書式ボタン（テキスト未選択時はdisabled） */}
+          {(() => {
+            const noText = !floatingToolbar.text;
+            const disabledCls = noText ? "opacity-30 cursor-not-allowed" : "";
+            return (<>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); if (!noText) applyFormat("bold"); }}
+                className={`w-6 h-6 font-bold hover:bg-gray-700 rounded flex items-center justify-center ${disabledCls}`}
+              >B</button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); if (!noText) applyFormat("italic"); }}
+                className={`w-6 h-6 italic hover:bg-gray-700 rounded flex items-center justify-center ${disabledCls}`}
+              >I</button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); if (!noText) applyFormat("underline"); }}
+                className={`w-6 h-6 underline hover:bg-gray-700 rounded flex items-center justify-center ${disabledCls}`}
+              >U</button>
+              <span className="w-px h-4 bg-gray-600 mx-0.5" />
+              {FLOAT_COLORS.map(({ color, label }) => (
+                <button
+                  key={color}
+                  onMouseDown={(e) => { e.preventDefault(); if (!noText) applyFormat("foreColor", color); }}
+                  className={`w-4 h-4 rounded-full border border-gray-500 hover:scale-125 transition-transform ${disabledCls}`}
+                  style={{ background: color }}
+                  title={`文字色: ${label}`}
+                />
+              ))}
+              <span className="w-px h-4 bg-gray-600 mx-0.5" />
+              {FLOAT_HIGHLIGHTS.map(({ color, label }) => (
+                <button
+                  key={color}
+                  onMouseDown={(e) => { e.preventDefault(); if (!noText) applyFormat("backColor", color); }}
+                  className={`w-4 h-4 rounded-full border border-gray-500 hover:scale-125 transition-transform ${disabledCls}`}
+                  style={{ background: color }}
+                  title={`ハイライト: ${label}`}
+                />
+              ))}
+              <span className="w-px h-4 bg-gray-600 mx-0.5" />
+              <button
+                onMouseDown={(e) => { e.preventDefault(); if (!noText) applyFormat("removeFormat"); }}
+                className={`px-1.5 h-6 text-[10px] text-gray-300 hover:bg-gray-700 rounded ${disabledCls}`}
+              >✕</button>
+            </>);
+          })()}
           <span className="w-px h-4 bg-gray-600 mx-0.5" />
           {/* メモ帳に追記ボタン */}
           <button
@@ -1998,14 +2173,20 @@ export function AnalysisStockPanel() {
           data-memo-popup="true"
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col"
           style={{
-            left: memoPopup.x,
-            top: memoPopup.y,
+            left: memoPopupPos?.x ?? memoPopup.x,
+            top: memoPopupPos?.y ?? memoPopup.y,
             width: `${memoPopupSize.w}px`,
             height: `${memoPopupSize.h}px`,
           }}
         >
-          {/* ヘッダー */}
-          <div className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-shrink-0">
+          {/* ヘッダー（ドラッグ可能） */}
+          <div
+            className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-shrink-0 cursor-grab active:cursor-grabbing"
+            onMouseDown={(e) => {
+              const el = e.currentTarget.parentElement as HTMLElement;
+              startDrag("memo", e, el.getBoundingClientRect());
+            }}
+          >
             <div className="flex items-center gap-1.5 text-xs font-medium text-[#185FA5]">
               <span>📝</span>
               <span>{memoPopup.sheetName}</span>
