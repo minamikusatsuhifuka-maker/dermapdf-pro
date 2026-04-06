@@ -637,7 +637,7 @@ export function AnalysisStockPanel() {
   const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const resizingRef = useRef(false);
-  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; w: number; h: number }>({ mouseX: 0, mouseY: 0, w: 0, h: 0 });
+  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; w: number; h: number; el: HTMLElement | null }>({ mouseX: 0, mouseY: 0, w: 0, h: 0, el: null });
 
   const pendingDragRef = useRef<{
     type: "toolbar" | "memo";
@@ -810,7 +810,11 @@ export function AnalysisStockPanel() {
         const dy = e.clientY - resizeStartRef.current.mouseY;
         const newW = Math.max(200, resizeStartRef.current.w + dx);
         const newH = Math.max(160, resizeStartRef.current.h + dy);
-        saveMemoPopupSize({ w: Math.round(newW), h: Math.round(newH) });
+        // DOMを直接操作（Reactの再レンダリングを避ける）
+        if (resizeStartRef.current.el) {
+          resizeStartRef.current.el.style.width = `${newW}px`;
+          resizeStartRef.current.el.style.height = `${newH}px`;
+        }
         return;
       }
 
@@ -849,6 +853,13 @@ export function AnalysisStockPanel() {
       pendingDragRef.current = null;
       if (resizingRef.current) {
         resizingRef.current = false;
+        // mouseup時だけstateとlocalStorageを更新
+        if (resizeStartRef.current.el) {
+          const el = resizeStartRef.current.el;
+          const finalW = Math.round(el.offsetWidth);
+          const finalH = Math.round(el.offsetHeight);
+          saveMemoPopupSize({ w: finalW, h: finalH });
+        }
         document.body.style.userSelect = "";
         document.body.style.cursor = "";
       }
@@ -2331,11 +2342,13 @@ export function AnalysisStockPanel() {
               e.preventDefault();
               e.stopPropagation();
               resizingRef.current = true;
+              const popupEl = (e.currentTarget as HTMLElement).closest("[data-memo-popup]") as HTMLElement | null;
               resizeStartRef.current = {
                 mouseX: e.clientX,
                 mouseY: e.clientY,
-                w: memoPopupSize.w,
-                h: memoPopupSize.h,
+                w: popupEl?.offsetWidth ?? memoPopupSize.w,
+                h: popupEl?.offsetHeight ?? memoPopupSize.h,
+                el: popupEl,
               };
               document.body.style.userSelect = "none";
               document.body.style.cursor = "nwse-resize";
