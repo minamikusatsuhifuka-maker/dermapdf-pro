@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
+import { appendToMemoSheet, loadMemoSheets } from "@/lib/memo-storage";
+import MemoPadPanel from "@/components/stock/memo-pad-panel";
 import {
   loadAllAnalyses,
   saveAnalysis,
@@ -566,6 +568,7 @@ const FLOAT_HIGHLIGHTS = [
 ];
 
 export function AnalysisStockPanel() {
+  const [mainTab, setMainTab] = useState<"stock" | "memo">("stock");
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -1139,6 +1142,34 @@ export function AnalysisStockPanel() {
           )}
         </div>
       </div>
+
+      {/* メインタブ切り替え */}
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={() => setMainTab("stock")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            mainTab === "stock"
+              ? "bg-[#378ADD] text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          📋 分析ストック <span className="text-xs opacity-75">({records.length})</span>
+        </button>
+        <button
+          onClick={() => setMainTab("memo")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            mainTab === "memo"
+              ? "bg-[#378ADD] text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          📝 メモ帳
+        </button>
+      </div>
+
+      {mainTab === "memo" && <MemoPadPanel />}
+
+      {mainTab === "stock" && (<>
 
       {/* フォルダツリー */}
       <div className="space-y-1 pb-2">
@@ -1776,6 +1807,8 @@ export function AnalysisStockPanel() {
         </div>
       )}
 
+      </>)}
+
       {/* フローティングツールバー */}
       {floatingToolbar && (
         <div
@@ -1838,32 +1871,24 @@ export function AnalysisStockPanel() {
             ✕
           </button>
           <span className="w-px h-4 bg-gray-600 mx-0.5" />
-          {/* ストックボタン */}
+          {/* メモ帳に追記ボタン */}
           <button
             onMouseDown={(e) => {
               e.preventDefault();
-              const original = records.find((a) => a.id === floatingToolbar.recordId);
-              const newRecord: AnalysisRecord = {
-                id: Date.now().toString(),
-                fileName: original?.fileName || "部分抽出",
-                analysisType: original?.analysisType || "partial",
-                analysisLabel: "📌 部分抽出",
-                content: floatingToolbar.text,
-                createdAt: new Date().toISOString(),
-                folder: original?.folder || "",
-                tags: original?.tags || [],
-                locked: false,
-              };
-              saveAnalysis(newRecord);
+              const sheets = loadMemoSheets();
+              const activeSheet = sheets[0];
+              if (activeSheet) {
+                appendToMemoSheet(activeSheet.id, floatingToolbar.text);
+                window.dispatchEvent(new Event("memo-updated"));
+              }
               setFloatingToolbar(null);
               window.getSelection()?.removeAllRanges();
-              reload();
-              toastOk("選択部分をストックに保存しました");
+              toastOk("📝 メモ帳に追記しました");
             }}
             className="flex items-center gap-1 px-2 h-6 bg-[#378ADD] hover:bg-[#185FA5] rounded-lg text-[10px] font-medium ml-0.5"
           >
-            <span>📌</span>
-            <span>ストック</span>
+            <span>📝</span>
+            <span>メモに追記</span>
           </button>
           {/* 矢印（下向き） */}
           <div
