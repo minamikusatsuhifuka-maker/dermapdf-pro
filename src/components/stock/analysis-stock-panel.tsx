@@ -699,25 +699,32 @@ export function AnalysisStockPanel() {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
   };
 
-  // 展開コンテンツ上の mouseup でフローティングツールバーを表示
-  const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
-    e.stopPropagation();
-    e.preventDefault(); // デフォルト動作を止める
+  // native mouseup でフローティングツールバーを表示（contentEditable内の選択を検知）
+  useEffect(() => {
+    const handleMouseUp = (e: MouseEvent) => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+      const text = selection.toString().trim();
+      if (text.length < 2) return;
 
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
-    const text = selection.toString().trim();
-    if (text.length < 2) return;
+      // contentEditable内の選択かチェック
+      const anchor = selection.anchorNode;
+      const stockContent = (anchor as Element)?.closest?.("[data-stock-content]")
+        || (anchor?.parentElement as Element)?.closest?.("[data-stock-content]");
+      if (!stockContent) return;
 
-    const x = e.clientX;
-    const y = e.clientY;
+      const recordId = stockContent.getAttribute("data-record-id") || "";
 
-    const toolbarW = 320;
-    let finalX = x;
-    if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
-    if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
+      // 画面端対策
+      const toolbarW = 320;
+      let finalX = e.clientX;
+      if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
+      if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
-    setFloatingToolbar({ x: finalX, y, height: 0, text, recordId });
+      setFloatingToolbar({ x: finalX, y: e.clientY, height: 0, text, recordId });
+    };
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
   }, []);
 
   // ツールバー外のクリックで閉じる（ツールバー・メモポップアップ自身は除外）
@@ -1735,7 +1742,6 @@ export function AnalysisStockPanel() {
                         data-record-id={r.id}
                         contentEditable
                         suppressContentEditableWarning
-                        onMouseUp={(e) => handleContentMouseUp(e, r.id)}
                         onClick={(e) => e.stopPropagation()}
                         onInput={(e) => {
                           debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
