@@ -823,7 +823,14 @@ export function AnalysisStockPanel() {
     e.preventDefault();
     e.stopPropagation();
     isDraggingRef.current = type;
+    // 要素内のクリック位置（左上からの相対座標）を保存
     dragOffsetRef.current = { x: e.clientX - elRect.left, y: e.clientY - elRect.top };
+    // ドラッグ開始時に実際のレンダリング位置をセット（transform解除によるジャンプ防止）
+    if (type === "toolbar") {
+      setToolbarPos({ x: elRect.left, y: elRect.top });
+    } else {
+      setMemoPopupPos({ x: elRect.left, y: elRect.top });
+    }
     document.body.style.userSelect = "none";
     document.body.style.cursor = "grabbing";
   }, []);
