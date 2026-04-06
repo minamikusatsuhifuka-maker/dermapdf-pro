@@ -5,6 +5,7 @@ import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, Exter
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   loadAllAnalyses,
+  saveAnalysis,
   deleteAnalysis,
   clearAllAnalyses,
   exportAnalysesAsJSON,
@@ -544,6 +545,111 @@ function InlineGensparkPanel({
   );
 }
 
+const RichEditor = ({
+  content,
+  onChange,
+  minHeight,
+  fontSize: editorFontSize,
+}: {
+  content: string;
+  onChange: (html: string) => void;
+  minHeight?: number;
+  fontSize?: number;
+}) => {
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== content) {
+      editorRef.current.innerHTML = content;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const applyFormat = (command: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, value);
+    if (editorRef.current) onChange(editorRef.current.innerHTML);
+  };
+
+  const COLORS = ["#e24b4b", "#378ADD", "#1D9E75", "#f59e0b"];
+  const HIGHLIGHTS = ["#fef08a", "#bae6fd", "#fecdd3"];
+
+  return (
+    <div className="border-2 border-[#378ADD] rounded-lg overflow-hidden">
+      {/* ツールバー */}
+      <div className="flex items-center gap-1 px-2 py-1.5 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-wrap">
+        <button
+          onMouseDown={(e) => { e.preventDefault(); applyFormat("bold"); }}
+          className="w-6 h-6 text-xs font-bold hover:bg-white rounded"
+        >
+          B
+        </button>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); applyFormat("italic"); }}
+          className="w-6 h-6 text-xs italic hover:bg-white rounded"
+        >
+          I
+        </button>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); applyFormat("underline"); }}
+          className="w-6 h-6 text-xs underline hover:bg-white rounded"
+        >
+          U
+        </button>
+        <span className="w-px h-4 bg-gray-300 mx-1" />
+        {/* 文字色 */}
+        <span className="text-[10px] text-gray-400">文字</span>
+        {COLORS.map((c) => (
+          <button
+            key={c}
+            onMouseDown={(e) => { e.preventDefault(); applyFormat("foreColor", c); }}
+            className="w-4 h-4 rounded-full border border-gray-200"
+            style={{ background: c }}
+            title={c}
+          />
+        ))}
+        <span className="w-px h-4 bg-gray-300 mx-1" />
+        {/* ハイライト */}
+        <span className="text-[10px] text-gray-400">蛍光</span>
+        {HIGHLIGHTS.map((c) => (
+          <button
+            key={c}
+            onMouseDown={(e) => { e.preventDefault(); applyFormat("backColor", c); }}
+            className="w-4 h-4 rounded-full border border-gray-200"
+            style={{ background: c }}
+            title={c}
+          />
+        ))}
+        <span className="w-px h-4 bg-gray-300 mx-1" />
+        {/* クリア */}
+        <button
+          onMouseDown={(e) => { e.preventDefault(); applyFormat("removeFormat"); }}
+          className="text-[10px] text-gray-500 hover:text-gray-700 px-1"
+        >
+          クリア
+        </button>
+      </div>
+      {/* 編集エリア */}
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => {
+          if (editorRef.current) onChange(editorRef.current.innerHTML);
+        }}
+        className="p-3 outline-none leading-relaxed bg-white"
+        style={{
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          minHeight: `${minHeight || 200}px`,
+          fontSize: `${editorFontSize || 13}px`,
+          lineHeight: "1.7",
+        }}
+      />
+    </div>
+  );
+};
+
 export function AnalysisStockPanel() {
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -590,6 +696,11 @@ export function AnalysisStockPanel() {
   // インライン編集
   const [editingContentId, setEditingContentId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+
+  // 選択範囲ポップアップ
+  const [selectionPopup, setSelectionPopup] = useState<{
+    x: number; y: number; text: string; recordId: string;
+  } | null>(null);
 
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
@@ -662,6 +773,34 @@ export function AnalysisStockPanel() {
   const setCardHeight = (id: string, h: number) => {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
   };
+
+  // 選択範囲からテキストを抽出してポップアップ表示
+  const handleContentMouseUp = (e: React.MouseEvent, record: AnalysisRecord) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setSelectionPopup(null);
+      return;
+    }
+    const text = selection.toString().trim();
+    if (text.length < 10) {
+      setSelectionPopup(null);
+      return;
+    }
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    setSelectionPopup({
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8,
+      text,
+      recordId: record.id,
+    });
+  };
+
+  // ページクリックでポップアップを閉じる
+  useEffect(() => {
+    const hide = () => setSelectionPopup(null);
+    document.addEventListener("mousedown", hide);
+    return () => document.removeEventListener("mousedown", hide);
+  }, []);
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
@@ -1588,15 +1727,11 @@ export function AnalysisStockPanel() {
 
                     {editingContentId === r.id ? (
                       <div>
-                        <textarea
-                          value={editingContent}
-                          onChange={(e) => setEditingContent(e.target.value)}
-                          className="w-full rounded-lg border-2 border-[#378ADD] bg-white p-3 font-[inherit] resize-y focus:border-[#378ADD] focus:outline-none"
-                          style={{
-                            minHeight: `${contentHeights[r.id] || globalHeight}px`,
-                            fontSize: `${fontSize}px`,
-                            lineHeight: "1.7",
-                          }}
+                        <RichEditor
+                          content={editingContent}
+                          onChange={(html) => setEditingContent(html)}
+                          minHeight={contentHeights[r.id] || globalHeight}
+                          fontSize={fontSize}
                         />
                         <div className="mt-2 flex items-center gap-2">
                           <button
@@ -1616,9 +1751,6 @@ export function AnalysisStockPanel() {
                           >
                             ✕ キャンセル
                           </button>
-                          <span className="ml-2 text-xs text-gray-400">
-                            {editingContent.length}文字
-                          </span>
                         </div>
                       </div>
                     ) : (
@@ -1632,18 +1764,34 @@ export function AnalysisStockPanel() {
                         >
                           ✏️ 編集
                         </button>
-                        <div
-                          className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 pr-16 text-gray-700"
-                          style={{
-                            height: `${contentHeights[r.id] || globalHeight}px`,
-                            minHeight: "80px",
-                            maxHeight: "2000px",
-                            fontSize: `${fontSize}px`,
-                            lineHeight: "1.7",
-                          }}
-                        >
-                          {r.content}
-                        </div>
+                        {/<[a-z][\s\S]*>/i.test(r.content) ? (
+                          <div
+                            className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 pr-16 text-gray-700"
+                            style={{
+                              height: `${contentHeights[r.id] || globalHeight}px`,
+                              minHeight: "80px",
+                              maxHeight: "2000px",
+                              fontSize: `${fontSize}px`,
+                              lineHeight: "1.7",
+                            }}
+                            onMouseUp={(e) => handleContentMouseUp(e, r)}
+                            dangerouslySetInnerHTML={{ __html: r.content }}
+                          />
+                        ) : (
+                          <div
+                            className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 pr-16 text-gray-700"
+                            style={{
+                              height: `${contentHeights[r.id] || globalHeight}px`,
+                              minHeight: "80px",
+                              maxHeight: "2000px",
+                              fontSize: `${fontSize}px`,
+                              lineHeight: "1.7",
+                            }}
+                            onMouseUp={(e) => handleContentMouseUp(e, r)}
+                          >
+                            {r.content}
+                          </div>
+                        )}
                         {r.updatedAt && (
                           <div className="mt-1 flex items-center justify-end gap-2">
                             <span className="text-[10px] text-gray-400">
@@ -1723,6 +1871,42 @@ export function AnalysisStockPanel() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 選択範囲ポップアップ */}
+      {selectionPopup && (
+        <div
+          className="fixed z-50 bg-[#378ADD] text-white text-xs px-3 py-1.5 rounded-full shadow-lg cursor-pointer hover:bg-[#185FA5] flex items-center gap-1.5 transition-colors"
+          style={{
+            left: selectionPopup.x,
+            top: selectionPopup.y,
+            transform: "translate(-50%, -100%)",
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const original = records.find((a) => a.id === selectionPopup.recordId);
+            const newRecord: AnalysisRecord = {
+              id: Date.now().toString(),
+              fileName: original?.fileName || "部分抽出",
+              analysisType: original?.analysisType || "partial",
+              analysisLabel: `📌 部分抽出: ${original?.analysisLabel || ""}`,
+              content: selectionPopup.text,
+              createdAt: new Date().toISOString(),
+              folder: original?.folder || "",
+              tags: original?.tags || [],
+              locked: false,
+            };
+            saveAnalysis(newRecord);
+            setSelectionPopup(null);
+            window.getSelection()?.removeAllRanges();
+            reload();
+            toastOk("選択部分をストックに保存しました");
+          }}
+        >
+          <span>📌</span>
+          <span>選択部分をストック ({selectionPopup.text.length}文字)</span>
         </div>
       )}
 
