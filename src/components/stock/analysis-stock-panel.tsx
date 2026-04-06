@@ -545,110 +545,25 @@ function InlineGensparkPanel({
   );
 }
 
-const RichEditor = ({
-  content,
-  onChange,
-  minHeight,
-  fontSize: editorFontSize,
-}: {
-  content: string;
-  onChange: (html: string) => void;
-  minHeight?: number;
-  fontSize?: number;
-}) => {
-  const editorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== content) {
-      editorRef.current.innerHTML = content;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const applyFormat = (command: string, value?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(command, false, value);
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
+function debounce<T extends (...args: Parameters<T>) => void>(fn: T, ms: number) {
+  let timer: ReturnType<typeof setTimeout>;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
   };
+}
 
-  const COLORS = ["#e24b4b", "#378ADD", "#1D9E75", "#f59e0b"];
-  const HIGHLIGHTS = ["#fef08a", "#bae6fd", "#fecdd3"];
-
-  return (
-    <div className="border-2 border-[#378ADD] rounded-lg overflow-hidden">
-      {/* ツールバー */}
-      <div className="flex items-center gap-1 px-2 py-1.5 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-wrap">
-        <button
-          onMouseDown={(e) => { e.preventDefault(); applyFormat("bold"); }}
-          className="w-6 h-6 text-xs font-bold hover:bg-white rounded"
-        >
-          B
-        </button>
-        <button
-          onMouseDown={(e) => { e.preventDefault(); applyFormat("italic"); }}
-          className="w-6 h-6 text-xs italic hover:bg-white rounded"
-        >
-          I
-        </button>
-        <button
-          onMouseDown={(e) => { e.preventDefault(); applyFormat("underline"); }}
-          className="w-6 h-6 text-xs underline hover:bg-white rounded"
-        >
-          U
-        </button>
-        <span className="w-px h-4 bg-gray-300 mx-1" />
-        {/* 文字色 */}
-        <span className="text-[10px] text-gray-400">文字</span>
-        {COLORS.map((c) => (
-          <button
-            key={c}
-            onMouseDown={(e) => { e.preventDefault(); applyFormat("foreColor", c); }}
-            className="w-4 h-4 rounded-full border border-gray-200"
-            style={{ background: c }}
-            title={c}
-          />
-        ))}
-        <span className="w-px h-4 bg-gray-300 mx-1" />
-        {/* ハイライト */}
-        <span className="text-[10px] text-gray-400">蛍光</span>
-        {HIGHLIGHTS.map((c) => (
-          <button
-            key={c}
-            onMouseDown={(e) => { e.preventDefault(); applyFormat("backColor", c); }}
-            className="w-4 h-4 rounded-full border border-gray-200"
-            style={{ background: c }}
-            title={c}
-          />
-        ))}
-        <span className="w-px h-4 bg-gray-300 mx-1" />
-        {/* クリア */}
-        <button
-          onMouseDown={(e) => { e.preventDefault(); applyFormat("removeFormat"); }}
-          className="text-[10px] text-gray-500 hover:text-gray-700 px-1"
-        >
-          クリア
-        </button>
-      </div>
-      {/* 編集エリア */}
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={() => {
-          if (editorRef.current) onChange(editorRef.current.innerHTML);
-        }}
-        className="p-3 outline-none leading-relaxed bg-white"
-        style={{
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          minHeight: `${minHeight || 200}px`,
-          fontSize: `${editorFontSize || 13}px`,
-          lineHeight: "1.7",
-        }}
-      />
-    </div>
-  );
-};
+const FLOAT_COLORS = [
+  { color: "#e24b4b", label: "赤" },
+  { color: "#378ADD", label: "青" },
+  { color: "#1D9E75", label: "緑" },
+  { color: "#f59e0b", label: "橙" },
+];
+const FLOAT_HIGHLIGHTS = [
+  { color: "#fef08a", label: "黄" },
+  { color: "#bae6fd", label: "水" },
+  { color: "#fecdd3", label: "桃" },
+];
 
 export function AnalysisStockPanel() {
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
@@ -693,12 +608,8 @@ export function AnalysisStockPanel() {
     });
   };
 
-  // インライン編集
-  const [editingContentId, setEditingContentId] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState("");
-
-  // 選択範囲ポップアップ
-  const [selectionPopup, setSelectionPopup] = useState<{
+  // フローティングツールバー
+  const [floatingToolbar, setFloatingToolbar] = useState<{
     x: number; y: number; text: string; recordId: string;
   } | null>(null);
 
@@ -774,33 +685,56 @@ export function AnalysisStockPanel() {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
   };
 
-  // 選択範囲からテキストを抽出してポップアップ表示
-  const handleContentMouseUp = (e: React.MouseEvent, record: AnalysisRecord) => {
+  // テキスト選択を検知してフローティングツールバーを表示
+  const handleSelectionChange = useCallback(() => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
-      setSelectionPopup(null);
+    if (!selection || selection.isCollapsed || selection.toString().trim().length < 2) {
+      setFloatingToolbar(null);
       return;
     }
     const text = selection.toString().trim();
-    if (text.length < 10) {
-      setSelectionPopup(null);
+    const range = selection.getRangeAt(0);
+    const container = range.commonAncestorContainer;
+    const cardContent =
+      (container as Element).closest?.("[data-stock-content]") ||
+      (container.parentElement as Element)?.closest?.("[data-stock-content]");
+    if (!cardContent) {
+      setFloatingToolbar(null);
       return;
     }
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
-    setSelectionPopup({
+    const recordId = cardContent.getAttribute("data-record-id") || "";
+    const rect = range.getBoundingClientRect();
+    setFloatingToolbar({
       x: rect.left + rect.width / 2,
-      y: rect.top - 8,
+      y: rect.top + window.scrollY - 8,
       text,
-      recordId: record.id,
+      recordId,
     });
-  };
-
-  // ページクリックでポップアップを閉じる
-  useEffect(() => {
-    const hide = () => setSelectionPopup(null);
-    document.addEventListener("mousedown", hide);
-    return () => document.removeEventListener("mousedown", hide);
   }, []);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+  }, [handleSelectionChange]);
+
+  // 書式適用後にコンテンツを保存
+  const applyFormat = useCallback((command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    if (floatingToolbar) {
+      const el = document.querySelector(`[data-record-id="${floatingToolbar.recordId}"]`);
+      if (el) {
+        updateAnalysisContent(floatingToolbar.recordId, el.innerHTML);
+      }
+    }
+  }, [floatingToolbar]);
+
+  // contentEditable の onInput を debounce で自動保存
+  const debouncedSave = useMemo(
+    () => debounce((id: string, html: string) => {
+      updateAnalysisContent(id, html);
+    }, 500),
+    []
+  );
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
@@ -1725,94 +1659,46 @@ export function AnalysisStockPanel() {
                       })}
                     </div>
 
-                    {editingContentId === r.id ? (
-                      <div>
-                        <RichEditor
-                          content={editingContent}
-                          onChange={(html) => setEditingContent(html)}
-                          minHeight={contentHeights[r.id] || globalHeight}
-                          fontSize={fontSize}
-                        />
-                        <div className="mt-2 flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              updateAnalysisContent(r.id, editingContent);
-                              setEditingContentId(null);
-                              reload();
-                              toastOk("内容を更新しました");
-                            }}
-                            className="rounded-lg bg-[#378ADD] px-3 py-1.5 text-xs text-white transition-colors hover:bg-[#185FA5]"
-                          >
-                            ✅ 保存
-                          </button>
-                          <button
-                            onClick={() => setEditingContentId(null)}
-                            className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs transition-colors hover:bg-gray-50"
-                          >
-                            ✕ キャンセル
-                          </button>
+                    <div>
+                      <div
+                        data-stock-content="true"
+                        data-record-id={r.id}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={(e) => {
+                          debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
+                        }}
+                        dangerouslySetInnerHTML={{ __html: r.content }}
+                        className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700 outline-none cursor-text focus:border-[#B5D4F4] focus:ring-1 focus:ring-[#B5D4F4]"
+                        style={{
+                          height: `${contentHeights[r.id] || globalHeight}px`,
+                          minHeight: "80px",
+                          maxHeight: "2000px",
+                          fontSize: `${fontSize}px`,
+                          lineHeight: "1.7",
+                          wordBreak: "break-word",
+                        }}
+                      />
+                      {r.updatedAt && (
+                        <div className="mt-1 flex items-center justify-end gap-2">
+                          <span className="text-[10px] text-gray-400">
+                            編集済み: {new Date(r.updatedAt).toLocaleString("ja-JP")}
+                          </span>
+                          {r.originalContent && (
+                            <button
+                              onClick={() => {
+                                revertAnalysisContent(r.id);
+                                reload();
+                                toastOk("元の内容に戻しました");
+                              }}
+                              className="text-[10px] text-[#378ADD] underline hover:text-[#378ADD]"
+                            >
+                              ↩️ 元に戻す
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <button
-                          onClick={() => {
-                            setEditingContent(r.content);
-                            setEditingContentId(r.id);
-                          }}
-                          className="absolute right-2 top-2 z-10 rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs transition-colors hover:border-[#B5D4F4] hover:text-[#378ADD]"
-                        >
-                          ✏️ 編集
-                        </button>
-                        {/<[a-z][\s\S]*>/i.test(r.content) ? (
-                          <div
-                            className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 pr-16 text-gray-700"
-                            style={{
-                              height: `${contentHeights[r.id] || globalHeight}px`,
-                              minHeight: "80px",
-                              maxHeight: "2000px",
-                              fontSize: `${fontSize}px`,
-                              lineHeight: "1.7",
-                            }}
-                            onMouseUp={(e) => handleContentMouseUp(e, r)}
-                            dangerouslySetInnerHTML={{ __html: r.content }}
-                          />
-                        ) : (
-                          <div
-                            className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 pr-16 text-gray-700"
-                            style={{
-                              height: `${contentHeights[r.id] || globalHeight}px`,
-                              minHeight: "80px",
-                              maxHeight: "2000px",
-                              fontSize: `${fontSize}px`,
-                              lineHeight: "1.7",
-                            }}
-                            onMouseUp={(e) => handleContentMouseUp(e, r)}
-                          >
-                            {r.content}
-                          </div>
-                        )}
-                        {r.updatedAt && (
-                          <div className="mt-1 flex items-center justify-end gap-2">
-                            <span className="text-[10px] text-gray-400">
-                              編集済み: {new Date(r.updatedAt).toLocaleString("ja-JP")}
-                            </span>
-                            {r.originalContent && (
-                              <button
-                                onClick={() => {
-                                  revertAnalysisContent(r.id);
-                                  reload();
-                                  toastOk("元の内容に戻しました");
-                                }}
-                                className="text-[10px] text-[#378ADD] underline hover:text-[#378ADD]"
-                              >
-                                ↩️ 元に戻す
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1874,39 +1760,104 @@ export function AnalysisStockPanel() {
         </div>
       )}
 
-      {/* 選択範囲ポップアップ */}
-      {selectionPopup && (
+      {/* フローティングツールバー */}
+      {floatingToolbar && (
         <div
-          className="fixed z-50 bg-[#378ADD] text-white text-xs px-3 py-1.5 rounded-full shadow-lg cursor-pointer hover:bg-[#185FA5] flex items-center gap-1.5 transition-colors"
+          className="fixed z-50 flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs"
           style={{
-            left: selectionPopup.x,
-            top: selectionPopup.y,
+            left: floatingToolbar.x,
+            top: floatingToolbar.y,
             transform: "translate(-50%, -100%)",
+            pointerEvents: "auto",
           }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const original = records.find((a) => a.id === selectionPopup.recordId);
-            const newRecord: AnalysisRecord = {
-              id: Date.now().toString(),
-              fileName: original?.fileName || "部分抽出",
-              analysisType: original?.analysisType || "partial",
-              analysisLabel: `📌 部分抽出: ${original?.analysisLabel || ""}`,
-              content: selectionPopup.text,
-              createdAt: new Date().toISOString(),
-              folder: original?.folder || "",
-              tags: original?.tags || [],
-              locked: false,
-            };
-            saveAnalysis(newRecord);
-            setSelectionPopup(null);
-            window.getSelection()?.removeAllRanges();
-            reload();
-            toastOk("選択部分をストックに保存しました");
-          }}
+          onMouseDown={(e) => e.preventDefault()}
         >
-          <span>📌</span>
-          <span>選択部分をストック ({selectionPopup.text.length}文字)</span>
+          {/* 書式ボタン */}
+          <button
+            onMouseDown={(e) => { e.preventDefault(); applyFormat("bold"); }}
+            className="w-6 h-6 font-bold hover:bg-gray-700 rounded flex items-center justify-center"
+          >
+            B
+          </button>
+          <button
+            onMouseDown={(e) => { e.preventDefault(); applyFormat("italic"); }}
+            className="w-6 h-6 italic hover:bg-gray-700 rounded flex items-center justify-center"
+          >
+            I
+          </button>
+          <button
+            onMouseDown={(e) => { e.preventDefault(); applyFormat("underline"); }}
+            className="w-6 h-6 underline hover:bg-gray-700 rounded flex items-center justify-center"
+          >
+            U
+          </button>
+          <span className="w-px h-4 bg-gray-600 mx-0.5" />
+          {/* 文字色 */}
+          {FLOAT_COLORS.map(({ color, label }) => (
+            <button
+              key={color}
+              onMouseDown={(e) => { e.preventDefault(); applyFormat("foreColor", color); }}
+              className="w-4 h-4 rounded-full border border-gray-500 hover:scale-125 transition-transform"
+              style={{ background: color }}
+              title={`文字色: ${label}`}
+            />
+          ))}
+          <span className="w-px h-4 bg-gray-600 mx-0.5" />
+          {/* ハイライト */}
+          {FLOAT_HIGHLIGHTS.map(({ color, label }) => (
+            <button
+              key={color}
+              onMouseDown={(e) => { e.preventDefault(); applyFormat("backColor", color); }}
+              className="w-4 h-4 rounded-full border border-gray-500 hover:scale-125 transition-transform"
+              style={{ background: color }}
+              title={`ハイライト: ${label}`}
+            />
+          ))}
+          <span className="w-px h-4 bg-gray-600 mx-0.5" />
+          {/* 書式クリア */}
+          <button
+            onMouseDown={(e) => { e.preventDefault(); applyFormat("removeFormat"); }}
+            className="px-1.5 h-6 text-[10px] text-gray-300 hover:bg-gray-700 rounded"
+          >
+            ✕
+          </button>
+          <span className="w-px h-4 bg-gray-600 mx-0.5" />
+          {/* ストックボタン */}
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const original = records.find((a) => a.id === floatingToolbar.recordId);
+              const newRecord: AnalysisRecord = {
+                id: Date.now().toString(),
+                fileName: original?.fileName || "部分抽出",
+                analysisType: original?.analysisType || "partial",
+                analysisLabel: "📌 部分抽出",
+                content: floatingToolbar.text,
+                createdAt: new Date().toISOString(),
+                folder: original?.folder || "",
+                tags: original?.tags || [],
+                locked: false,
+              };
+              saveAnalysis(newRecord);
+              setFloatingToolbar(null);
+              window.getSelection()?.removeAllRanges();
+              reload();
+              toastOk("選択部分をストックに保存しました");
+            }}
+            className="flex items-center gap-1 px-2 h-6 bg-[#378ADD] hover:bg-[#185FA5] rounded-lg text-[10px] font-medium ml-0.5"
+          >
+            <span>📌</span>
+            <span>ストック</span>
+          </button>
+          {/* 矢印（下向き） */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0"
+            style={{
+              borderLeft: "5px solid transparent",
+              borderRight: "5px solid transparent",
+              borderTop: "5px solid #111827",
+            }}
+          />
         </div>
       )}
 
