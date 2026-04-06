@@ -1953,28 +1953,24 @@ export function AnalysisStockPanel() {
                 const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
                 window.dispatchEvent(new Event("memo-updated"));
 
-                // メモポップアップを選択範囲の上（ツールバーがあった場所）に表示
-                // ツールバーの高さ約30px + gap 8px = 38px 分上にある
-                const popupW = memoPopupSize.w;
-                const popupH = memoPopupSize.h;
-                // ツールバーは y=rect.top, transform: -100%-8px → 上端は rect.top - toolbarH - 8
-                // ポップアップはツールバーのさらに上。ツールバー高さは約36px
-                const toolbarH = 36;
-                let popupX = floatingToolbar.x - popupW / 2; // 選択範囲中央揃え
-                let popupY = floatingToolbar.y - toolbarH - 8 - popupH - 8; // ツールバー上端のさらに上
-                // 上に収まらない場合は選択範囲の下にフォールバック
-                if (popupY < 10) {
-                  popupY = floatingToolbar.y + (floatingToolbar.height || 20) + 8;
+                // ツールバーの実際の表示位置からメモポップアップ座標を計算
+                const toolbarEl = document.querySelector("[data-floating-toolbar]");
+                if (toolbarEl) {
+                  const tbRect = toolbarEl.getBoundingClientRect();
+                  const popupW = memoPopupSize.w;
+                  const popupH = memoPopupSize.h;
+                  let px = tbRect.left + tbRect.width / 2 - popupW / 2;
+                  let py = tbRect.top - popupH - 8; // ツールバーの上
+                  if (py < 10) py = tbRect.bottom + 8; // 上に収まらない場合は下
+                  px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
+                  py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
+                  setMemoPopup({
+                    content: updatedSheet?.content || "",
+                    sheetName: updatedSheet?.name || "メモ",
+                    x: px,
+                    y: py,
+                  });
                 }
-                // 画面内にclamp
-                popupX = Math.max(10, Math.min(popupX, window.innerWidth - popupW - 10));
-                popupY = Math.max(10, Math.min(popupY, window.innerHeight - popupH - 10));
-                setMemoPopup({
-                  content: updatedSheet?.content || "",
-                  sheetName: updatedSheet?.name || "メモ",
-                  x: popupX,
-                  y: popupY,
-                });
               }
               // ツールバーはそのまま維持（消さない）
               // 選択範囲も維持
