@@ -2369,7 +2369,7 @@ export function AnalysisStockPanel() {
       {/* 右下固定FAB：body直下にポータルで描画（backdrop-blur等の影響を受けないため） */}
       {mainTab === "stock" && isMounted && createPortal(
         <button
-          onClick={() => {
+          onClick={(e) => {
             if (memoPopup) {
               setMemoPopup(null);
               setFloatingToolbar(null);
@@ -2379,11 +2379,16 @@ export function AnalysisStockPanel() {
               if (!activeSheet) return;
               const pw = memoPopupSize.w;
               const ph = memoPopupSize.h;
-              // メモポップアップを右下に表示
-              const px = Math.max(10, window.innerWidth - pw - 20);
-              const py = Math.max(10, window.innerHeight - ph - 80);
+              // FABボタンの位置を基準にメモを表示（ボタン真上・右揃え）
+              const btn = e.currentTarget.getBoundingClientRect();
+              // 右端をボタン右端に揃え、下端をボタン上端の8px上に揃える
+              let px = btn.right - pw;
+              let py = btn.top - ph - 8;
+              // 画面外に出ないようclamp
+              px = Math.max(10, Math.min(px, window.innerWidth - pw - 10));
+              py = Math.max(10, Math.min(py, window.innerHeight - ph - 10));
               setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
-              // ツールバーも右下メモの上に同時表示
+              // ツールバーはメモの上に配置
               const tbX = px + pw / 2;
               const tbY = py - 8;
               setFloatingToolbar({ x: tbX, y: tbY, height: 0, text: "", recordId: "" });
