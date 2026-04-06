@@ -616,6 +616,12 @@ export function AnalysisStockPanel() {
     x: number; y: number; text: string; recordId: string;
   } | null>(null);
 
+  // メモプレビューポップアップ
+  const [memoPopup, setMemoPopup] = useState<{
+    content: string;
+    sheetName: string;
+  } | null>(null);
+
   // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
   const contentRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -1899,17 +1905,19 @@ export function AnalysisStockPanel() {
               const sheets = loadMemoSheets();
               const activeSheet = sheets[0];
               if (activeSheet) {
-                appendToMemoSheet(activeSheet.id, floatingToolbar.text);
+                const updated = appendToMemoSheet(activeSheet.id, floatingToolbar.text);
+                const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
                 window.dispatchEvent(new Event("memo-updated"));
+
+                // タブ切り替えせずポップアップ表示
+                setMemoPopup({
+                  content: updatedSheet?.content || "",
+                  sheetName: updatedSheet?.name || "メモ",
+                });
+                setTimeout(() => setMemoPopup(null), 4000);
               }
               setFloatingToolbar(null);
               window.getSelection()?.removeAllRanges();
-              setMainTab("memo");
-              toastOk("📝 メモ帳に追記しました");
-              setTimeout(() => {
-                const textarea = document.querySelector("textarea[data-memo-textarea]") as HTMLTextAreaElement;
-                if (textarea) textarea.scrollTop = textarea.scrollHeight;
-              }, 100);
             }}
             className="flex items-center gap-1 px-2 h-6 bg-[#378ADD] hover:bg-[#185FA5] rounded-lg text-[10px] font-medium ml-0.5"
           >
@@ -1925,6 +1933,49 @@ export function AnalysisStockPanel() {
               borderTop: "5px solid #111827",
             }}
           />
+        </div>
+      )}
+
+      {/* メモプレビューポップアップ */}
+      {memoPopup && (
+        <div
+          className="fixed bottom-6 right-6 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+          style={{ maxHeight: "240px" }}
+        >
+          <div className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4]">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-[#185FA5]">
+              <span>📝</span>
+              <span>{memoPopup.sheetName}</span>
+              <span className="text-[10px] text-[#378ADD] bg-white px-1.5 py-0.5 rounded-full">追記しました</span>
+            </div>
+            <button
+              onClick={() => setMemoPopup(null)}
+              className="text-gray-400 hover:text-gray-600 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+          <div
+            className="p-3 text-xs text-gray-600 leading-relaxed overflow-y-auto"
+            style={{ maxHeight: "180px" }}
+          >
+            <div className="whitespace-pre-wrap break-words">
+              {memoPopup.content.length > 200
+                ? "..." + memoPopup.content.slice(-200)
+                : memoPopup.content}
+            </div>
+          </div>
+          <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-gray-50">
+            <span className="text-[10px] text-gray-400">
+              {memoPopup.content.length}文字
+            </span>
+            <button
+              onClick={() => { setMemoPopup(null); setMainTab("memo"); }}
+              className="text-[10px] text-[#378ADD] hover:underline"
+            >
+              メモ帳を開く →
+            </button>
+          </div>
         </div>
       )}
 
