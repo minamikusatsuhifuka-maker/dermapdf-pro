@@ -1012,155 +1012,34 @@ export function AnalysisStockPanel() {
       id="analysis-stock"
       className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* タイトル行 */}
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-lg font-bold text-gray-700">
           保存済み分析 ({records.length}件)
         </h2>
-        <div className="flex flex-wrap items-center gap-3">
-          {/* 高さ一括変更 */}
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span>高さ</span>
-            {([
-              { label: "S", value: 160 },
-              { label: "M", value: 280 },
-              { label: "L", value: 500 },
-              { label: "XL", value: 900 },
-            ] as const).map((opt) => (
-              <button
-                key={opt.label}
-                onClick={() => { setGlobalHeight(opt.value); setContentHeights({}); }}
-                className={`flex h-6 w-6 items-center justify-center rounded border text-[10px] font-bold transition-colors ${
-                  globalHeight === opt.value
-                    ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
-                    : "border-gray-200 text-gray-500 hover:border-[#B5D4F4]"
-                }`}
-                title={`カードの高さを${opt.label === "S" ? "小" : opt.label === "M" ? "中" : opt.label === "L" ? "大" : "特大"}に設定`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* フォントサイズ変更 */}
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span>文字</span>
-            <button
-              onClick={() => setFontSize((f) => Math.max(10, f - 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
-              title="本文の文字サイズを小さく"
-            >
-              A-
-            </button>
-            <span className="w-8 text-center">{fontSize}px</span>
-            <button
-              onClick={() => setFontSize((f) => Math.min(20, f + 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
-              title="本文の文字サイズを大きく"
-            >
-              A+
-            </button>
-          </div>
-
-          {/* フォルダフォントサイズ */}
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span className="text-gray-400">📁</span>
-            <button
-              onClick={() => setFolderFontSize((f) => Math.max(9, f - 1))}
-              className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
-              title="フォルダタブの文字サイズを小さく"
-            >
-              A-
-            </button>
-            <span className="w-7 text-center text-[10px]">{folderFontSize}px</span>
-            <button
-              onClick={() => setFolderFontSize((f) => Math.min(16, f + 1))}
-              className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
-              title="フォルダタブの文字サイズを大きく"
-            >
-              A+
-            </button>
-          </div>
-
-          <button
-            onClick={exportAnalysesAsJSON}
-            disabled={records.length === 0}
-            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
-            title="全分析をJSONファイルでエクスポート"
-          >
-            <Download className="h-3 w-3" /> JSON
-          </button>
-          <button
-            onClick={exportAnalysesAsText}
-            disabled={records.length === 0}
-            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
-            title="全分析をテキストファイルでエクスポート"
-          >
-            <Download className="h-3 w-3" /> テキスト
-          </button>
-          <button
-            onClick={() => exportAnalysesAsDocx()}
-            disabled={records.length === 0}
-            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
-            title="全分析をWordファイルでエクスポート"
-          >
-            <Download className="h-3 w-3" /> Word
-          </button>
-          <button
-            onClick={() => exportAnalysesAsPdf()}
-            disabled={records.length === 0}
-            className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
-            title="全分析をPDFファイルでエクスポート"
-          >
-            <Download className="h-3 w-3" /> PDF
-          </button>
-          {showConfirmClear ? (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleClearAll}
-                className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white"
-                title="本当に全件削除する"
-              >
-                本当に全削除
-              </button>
-              <button
-                onClick={() => setShowConfirmClear(false)}
-                className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600"
-                title="キャンセル"
-              >
-                キャンセル
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowConfirmClear(true)}
-              disabled={records.length === 0}
-              className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm hover:bg-red-100 disabled:opacity-40"
-              title="保存済み分析を全て削除する"
-            >
-              <Trash2 className="h-3 w-3" /> 全削除
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* メインタブ切り替え */}
-      <div className="flex gap-2 mb-3">
+      {/* メインタブ */}
+      <div className="flex gap-2 border-b border-gray-100 mb-4">
         <button
           onClick={() => setMainTab("stock")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             mainTab === "stock"
-              ? "bg-[#378ADD] text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              ? "border-[#378ADD] text-[#378ADD]"
+              : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          📋 分析ストック <span className="text-xs opacity-75">({records.length})</span>
+          📋 分析ストック
+          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+            {records.length}
+          </span>
         </button>
         <button
           onClick={() => setMainTab("memo")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             mainTab === "memo"
-              ? "bg-[#378ADD] text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              ? "border-[#378ADD] text-[#378ADD]"
+              : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
           📝 メモ帳
@@ -1170,6 +1049,148 @@ export function AnalysisStockPanel() {
       {mainTab === "memo" && <MemoPadPanel />}
 
       {mainTab === "stock" && (<>
+
+      {/* ストック用ヘッダーボタン群 */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* 高さ一括変更 */}
+        <div className="flex items-center gap-1 text-xs text-gray-500">
+          <span>高さ</span>
+          {([
+            { label: "S", value: 160 },
+            { label: "M", value: 280 },
+            { label: "L", value: 500 },
+            { label: "XL", value: 900 },
+          ] as const).map((opt) => (
+            <button
+              key={opt.label}
+              onClick={() => { setGlobalHeight(opt.value); setContentHeights({}); }}
+              className={`flex h-6 w-6 items-center justify-center rounded border text-[10px] font-bold transition-colors ${
+                globalHeight === opt.value
+                  ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
+                  : "border-gray-200 text-gray-500 hover:border-[#B5D4F4]"
+              }`}
+              title={`カードの高さを${opt.label === "S" ? "小" : opt.label === "M" ? "中" : opt.label === "L" ? "大" : "特大"}に設定`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* フォントサイズ変更 */}
+        <div className="flex items-center gap-1 text-xs text-gray-500">
+          <span>文字</span>
+          <button
+            onClick={() => setFontSize((f) => Math.max(10, f - 1))}
+            className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+            title="本文の文字サイズを小さく"
+          >
+            A-
+          </button>
+          <span className="w-8 text-center">{fontSize}px</span>
+          <button
+            onClick={() => setFontSize((f) => Math.min(20, f + 1))}
+            className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+            title="本文の文字サイズを大きく"
+          >
+            A+
+          </button>
+        </div>
+
+        {/* フォルダフォントサイズ */}
+        <div className="flex items-center gap-1 text-xs text-gray-500">
+          <span className="text-gray-400">📁</span>
+          <button
+            onClick={() => setFolderFontSize((f) => Math.max(9, f - 1))}
+            className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
+            title="フォルダタブの文字サイズを小さく"
+          >
+            A-
+          </button>
+          <span className="w-7 text-center text-[10px]">{folderFontSize}px</span>
+          <button
+            onClick={() => setFolderFontSize((f) => Math.min(16, f + 1))}
+            className="flex h-5 w-5 items-center justify-center rounded border border-gray-200 text-[10px] font-bold hover:border-[#B5D4F4]"
+            title="フォルダタブの文字サイズを大きく"
+          >
+            A+
+          </button>
+        </div>
+
+        <button
+          onClick={exportAnalysesAsJSON}
+          disabled={records.length === 0}
+          className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          title="全分析をJSONファイルでエクスポート"
+        >
+          <Download className="h-3 w-3" /> JSON
+        </button>
+        <button
+          onClick={exportAnalysesAsText}
+          disabled={records.length === 0}
+          className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          title="全分析をテキストファイルでエクスポート"
+        >
+          <Download className="h-3 w-3" /> テキスト
+        </button>
+        <button
+          onClick={() => exportAnalysesAsDocx()}
+          disabled={records.length === 0}
+          className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          title="全分析をWordファイルでエクスポート"
+        >
+          <Download className="h-3 w-3" /> Word
+        </button>
+        <button
+          onClick={() => exportAnalysesAsPdf()}
+          disabled={records.length === 0}
+          className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80 disabled:opacity-40"
+          title="全分析をPDFファイルでエクスポート"
+        >
+          <Download className="h-3 w-3" /> PDF
+        </button>
+        {records.some((r) => r.analysisType === "partial") && (
+          <button
+            onClick={() => {
+              if (!confirm("「部分抽出」カードを全て削除しますか？")) return;
+              const partialIds = records.filter((r) => r.analysisType === "partial").map((r) => r.id);
+              partialIds.forEach((id) => deleteAnalysis(id));
+              reload();
+              toastOk(`部分抽出カード${partialIds.length}件を削除しました`);
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-600 shadow-sm hover:bg-orange-100"
+            title="「部分抽出」カードを一括削除"
+          >
+            <Trash2 className="h-3 w-3" /> 部分抽出を削除
+          </button>
+        )}
+        {showConfirmClear ? (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleClearAll}
+              className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white"
+              title="本当に全件削除する"
+            >
+              本当に全削除
+            </button>
+            <button
+              onClick={() => setShowConfirmClear(false)}
+              className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600"
+              title="キャンセル"
+            >
+              キャンセル
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowConfirmClear(true)}
+            disabled={records.length === 0}
+            className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm hover:bg-red-100 disabled:opacity-40"
+            title="保存済み分析を全て削除する"
+          >
+            <Trash2 className="h-3 w-3" /> 全削除
+          </button>
+        )}
+      </div>
 
       {/* フォルダツリー */}
       <div className="space-y-1 pb-2">
@@ -1883,7 +1904,12 @@ export function AnalysisStockPanel() {
               }
               setFloatingToolbar(null);
               window.getSelection()?.removeAllRanges();
+              setMainTab("memo");
               toastOk("📝 メモ帳に追記しました");
+              setTimeout(() => {
+                const textarea = document.querySelector("textarea[data-memo-textarea]") as HTMLTextAreaElement;
+                if (textarea) textarea.scrollTop = textarea.scrollHeight;
+              }, 100);
             }}
             className="flex items-center gap-1 px-2 h-6 bg-[#378ADD] hover:bg-[#185FA5] rounded-lg text-[10px] font-medium ml-0.5"
           >

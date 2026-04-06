@@ -168,6 +168,7 @@ export default function MemoPadPanel() {
           </div>
           <textarea
             ref={textareaRef}
+            data-memo-textarea="true"
             value={activeSheet.content}
             onChange={(e) => handleContentChange(e.target.value)}
             placeholder={
