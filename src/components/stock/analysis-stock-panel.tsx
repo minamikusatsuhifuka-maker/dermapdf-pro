@@ -2086,24 +2086,20 @@ export function AnalysisStockPanel() {
           style={toolbarDragged ? {
             left: toolbarPos.x,
             top: toolbarPos.y,
-            transform: "none",
+            cursor: "grab",
           } : {
-            left: floatingToolbar.x,
-            top: floatingToolbar.y,
-            transform: "translate(-50%, calc(-100% - 8px))",
+            // transform を使わず直接座標で配置（ドラッグ時の座標系統一のため）
+            // x = 中央揃えの left、y = 選択範囲上端 - ツールバー高さ(36px) - gap(8px)
+            left: floatingToolbar.x - 170,
+            top: floatingToolbar.y - 44,
+            cursor: "grab",
           }}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === "BUTTON" || tag === "INPUT") return;
+            startDrag("toolbar", e);
+          }}
         >
-          {/* ドラッグハンドル */}
-          <span
-            className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white px-0.5 select-none"
-            onMouseDown={(e) => {
-              startDrag("toolbar", e);
-            }}
-            title="ドラッグで移動"
-          >
-            ⠿
-          </span>
           <span className="w-px h-4 bg-gray-600 mx-0.5" />
           {/* 書式ボタン（テキスト未選択時はdisabled） */}
           {(() => {
@@ -2188,15 +2184,7 @@ export function AnalysisStockPanel() {
             <span>📝</span>
             <span>メモに追記</span>
           </button>
-          {/* 矢印（下向き） */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0"
-            style={{
-              borderLeft: "5px solid transparent",
-              borderRight: "5px solid transparent",
-              borderTop: "5px solid #111827",
-            }}
-          />
+
         </div>
       )}
 
