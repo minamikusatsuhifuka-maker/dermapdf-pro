@@ -642,6 +642,7 @@ export function AnalysisStockPanel() {
 
   // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
   const contentRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const memoPopupScrollRef = useRef<HTMLDivElement | null>(null);
 
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
@@ -741,6 +742,14 @@ export function AnalysisStockPanel() {
       setFloatingToolbar({ x: finalX, y: rect.top, height: rect.height, text, recordId });
     }, 10);
   }, []);
+
+  // メモポップアップ更新時に最下部へスクロール
+  useEffect(() => {
+    if (memoPopup && memoPopupScrollRef.current) {
+      const el = memoPopupScrollRef.current;
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [memoPopup]);
 
   // ツールバー外のクリックで閉じる（ツールバー・メモポップアップ自身は除外）
   useEffect(() => {
@@ -2055,7 +2064,7 @@ export function AnalysisStockPanel() {
           )}
 
           {/* コンテンツ */}
-          <div className="p-3 text-xs text-gray-600 leading-relaxed overflow-y-auto flex-1">
+          <div ref={memoPopupScrollRef} className="p-3 text-xs text-gray-600 leading-relaxed overflow-y-auto flex-1">
             <div className="whitespace-pre-wrap break-words">
               {memoPopup.content.length > 400
                 ? "..." + memoPopup.content.slice(-400)
