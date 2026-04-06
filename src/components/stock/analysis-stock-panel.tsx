@@ -570,6 +570,7 @@ const FLOAT_HIGHLIGHTS = [
 
 export function AnalysisStockPanel() {
   const [mainTab, setMainTab] = useState<"stock" | "memo">("stock");
+  const [isMounted, setIsMounted] = useState(false);
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -695,6 +696,8 @@ export function AnalysisStockPanel() {
     const merged = Array.from(new Set([...saved, ...fromRecords]));
     setCustomFolders(merged);
   }, [loadCustomFolders]);
+
+  useEffect(() => { setIsMounted(true); }, []);
 
   useEffect(() => {
     reload();
@@ -2364,7 +2367,7 @@ export function AnalysisStockPanel() {
       )}
 
       {/* 右下固定FAB：body直下にポータルで描画（backdrop-blur等の影響を受けないため） */}
-      {mainTab === "stock" && typeof document !== "undefined" && createPortal(
+      {mainTab === "stock" && isMounted && createPortal(
         <button
           onClick={() => {
             if (memoPopup) {
