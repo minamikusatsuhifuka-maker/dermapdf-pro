@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { appendToMemoSheet, loadMemoSheets } from "@/lib/memo-storage";
@@ -2295,36 +2296,40 @@ export function AnalysisStockPanel() {
         </div>
       )}
 
-      {/* 右下固定FAB：メモ欄を開くボタン */}
-      {mainTab === "stock" && (
+      {/* 右下固定FAB：body直下にポータルで描画（backdrop-blur等の影響を受けないため） */}
+      {mainTab === "stock" && typeof document !== "undefined" && createPortal(
         <button
           onClick={() => {
             if (memoPopup) {
               setMemoPopup(null);
+              setFloatingToolbar(null);
             } else {
               const sheets = loadMemoSheets();
               const activeSheet = sheets[0];
               if (!activeSheet) return;
               const pw = memoPopupSize.w;
               const ph = memoPopupSize.h;
-              // 右下から計算（viewportに収まるよう）
+              // メモポップアップを右下に表示
               const px = Math.max(10, window.innerWidth - pw - 20);
               const py = Math.max(10, window.innerHeight - ph - 80);
               setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
+              // ツールバーも右下メモの上に同時表示
+              const tbX = px + pw / 2;
+              const tbY = py - 8;
+              setFloatingToolbar({ x: tbX, y: tbY, height: 0, text: "", recordId: "" });
             }
           }}
           className="fixed bottom-5 right-5 z-[9990] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl text-white text-sm font-medium transition-all hover:scale-105 active:scale-95"
           style={{ background: memoPopup ? "#1D9E75" : "#378ADD" }}
-          title="メモ帳を開く / 閉じる"
+          title="メモ帳を開く / 閉じる (M)"
         >
           <span className="text-base">📝</span>
           <span>{memoPopup ? "メモを閉じる" : "メモを開く"}</span>
           {!memoPopup && (
-            <span className="bg-white/25 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
-              M
-            </span>
+            <span className="bg-white/25 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">M</span>
           )}
-        </button>
+        </button>,
+        document.body
       )}
 
       {/* パスワード確認モーダル */}
