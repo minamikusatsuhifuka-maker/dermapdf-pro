@@ -702,45 +702,30 @@ export function AnalysisStockPanel() {
   // 展開コンテンツ上の mouseup でフローティングツールバーを表示
   const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
     e.stopPropagation();
+    e.preventDefault(); // デフォルト動作を止める
 
-    // マウスを離した位置（ビューポート座標）を保存
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+    const text = selection.toString().trim();
+    if (text.length < 2) return;
 
-    setTimeout(() => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) {
-        setFloatingToolbar(null);
-        return;
-      }
-      const text = selection.toString().trim();
-      if (text.length < 2) {
-        setFloatingToolbar(null);
-        return;
-      }
+    const x = e.clientX;
+    const y = e.clientY;
 
-      // ツールバーをマウスを離した位置の上に表示
-      // 画面端対策
-      const toolbarW = 320;
-      let x = mouseX;
-      if (x - toolbarW / 2 < 10) x = toolbarW / 2 + 10;
-      if (x + toolbarW / 2 > window.innerWidth - 10) x = window.innerWidth - toolbarW / 2 - 10;
+    const toolbarW = 320;
+    let finalX = x;
+    if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
+    if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
-      setFloatingToolbar({
-        x,
-        y: mouseY, // マウスを離した位置のY
-        height: 20,
-        text,
-        recordId,
-      });
-    }, 0);
+    setFloatingToolbar({ x: finalX, y, height: 0, text, recordId });
   }, []);
 
-  // ツールバー外のクリックで閉じる
+  // ツールバー外のクリックで閉じる（ツールバー・メモポップアップ自身は除外）
   useEffect(() => {
     const hide = (e: MouseEvent) => {
-      const toolbar = document.querySelector("[data-floating-toolbar]");
-      if (toolbar && toolbar.contains(e.target as Node)) return;
+      const target = e.target as Element;
+      if (target.closest("[data-floating-toolbar]")) return;
+      if (target.closest("[data-memo-popup]")) return;
       setFloatingToolbar(null);
     };
     document.addEventListener("mousedown", hide);
@@ -1856,8 +1841,8 @@ export function AnalysisStockPanel() {
           data-floating-toolbar="true"
           className="fixed z-[9999] flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs select-none"
           style={{
-            left: `${floatingToolbar.x}px`,
-            top: `${floatingToolbar.y}px`,
+            left: floatingToolbar.x,
+            top: floatingToolbar.y,
             transform: "translate(-50%, calc(-100% - 8px))",
           }}
           onMouseDown={(e) => e.preventDefault()}
@@ -1930,7 +1915,6 @@ export function AnalysisStockPanel() {
                   x: floatingToolbar.x + 40,  // ツールバーより少し右
                   y: floatingToolbar.y - 10,  // ツールバーとほぼ同じ高さ
                 });
-                setTimeout(() => setMemoPopup(null), 4000);
               }
               setFloatingToolbar(null);
               window.getSelection()?.removeAllRanges();
@@ -1955,11 +1939,12 @@ export function AnalysisStockPanel() {
       {/* メモプレビューポップアップ（選択範囲の近く、ツールバーの下に表示） */}
       {memoPopup && (
         <div
+          data-memo-popup="true"
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
           style={{
-            left: `${memoPopup.x}px`,
-            top: `${memoPopup.y}px`,
-            transform: "translate(0, -100%)", // 上方向に表示
+            left: memoPopup.x,
+            top: memoPopup.y,
+            transform: "translate(0, -100%)",
             width: "200px",
             maxHeight: "160px",
           }}
