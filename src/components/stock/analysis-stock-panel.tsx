@@ -624,6 +624,22 @@ export function AnalysisStockPanel() {
     y: number;
   } | null>(null);
 
+  // メモポップアップサイズ（設定画面から変更可能、localStorageで永続化）
+  const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>(() => {
+    try {
+      const saved = localStorage.getItem("dermapdf_memo_popup_size");
+      return saved ? JSON.parse(saved) : { w: 340, h: 280 };
+    } catch {
+      return { w: 340, h: 280 };
+    }
+  });
+  const [showMemoSizeSettings, setShowMemoSizeSettings] = useState(false);
+
+  const saveMemoPopupSize = useCallback((size: { w: number; h: number }) => {
+    setMemoPopupSize(size);
+    localStorage.setItem("dermapdf_memo_popup_size", JSON.stringify(size));
+  }, []);
+
   // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
   const contentRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -699,32 +715,30 @@ export function AnalysisStockPanel() {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
   };
 
-  // native mouseup でフローティングツールバーを表示（contentEditable内の選択を検知）
-  useEffect(() => {
-    const handleMouseUp = (e: MouseEvent) => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) return;
-      const text = selection.toString().trim();
-      if (text.length < 2) return;
+  // 展開コンテンツ上の mouseup でフローティングツールバーを表示
+  const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
+    e.stopPropagation();
+    e.preventDefault(); // デフォルト動作を止める
 
-      // contentEditable内の選択かチェック
-      const anchor = selection.anchorNode;
-      const stockContent = (anchor as Element)?.closest?.("[data-stock-content]")
-        || (anchor?.parentElement as Element)?.closest?.("[data-stock-content]");
-      if (!stockContent) return;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+    const text = selection.toString().trim();
+    if (text.length < 2) return;
 
-      const recordId = stockContent.getAttribute("data-record-id") || "";
+    // 選択範囲のBoundingRectを使って正確な位置を取得
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
 
-      // 画面端対策
-      const toolbarW = 320;
-      let finalX = e.clientX;
-      if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
-      if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
+    const toolbarW = 320;
+    // 選択範囲の中央上に表示
+    let finalX = rect.left + rect.width / 2;
+    if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
+    if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
-      setFloatingToolbar({ x: finalX, y: e.clientY, height: 0, text, recordId });
-    };
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => document.removeEventListener("mouseup", handleMouseUp);
+    // 選択範囲の上端（rect.top）を使う。スクロール位置は不要（fixedなのでclientY相当）
+    const finalY = rect.top;
+
+    setFloatingToolbar({ x: finalX, y: finalY, height: 0, text, recordId });
   }, []);
 
   // ツールバー外のクリックで閉じる（ツールバー・メモポップアップ自身は除外）
@@ -1742,6 +1756,7 @@ export function AnalysisStockPanel() {
                         data-record-id={r.id}
                         contentEditable
                         suppressContentEditableWarning
+                        onMouseUp={(e) => handleContentMouseUp(e, r.id)}
                         onClick={(e) => e.stopPropagation()}
                         onInput={(e) => {
                           debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
@@ -1914,12 +1929,12 @@ export function AnalysisStockPanel() {
                 const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
                 window.dispatchEvent(new Event("memo-updated"));
 
-                // ツールバー位置を保存してからポップアップ表示
+                // ツールバーのすぐ下（選択範囲の近く）にポップアップ表示
                 setMemoPopup({
                   content: updatedSheet?.content || "",
                   sheetName: updatedSheet?.name || "メモ",
-                  x: floatingToolbar.x + 40,  // ツールバーより少し右
-                  y: floatingToolbar.y - 10,  // ツールバーとほぼ同じ高さ
+                  x: floatingToolbar.x - 20,  // ツールバー中央より少し左に揃える
+                  y: floatingToolbar.y - 48,  // ツールバーの少し上（ツールバー自体がtop-100%なので選択範囲の直上）
                 });
               }
               setFloatingToolbar(null);
@@ -1946,45 +1961,104 @@ export function AnalysisStockPanel() {
       {memoPopup && (
         <div
           data-memo-popup="true"
-          className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+          className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col"
           style={{
-            left: memoPopup.x,
+            left: Math.min(memoPopup.x, window.innerWidth - memoPopupSize.w - 10),
             top: memoPopup.y,
             transform: "translate(0, -100%)",
-            width: "200px",
-            maxHeight: "160px",
+            width: `${memoPopupSize.w}px`,
+            height: `${memoPopupSize.h}px`,
           }}
         >
-          <div className="flex items-center justify-between px-3 py-1.5 bg-[#E6F1FB] border-b border-[#B5D4F4]">
-            <div className="flex items-center gap-1 text-xs font-medium text-[#185FA5]">
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-shrink-0">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-[#185FA5]">
               <span>📝</span>
               <span>{memoPopup.sheetName}</span>
-              <span className="text-[10px] text-[#378ADD] bg-white px-1.5 py-0.5 rounded-full">追記</span>
+              <span className="text-[10px] text-[#378ADD] bg-white px-1.5 py-0.5 rounded-full">追記済み</span>
             </div>
-            <button
-              onClick={() => setMemoPopup(null)}
-              className="text-gray-400 hover:text-gray-600 text-xs"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-1">
+              {/* サイズ設定ボタン */}
+              <button
+                onClick={() => setShowMemoSizeSettings((v) => !v)}
+                className="text-gray-400 hover:text-[#378ADD] transition-colors text-xs px-1"
+                title="サイズ設定"
+              >
+                ⚙
+              </button>
+              <button
+                onClick={() => setMemoPopup(null)}
+                className="text-gray-400 hover:text-gray-600 text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
           </div>
-          <div
-            className="p-2.5 text-xs text-gray-600 leading-relaxed overflow-y-auto"
-            style={{ maxHeight: "140px" }}
-          >
+
+          {/* サイズ設定パネル（インライン） */}
+          {showMemoSizeSettings && (
+            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0 text-xs text-gray-600 space-y-1.5">
+              <div className="font-medium text-gray-700 text-[11px]">📐 メモ欄のサイズ</div>
+              <div className="flex items-center gap-2">
+                <span className="w-12 text-[10px] text-gray-500">幅</span>
+                <input
+                  type="range" min={200} max={600} step={20}
+                  value={memoPopupSize.w}
+                  onChange={(e) => saveMemoPopupSize({ ...memoPopupSize, w: Number(e.target.value) })}
+                  className="flex-1 accent-[#378ADD]"
+                />
+                <span className="w-10 text-right text-[10px] text-gray-500">{memoPopupSize.w}px</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-12 text-[10px] text-gray-500">高さ</span>
+                <input
+                  type="range" min={160} max={600} step={20}
+                  value={memoPopupSize.h}
+                  onChange={(e) => saveMemoPopupSize({ ...memoPopupSize, h: Number(e.target.value) })}
+                  className="flex-1 accent-[#378ADD]"
+                />
+                <span className="w-10 text-right text-[10px] text-gray-500">{memoPopupSize.h}px</span>
+              </div>
+              <div className="flex gap-1.5 pt-0.5">
+                {[
+                  { label: "S", w: 240, h: 200 },
+                  { label: "M", w: 340, h: 280 },
+                  { label: "L", w: 440, h: 360 },
+                  { label: "XL", w: 540, h: 460 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => saveMemoPopupSize({ w: preset.w, h: preset.h })}
+                    className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                      memoPopupSize.w === preset.w && memoPopupSize.h === preset.h
+                        ? "bg-[#378ADD] text-white border-[#378ADD]"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-[#378ADD]"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* コンテンツ */}
+          <div className="p-3 text-xs text-gray-600 leading-relaxed overflow-y-auto flex-1">
             <div className="whitespace-pre-wrap break-words">
-              {memoPopup.content.length > 150
-                ? "..." + memoPopup.content.slice(-150)
+              {memoPopup.content.length > 400
+                ? "..." + memoPopup.content.slice(-400)
                 : memoPopup.content}
             </div>
           </div>
-          <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 bg-gray-50">
+
+          {/* フッター */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-gray-50 flex-shrink-0">
             <span className="text-[10px] text-gray-400">
               {memoPopup.content.length}文字
             </span>
             <button
               onClick={() => { setMemoPopup(null); setMainTab("memo"); }}
-              className="text-[10px] text-[#378ADD] hover:underline"
+              className="text-[10px] text-[#378ADD] hover:underline font-medium"
             >
               メモ帳を開く →
             </button>
