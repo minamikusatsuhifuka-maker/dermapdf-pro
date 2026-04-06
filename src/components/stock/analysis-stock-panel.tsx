@@ -628,9 +628,9 @@ export function AnalysisStockPanel() {
   const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>(() => {
     try {
       const saved = localStorage.getItem("dermapdf_memo_popup_size");
-      return saved ? JSON.parse(saved) : { w: 340, h: 280 };
+      return saved ? JSON.parse(saved) : { w: 560, h: 460 };
     } catch {
-      return { w: 340, h: 280 };
+      return { w: 560, h: 460 };
     }
   });
   const [showMemoSizeSettings, setShowMemoSizeSettings] = useState(false);
@@ -1950,8 +1950,8 @@ export function AnalysisStockPanel() {
                   y: popupY,
                 });
               }
-              setFloatingToolbar(null);
-              window.getSelection()?.removeAllRanges();
+              // ツールバーはそのまま維持（消さない）
+              // 選択範囲も維持
             }}
             className="flex items-center gap-1 px-2 h-6 bg-[#378ADD] hover:bg-[#185FA5] rounded-lg text-[10px] font-medium ml-0.5"
           >
@@ -2034,7 +2034,7 @@ export function AnalysisStockPanel() {
               <div className="flex gap-1.5 pt-0.5">
                 {[
                   { label: "S", w: 240, h: 200 },
-                  { label: "M", w: 340, h: 280 },
+                  { label: "M", w: 560, h: 460 },
                   { label: "L", w: 440, h: 360 },
                   { label: "XL", w: 540, h: 460 },
                 ].map((preset) => (
