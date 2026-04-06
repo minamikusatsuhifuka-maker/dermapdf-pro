@@ -32,7 +32,7 @@ export function appendToMemoSheet(sheetId: string, text: string): MemoSheet[] {
   const sheets = loadMemoSheets();
   const updated = sheets.map((s) => {
     if (s.id === sheetId) {
-      const newContent = s.content ? s.content + "\n\n" + text : text;
+      const newContent = s.content ? s.content + "\n" + text : text;
       return { ...s, content: newContent, updatedAt: new Date().toISOString() };
     }
     return s;

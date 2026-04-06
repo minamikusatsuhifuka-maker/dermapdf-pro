@@ -720,9 +720,18 @@ export function AnalysisStockPanel() {
       // 最初の行の矩形を使う（選択開始位置）
       const firstRect = rects[0];
 
+      // ツールバーの幅は約300px — 画面端で切れないよう補正
+      const toolbarWidth = 320;
+      const viewportWidth = window.innerWidth;
+      let toolbarX = firstRect.left + firstRect.width / 2;
+      // 左端チェック
+      if (toolbarX - toolbarWidth / 2 < 10) toolbarX = toolbarWidth / 2 + 10;
+      // 右端チェック
+      if (toolbarX + toolbarWidth / 2 > viewportWidth - 10) toolbarX = viewportWidth - toolbarWidth / 2 - 10;
+
       setFloatingToolbar({
-        x: firstRect.left + firstRect.width / 2,
-        y: firstRect.top, // ビューポート上端からの距離（スクロール込み）
+        x: toolbarX,
+        y: firstRect.top,
         height: firstRect.height,
         text,
         recordId,
@@ -1852,7 +1861,7 @@ export function AnalysisStockPanel() {
           style={{
             left: `${floatingToolbar.x}px`,
             top: `${floatingToolbar.y}px`,
-            transform: "translate(-50%, calc(-100% - 6px))",
+            transform: "translate(-50%, calc(-100% - 2px))",
           }}
           onMouseDown={(e) => e.preventDefault()}
         >
@@ -1949,12 +1958,13 @@ export function AnalysisStockPanel() {
       {/* メモプレビューポップアップ（選択範囲の近く、ツールバーの下に表示） */}
       {memoPopup && (
         <div
-          className="fixed z-[9998] w-60 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+          className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
           style={{
-            left: `${memoPopup.x}px`,
-            top: `${memoPopup.y}px`,
-            transform: "translate(-50%, 6px)", // 選択範囲の下6px
-            maxHeight: "180px",
+            left: `${memoPopup.x + 20}px`,   // 選択範囲の右寄り
+            top: `${memoPopup.y - 10}px`,    // 選択範囲の上端付近
+            transform: "translate(0, -100%)", // 上方向に表示
+            maxHeight: "160px",
+            width: "220px",                   // コンパクトに
           }}
         >
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#E6F1FB] border-b border-[#B5D4F4]">
