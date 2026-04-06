@@ -625,7 +625,8 @@ export function AnalysisStockPanel() {
   } | null>(null);
 
   // ドラッグ移動用state
-  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
+  const [toolbarDragged, setToolbarDragged] = useState(false); // ドラッグ済みフラグ（transform切替用）
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [memoPopupPos, setMemoPopupPos] = useState<{ x: number; y: number } | null>(() => {
     try {
       const saved = localStorage.getItem("dermapdf_memo_popup_pos");
@@ -757,7 +758,7 @@ export function AnalysisStockPanel() {
         if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
         // rect.top / rect.bottom はviewport座標（fixed配置にそのまま使える）
-        setToolbarPos(null); // テキスト選択時はドラッグ位置をリセット
+        setToolbarDragged(false); // テキスト選択でtransformモードに戻す
         setFloatingToolbar({ x: finalX, y: rect.top, height: rect.height, text, recordId });
       });
     };
@@ -819,17 +820,24 @@ export function AnalysisStockPanel() {
     };
   }, []);
 
-  const startDrag = useCallback((type: "toolbar" | "memo", e: React.MouseEvent, elRect: DOMRect) => {
+  const startDrag = useCallback((type: "toolbar" | "memo", e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // ドラッグ対象要素の実際の画面位置を getBoundingClientRect() で取得
+    const el = (type === "toolbar"
+      ? document.querySelector("[data-floating-toolbar]")
+      : document.querySelector("[data-memo-popup]")) as HTMLElement | null;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
     isDraggingRef.current = type;
     // 要素内のクリック位置（左上からの相対座標）を保存
-    dragOffsetRef.current = { x: e.clientX - elRect.left, y: e.clientY - elRect.top };
-    // ドラッグ開始時に実際のレンダリング位置をセット（transform解除によるジャンプ防止）
+    dragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    // 実際のレンダリング位置をセット（transform を外して自由配置モードに切り替え）
     if (type === "toolbar") {
-      setToolbarPos({ x: elRect.left, y: elRect.top });
+      setToolbarPos({ x: rect.left, y: rect.top });
+      setToolbarDragged(true);
     } else {
-      setMemoPopupPos({ x: elRect.left, y: elRect.top });
+      setMemoPopupPos({ x: rect.left, y: rect.top });
     }
     document.body.style.userSelect = "none";
     document.body.style.cursor = "grabbing";
@@ -838,7 +846,7 @@ export function AnalysisStockPanel() {
   // ボタンからツールバーを表示（テキスト未選択でも可）
   const showToolbarForCard = useCallback((recordId: string, buttonEl: HTMLElement) => {
     const rect = buttonEl.getBoundingClientRect();
-    setToolbarPos(null); // ドラッグ位置リセット
+    setToolbarDragged(false); // transformモードに戻す
     setFloatingToolbar({
       x: rect.left + rect.width / 2,
       y: rect.top,
@@ -876,7 +884,7 @@ export function AnalysisStockPanel() {
       if (e.key === "Escape") {
         setFloatingToolbar(null);
         setMemoPopup(null);
-        setToolbarPos(null);
+        setToolbarDragged(false);
         return;
       }
       // mキーでツールバー+メモ同時表示（input/textarea/contenteditable以外で）
@@ -900,7 +908,7 @@ export function AnalysisStockPanel() {
         let fx = rect.left + rect.width / 2;
         if (fx - toolbarW / 2 < 10) fx = toolbarW / 2 + 10;
         if (fx + toolbarW / 2 > window.innerWidth - 10) fx = window.innerWidth - toolbarW / 2 - 10;
-        setToolbarPos(null);
+        setToolbarDragged(false);
         setFloatingToolbar({ x: fx, y: rect.top, height: rect.height, text, recordId });
         // メモ欄も表示
         const sheets = loadMemoSheets();
@@ -2057,9 +2065,10 @@ export function AnalysisStockPanel() {
         <div
           data-floating-toolbar="true"
           className="fixed z-[9999] flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs select-none"
-          style={toolbarPos ? {
+          style={toolbarDragged ? {
             left: toolbarPos.x,
             top: toolbarPos.y,
+            transform: "none",
           } : {
             left: floatingToolbar.x,
             top: floatingToolbar.y,
@@ -2071,8 +2080,7 @@ export function AnalysisStockPanel() {
           <span
             className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white px-0.5 select-none"
             onMouseDown={(e) => {
-              const el = (e.currentTarget.parentElement as HTMLElement);
-              startDrag("toolbar", e, el.getBoundingClientRect());
+              startDrag("toolbar", e);
             }}
             title="ドラッグで移動"
           >
@@ -2190,8 +2198,7 @@ export function AnalysisStockPanel() {
           <div
             className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-shrink-0 cursor-grab active:cursor-grabbing"
             onMouseDown={(e) => {
-              const el = e.currentTarget.parentElement as HTMLElement;
-              startDrag("memo", e, el.getBoundingClientRect());
+              startDrag("memo", e);
             }}
           >
             <div className="flex items-center gap-1.5 text-xs font-medium text-[#185FA5]">
