@@ -620,6 +620,8 @@ export function AnalysisStockPanel() {
   const [memoPopup, setMemoPopup] = useState<{
     content: string;
     sheetName: string;
+    x: number;
+    y: number;
   } | null>(null);
 
   // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
@@ -713,9 +715,10 @@ export function AnalysisStockPanel() {
       }
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      // 選択範囲上端の5px上にツールバーを表示
       setFloatingToolbar({
         x: rect.left + rect.width / 2,
-        y: rect.top - 4,
+        y: rect.top - 5,
         text,
         recordId,
       });
@@ -1909,10 +1912,14 @@ export function AnalysisStockPanel() {
                 const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
                 window.dispatchEvent(new Event("memo-updated"));
 
-                // タブ切り替えせずポップアップ表示
+                // ツールバー位置を保存してからポップアップ表示
+                const tbX = floatingToolbar.x;
+                const tbY = floatingToolbar.y;
                 setMemoPopup({
                   content: updatedSheet?.content || "",
                   sheetName: updatedSheet?.name || "メモ",
+                  x: tbX,
+                  y: tbY,
                 });
                 setTimeout(() => setMemoPopup(null), 4000);
               }
@@ -1936,36 +1943,41 @@ export function AnalysisStockPanel() {
         </div>
       )}
 
-      {/* メモプレビューポップアップ */}
+      {/* メモプレビューポップアップ（選択範囲の近く、ツールバーの下に表示） */}
       {memoPopup && (
         <div
-          className="fixed bottom-6 right-6 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
-          style={{ maxHeight: "240px" }}
+          className="fixed z-50 w-64 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+          style={{
+            left: memoPopup.x,
+            top: memoPopup.y + 8,
+            transform: "translate(-50%, 0)",
+            maxHeight: "200px",
+          }}
         >
-          <div className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4]">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-[#185FA5]">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-[#E6F1FB] border-b border-[#B5D4F4]">
+            <div className="flex items-center gap-1 text-xs font-medium text-[#185FA5]">
               <span>📝</span>
               <span>{memoPopup.sheetName}</span>
-              <span className="text-[10px] text-[#378ADD] bg-white px-1.5 py-0.5 rounded-full">追記しました</span>
+              <span className="text-[10px] text-[#378ADD] bg-white px-1.5 py-0.5 rounded-full">追記</span>
             </div>
             <button
               onClick={() => setMemoPopup(null)}
-              className="text-gray-400 hover:text-gray-600 text-sm"
+              className="text-gray-400 hover:text-gray-600 text-xs"
             >
               ✕
             </button>
           </div>
           <div
-            className="p-3 text-xs text-gray-600 leading-relaxed overflow-y-auto"
-            style={{ maxHeight: "180px" }}
+            className="p-2.5 text-xs text-gray-600 leading-relaxed overflow-y-auto"
+            style={{ maxHeight: "140px" }}
           >
             <div className="whitespace-pre-wrap break-words">
-              {memoPopup.content.length > 200
-                ? "..." + memoPopup.content.slice(-200)
+              {memoPopup.content.length > 150
+                ? "..." + memoPopup.content.slice(-150)
                 : memoPopup.content}
             </div>
           </div>
-          <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-gray-50">
+          <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 bg-gray-50">
             <span className="text-[10px] text-gray-400">
               {memoPopup.content.length}文字
             </span>
