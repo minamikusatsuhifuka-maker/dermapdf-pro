@@ -685,37 +685,41 @@ export function AnalysisStockPanel() {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
   };
 
-  // テキスト選択を検知してフローティングツールバーを表示
-  const handleSelectionChange = useCallback(() => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.toString().trim().length < 2) {
-      setFloatingToolbar(null);
-      return;
-    }
-    const text = selection.toString().trim();
-    const range = selection.getRangeAt(0);
-    const container = range.commonAncestorContainer;
-    const cardContent =
-      (container as Element).closest?.("[data-stock-content]") ||
-      (container.parentElement as Element)?.closest?.("[data-stock-content]");
-    if (!cardContent) {
-      setFloatingToolbar(null);
-      return;
-    }
-    const recordId = cardContent.getAttribute("data-record-id") || "";
-    const rect = range.getBoundingClientRect();
-    setFloatingToolbar({
-      x: rect.left + rect.width / 2,
-      y: rect.top + window.scrollY - 8,
-      text,
-      recordId,
-    });
+  // 展開コンテンツ上の mouseup でフローティングツールバーを表示
+  const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
+    e.stopPropagation();
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        setFloatingToolbar(null);
+        return;
+      }
+      const text = selection.toString().trim();
+      if (text.length < 2) {
+        setFloatingToolbar(null);
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setFloatingToolbar({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+        text,
+        recordId,
+      });
+    }, 10);
   }, []);
 
+  // ツールバー外のクリックで閉じる
   useEffect(() => {
-    document.addEventListener("selectionchange", handleSelectionChange);
-    return () => document.removeEventListener("selectionchange", handleSelectionChange);
-  }, [handleSelectionChange]);
+    const hide = (e: MouseEvent) => {
+      const toolbar = document.querySelector("[data-floating-toolbar]");
+      if (toolbar && toolbar.contains(e.target as Node)) return;
+      setFloatingToolbar(null);
+    };
+    document.addEventListener("mousedown", hide);
+    return () => document.removeEventListener("mousedown", hide);
+  }, []);
 
   // 書式適用後にコンテンツを保存
   const applyFormat = useCallback((command: string, value?: string) => {
@@ -1665,6 +1669,8 @@ export function AnalysisStockPanel() {
                         data-record-id={r.id}
                         contentEditable
                         suppressContentEditableWarning
+                        onMouseUp={(e) => handleContentMouseUp(e, r.id)}
+                        onClick={(e) => e.stopPropagation()}
                         onInput={(e) => {
                           debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
                         }}
@@ -1677,6 +1683,8 @@ export function AnalysisStockPanel() {
                           fontSize: `${fontSize}px`,
                           lineHeight: "1.7",
                           wordBreak: "break-word",
+                          userSelect: "text",
+                          WebkitUserSelect: "text",
                         }}
                       />
                       {r.updatedAt && (
@@ -1763,12 +1771,12 @@ export function AnalysisStockPanel() {
       {/* フローティングツールバー */}
       {floatingToolbar && (
         <div
-          className="fixed z-50 flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs"
+          data-floating-toolbar="true"
+          className="fixed z-[9999] flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs select-none"
           style={{
             left: floatingToolbar.x,
             top: floatingToolbar.y,
             transform: "translate(-50%, -100%)",
-            pointerEvents: "auto",
           }}
           onMouseDown={(e) => e.preventDefault()}
         >
