@@ -613,6 +613,9 @@ export function AnalysisStockPanel() {
     x: number; y: number; text: string; recordId: string;
   } | null>(null);
 
+  // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
+  const contentRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
   const [folderFontSize, setFolderFontSize] = useState(12);
@@ -703,7 +706,7 @@ export function AnalysisStockPanel() {
       const rect = range.getBoundingClientRect();
       setFloatingToolbar({
         x: rect.left + rect.width / 2,
-        y: rect.top - 8,
+        y: rect.top - 4,
         text,
         recordId,
       });
@@ -1665,6 +1668,12 @@ export function AnalysisStockPanel() {
 
                     <div>
                       <div
+                        ref={(el) => {
+                          if (el && !contentRefs.current[r.id]) {
+                            contentRefs.current[r.id] = el;
+                            el.innerHTML = r.content || "";
+                          }
+                        }}
                         data-stock-content="true"
                         data-record-id={r.id}
                         contentEditable
@@ -1674,7 +1683,6 @@ export function AnalysisStockPanel() {
                         onInput={(e) => {
                           debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
                         }}
-                        dangerouslySetInnerHTML={{ __html: r.content }}
                         className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700 outline-none cursor-text focus:border-[#B5D4F4] focus:ring-1 focus:ring-[#B5D4F4]"
                         style={{
                           height: `${contentHeights[r.id] || globalHeight}px`,
