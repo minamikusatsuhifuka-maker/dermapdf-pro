@@ -702,6 +702,11 @@ export function AnalysisStockPanel() {
   // 展開コンテンツ上の mouseup でフローティングツールバーを表示
   const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
     e.stopPropagation();
+
+    // マウスを離した位置（ビューポート座標）を保存
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
     setTimeout(() => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
@@ -713,26 +718,18 @@ export function AnalysisStockPanel() {
         setFloatingToolbar(null);
         return;
       }
-      const range = selection.getRangeAt(0);
-      const rects = range.getClientRects(); // 複数行選択に対応
-      if (!rects.length) return;
 
-      // 最初の行の矩形を使う（選択開始位置）
-      const firstRect = rects[0];
-
-      // ツールバーの幅は約300px — 画面端で切れないよう補正
-      const toolbarWidth = 320;
-      const viewportWidth = window.innerWidth;
-      let toolbarX = firstRect.left + firstRect.width / 2;
-      // 左端チェック
-      if (toolbarX - toolbarWidth / 2 < 10) toolbarX = toolbarWidth / 2 + 10;
-      // 右端チェック
-      if (toolbarX + toolbarWidth / 2 > viewportWidth - 10) toolbarX = viewportWidth - toolbarWidth / 2 - 10;
+      // ツールバーをマウスを離した位置の上に表示
+      // 画面端対策
+      const toolbarW = 320;
+      let x = mouseX;
+      if (x - toolbarW / 2 < 10) x = toolbarW / 2 + 10;
+      if (x + toolbarW / 2 > window.innerWidth - 10) x = window.innerWidth - toolbarW / 2 - 10;
 
       setFloatingToolbar({
-        x: toolbarX,
-        y: firstRect.top,
-        height: firstRect.height,
+        x,
+        y: mouseY, // マウスを離した位置のY
+        height: 20,
         text,
         recordId,
       });
@@ -1861,7 +1858,7 @@ export function AnalysisStockPanel() {
           style={{
             left: `${floatingToolbar.x}px`,
             top: `${floatingToolbar.y}px`,
-            transform: "translate(-50%, calc(-100% - 2px))",
+            transform: "translate(-50%, calc(-100% - 8px))",
           }}
           onMouseDown={(e) => e.preventDefault()}
         >
@@ -1930,8 +1927,8 @@ export function AnalysisStockPanel() {
                 setMemoPopup({
                   content: updatedSheet?.content || "",
                   sheetName: updatedSheet?.name || "メモ",
-                  x: floatingToolbar.x,
-                  y: floatingToolbar.y + floatingToolbar.height, // 選択行の下端
+                  x: floatingToolbar.x + 40,  // ツールバーより少し右
+                  y: floatingToolbar.y - 10,  // ツールバーとほぼ同じ高さ
                 });
                 setTimeout(() => setMemoPopup(null), 4000);
               }
@@ -1960,11 +1957,11 @@ export function AnalysisStockPanel() {
         <div
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
           style={{
-            left: `${memoPopup.x + 20}px`,   // 選択範囲の右寄り
-            top: `${memoPopup.y - 10}px`,    // 選択範囲の上端付近
+            left: `${memoPopup.x}px`,
+            top: `${memoPopup.y}px`,
             transform: "translate(0, -100%)", // 上方向に表示
+            width: "200px",
             maxHeight: "160px",
-            width: "220px",                   // コンパクトに
           }}
         >
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#E6F1FB] border-b border-[#B5D4F4]">
