@@ -636,6 +636,9 @@ export function AnalysisStockPanel() {
   });
   const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const resizingRef = useRef(false);
+  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; w: number; h: number }>({ mouseX: 0, mouseY: 0, w: 0, h: 0 });
+
   const pendingDragRef = useRef<{
     type: "toolbar" | "memo";
     startX: number; startY: number;
@@ -800,6 +803,17 @@ export function AnalysisStockPanel() {
   useEffect(() => {
     const THRESH = 5;
     const onMouseMove = (e: MouseEvent) => {
+      // リサイズ中
+      if (resizingRef.current) {
+        e.preventDefault();
+        const dx = e.clientX - resizeStartRef.current.mouseX;
+        const dy = e.clientY - resizeStartRef.current.mouseY;
+        const newW = Math.max(200, resizeStartRef.current.w + dx);
+        const newH = Math.max(160, resizeStartRef.current.h + dy);
+        saveMemoPopupSize({ w: Math.round(newW), h: Math.round(newH) });
+        return;
+      }
+
       // pending状態: 閾値超えたら本ドラッグ開始
       if (pendingDragRef.current && !isDraggingRef.current) {
         const dx = Math.abs(e.clientX - pendingDragRef.current.startX);
@@ -833,6 +847,11 @@ export function AnalysisStockPanel() {
     };
     const onMouseUp = () => {
       pendingDragRef.current = null;
+      if (resizingRef.current) {
+        resizingRef.current = false;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      }
       if (isDraggingRef.current) {
         isDraggingRef.current = null;
         document.body.style.userSelect = "";
@@ -2192,7 +2211,7 @@ export function AnalysisStockPanel() {
       {memoPopup && (
         <div
           data-memo-popup="true"
-          className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col"
+          className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col relative"
           style={{
             left: memoPopupPos?.x ?? memoPopup.x,
             top: memoPopupPos?.y ?? memoPopup.y,
@@ -2303,6 +2322,30 @@ export function AnalysisStockPanel() {
             >
               メモ帳を開く →
             </button>
+          </div>
+
+          {/* 右下リサイズハンドル */}
+          <div
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 flex items-end justify-end pr-0.5 pb-0.5"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              resizingRef.current = true;
+              resizeStartRef.current = {
+                mouseX: e.clientX,
+                mouseY: e.clientY,
+                w: memoPopupSize.w,
+                h: memoPopupSize.h,
+              };
+              document.body.style.userSelect = "none";
+              document.body.style.cursor = "nwse-resize";
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" className="text-gray-300">
+              <line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="5" y1="10" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="8" y1="10" x2="10" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
           </div>
         </div>
       )}
