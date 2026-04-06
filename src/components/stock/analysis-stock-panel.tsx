@@ -2295,6 +2295,38 @@ export function AnalysisStockPanel() {
         </div>
       )}
 
+      {/* 右下固定FAB：メモ欄を開くボタン */}
+      {mainTab === "stock" && (
+        <button
+          onClick={() => {
+            if (memoPopup) {
+              setMemoPopup(null);
+            } else {
+              const sheets = loadMemoSheets();
+              const activeSheet = sheets[0];
+              if (!activeSheet) return;
+              const pw = memoPopupSize.w;
+              const ph = memoPopupSize.h;
+              // 右下から計算（viewportに収まるよう）
+              const px = Math.max(10, window.innerWidth - pw - 20);
+              const py = Math.max(10, window.innerHeight - ph - 80);
+              setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
+            }
+          }}
+          className="fixed bottom-5 right-5 z-[9990] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl text-white text-sm font-medium transition-all hover:scale-105 active:scale-95"
+          style={{ background: memoPopup ? "#1D9E75" : "#378ADD" }}
+          title="メモ帳を開く / 閉じる"
+        >
+          <span className="text-base">📝</span>
+          <span>{memoPopup ? "メモを閉じる" : "メモを開く"}</span>
+          {!memoPopup && (
+            <span className="bg-white/25 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+              M
+            </span>
+          )}
+        </button>
+      )}
+
       {/* パスワード確認モーダル */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
