@@ -716,32 +716,46 @@ export function AnalysisStockPanel() {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
   };
 
-  // 展開コンテンツ上の mouseup でフローティングツールバーを表示
-  const handleContentMouseUp = useCallback((e: React.MouseEvent, recordId: string) => {
-    e.stopPropagation();
-    // ※ e.preventDefault() は呼ばない — 呼ぶと選択が確定せずrectが0になる
+  // native document mouseup で選択範囲を取得してツールバー表示
+  // React onMouseUp / SyntheticEvent は使わない（スクロールコンテナ内でrectがズレるため）
+  useEffect(() => {
+    const onMouseUp = () => {
+      // rAF で描画・スクロール確定後にrectを取得
+      requestAnimationFrame(() => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) return;
+        const text = selection.toString().trim();
+        if (text.length < 2) return;
 
-    // setTimeout で選択確定を待ってからrectを取得
-    setTimeout(() => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) return;
-      const text = selection.toString().trim();
-      if (text.length < 2) return;
+        // data-stock-content 内の選択かチェック
+        const anchor = selection.anchorNode;
+        const stockEl = (anchor as Element)?.closest?.("[data-stock-content]")
+          ?? (anchor?.parentElement as Element)?.closest?.("[data-stock-content]");
+        if (!stockEl) return;
+        const recordId = stockEl.getAttribute("data-record-id") ?? "";
 
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
 
-      // rect が無効（選択が取得できなかった場合）はスキップ
-      if (rect.width === 0 && rect.height === 0) return;
+        // rect が無効な場合はスキップ
+        if (!rect || (rect.width === 0 && rect.height === 0)) return;
 
-      const toolbarW = 320;
-      let finalX = rect.left + rect.width / 2;
-      if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
-      if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
+        const toolbarW = 320;
+        let finalX = rect.left + rect.width / 2;
+        if (finalX - toolbarW / 2 < 10) finalX = toolbarW / 2 + 10;
+        if (finalX + toolbarW / 2 > window.innerWidth - 10) finalX = window.innerWidth - toolbarW / 2 - 10;
 
-      setFloatingToolbar({ x: finalX, y: rect.top, height: rect.height, text, recordId });
-    }, 10);
+        // rect.top / rect.bottom はviewport座標（fixed配置にそのまま使える）
+        setFloatingToolbar({ x: finalX, y: rect.top, height: rect.height, text, recordId });
+      });
+    };
+
+    document.addEventListener("mouseup", onMouseUp);
+    return () => document.removeEventListener("mouseup", onMouseUp);
   }, []);
+
+  // onMouseUp prop 用ダミー（native addEventListener に移行済み）
+  const handleContentMouseUp = useCallback((_e: React.MouseEvent, _recordId: string) => {}, []);
 
   // メモポップアップ更新時に最下部へスクロール
   useEffect(() => {
@@ -1943,9 +1957,12 @@ export function AnalysisStockPanel() {
                 // ツールバーの高さ約30px + gap 8px = 38px 分上にある
                 const popupW = memoPopupSize.w;
                 const popupH = memoPopupSize.h;
-                let popupX = floatingToolbar.x - popupW / 2; // 中央揃え
-                let popupY = floatingToolbar.y - popupH - 46; // ツールバーの上
-                // 上に入らない場合は選択範囲の下に表示
+                // ツールバーは y=rect.top, transform: -100%-8px → 上端は rect.top - toolbarH - 8
+                // ポップアップはツールバーのさらに上。ツールバー高さは約36px
+                const toolbarH = 36;
+                let popupX = floatingToolbar.x - popupW / 2; // 選択範囲中央揃え
+                let popupY = floatingToolbar.y - toolbarH - 8 - popupH - 8; // ツールバー上端のさらに上
+                // 上に収まらない場合は選択範囲の下にフォールバック
                 if (popupY < 10) {
                   popupY = floatingToolbar.y + (floatingToolbar.height || 20) + 8;
                 }
