@@ -1929,12 +1929,20 @@ export function AnalysisStockPanel() {
                 const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
                 window.dispatchEvent(new Event("memo-updated"));
 
-                // ツールバーのすぐ下（選択範囲の近く）にポップアップ表示
+                // メモポップアップをツールバー位置（選択範囲の上）の近くに表示
+                // ツールバーは y - (ツールバー高さ+8px) に出るので、その上に重ねる
+                // 画面内に収まるよう top を clamp する
+                const popupH = memoPopupSize.h;
+                const popupW = memoPopupSize.w;
+                const rawTop = floatingToolbar.y - 48; // 選択範囲の上端より少し上
+                const clampedTop = Math.max(10, Math.min(rawTop, window.innerHeight - popupH - 10));
+                const rawLeft = floatingToolbar.x - 20;
+                const clampedLeft = Math.max(10, Math.min(rawLeft, window.innerWidth - popupW - 10));
                 setMemoPopup({
                   content: updatedSheet?.content || "",
                   sheetName: updatedSheet?.name || "メモ",
-                  x: floatingToolbar.x - 20,  // ツールバー中央より少し左に揃える
-                  y: floatingToolbar.y - 48,  // ツールバーの少し上（ツールバー自体がtop-100%なので選択範囲の直上）
+                  x: clampedLeft,
+                  y: clampedTop,
                 });
               }
               setFloatingToolbar(null);
@@ -1963,9 +1971,8 @@ export function AnalysisStockPanel() {
           data-memo-popup="true"
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col"
           style={{
-            left: Math.min(memoPopup.x, window.innerWidth - memoPopupSize.w - 10),
+            left: memoPopup.x,
             top: memoPopup.y,
-            transform: "translate(0, -100%)",
             width: `${memoPopupSize.w}px`,
             height: `${memoPopupSize.h}px`,
           }}
