@@ -28,6 +28,7 @@ import {
   getTagsWithCount,
   renameFolder,
   toggleLock,
+  toggleFavorite,
   duplicateAnalysis,
   bulkToggleLock,
   hasDeletePassword,
@@ -53,6 +54,7 @@ const selectClass =
 
 const DEFAULT_FOLDERS = ["人材育成", "採用", "マニュアル", "リスク管理", "等級・評価", "経営戦略", "その他"];
 const LOCK_FOLDER = "🔒 ロック済み";
+const FAVORITE_FOLDER = "⭐ お気に入り";
 const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
 const FOLDER_ORDER_KEY = "dermapdf_folder_order";
 
@@ -1046,11 +1048,14 @@ export function AnalysisStockPanel() {
       }
     });
     counts[LOCK_FOLDER] = records.filter((r) => r.locked).length;
+    counts[FAVORITE_FOLDER] = records.filter((r) => r.favorite).length;
     return counts;
   }, [records]);
 
   // フォルダフィルタ + 検索フィルタ（サブフォルダも含む）
-  const folderFiltered = activeFolder === LOCK_FOLDER
+  const folderFiltered = activeFolder === FAVORITE_FOLDER
+    ? records.filter((r) => r.favorite)
+    : activeFolder === LOCK_FOLDER
     ? records.filter((r) => r.locked)
     : activeFolder
       ? records.filter((r) => r.folder === activeFolder || (r.folder || "").startsWith(activeFolder + "/"))
@@ -1465,6 +1470,24 @@ export function AnalysisStockPanel() {
               {folderCounts[LOCK_FOLDER] || 0}
             </span>
           </button>
+          <button
+            onClick={() => setActiveFolder(activeFolder === FAVORITE_FOLDER ? null : FAVORITE_FOLDER)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
+              activeFolder === FAVORITE_FOLDER
+                ? "bg-yellow-500 text-white"
+                : "bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100"
+            }`}
+            style={{ fontSize: `${folderFontSize}px` }}
+          >
+            <span>⭐ お気に入り</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeFolder === FAVORITE_FOLDER
+                ? "bg-white/20 text-white"
+                : "bg-yellow-200 text-yellow-800"
+            }`}>
+              {folderCounts[FAVORITE_FOLDER] || 0}
+            </span>
+          </button>
         </div>
 
         {/* 階層フォルダツリー */}
@@ -1848,6 +1871,21 @@ export function AnalysisStockPanel() {
                     title="PDFファイルでダウンロード"
                   >
                     <span className="text-xs font-bold">PDF</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(r.id);
+                      reload();
+                    }}
+                    className={`rounded p-1 transition-colors ${
+                      r.favorite
+                        ? "text-yellow-500 hover:text-yellow-600"
+                        : "text-gray-300 hover:text-yellow-500"
+                    }`}
+                    title={r.favorite ? "お気に入りを解除" : "お気に入りに追加"}
+                  >
+                    {r.favorite ? "★" : "☆"}
                   </button>
                   <button
                     onClick={(e) => {

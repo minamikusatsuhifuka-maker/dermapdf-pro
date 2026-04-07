@@ -11,6 +11,7 @@ export interface AnalysisRecord {
   updatedAt?: string;
   originalContent?: string;
   locked?: boolean;
+  favorite?: boolean;
 }
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
@@ -84,6 +85,16 @@ export function toggleLock(id: string): void {
   const idx = records.findIndex((r) => r.id === id);
   if (idx !== -1) {
     records[idx].locked = !records[idx].locked;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+export function toggleFavorite(id: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    records[idx].favorite = !records[idx].favorite;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
     window.dispatchEvent(new Event("analysisStockUpdated"));
   }
