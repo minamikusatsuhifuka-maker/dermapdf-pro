@@ -627,9 +627,8 @@ export function AnalysisStockPanel() {
   } | null>(null);
 
   // ドラッグ移動用state
-  const [toolbarDragged, setToolbarDragged] = useState(false); // ドラッグ済みフラグ（transform切替用）
+  const [toolbarDragged, setToolbarDragged] = useState(false);
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [memoPopupPos, setMemoPopupPos] = useState<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const resizingRef = useRef(false);
@@ -688,8 +687,6 @@ export function AnalysisStockPanel() {
   useEffect(() => {
     setIsMounted(true);
     try {
-      const pos = localStorage.getItem("dermapdf_memo_popup_pos");
-      if (pos) setMemoPopupPos(JSON.parse(pos));
       const size = localStorage.getItem("dermapdf_memo_popup_size");
       if (size) setMemoPopupSize(JSON.parse(size));
     } catch {}
@@ -825,11 +822,6 @@ export function AnalysisStockPanel() {
           const p = pendingDragRef.current;
           isDraggingRef.current = p.type;
           dragOffsetRef.current = { x: p.startX - p.elLeft, y: p.startY - p.elTop };
-          // 現在のマウス位置から逆算（ジャンプ防止）
-          const ix = e.clientX - dragOffsetRef.current.x;
-          const iy = e.clientY - dragOffsetRef.current.y;
-          if (p.type === "toolbar") { setToolbarPos({ x: ix, y: iy }); setToolbarDragged(true); }
-          else { setMemoPopupPos({ x: ix, y: iy }); }
           document.body.style.userSelect = "none";
           document.body.style.cursor = "grabbing";
           pendingDragRef.current = null;
@@ -842,10 +834,9 @@ export function AnalysisStockPanel() {
       const ny = e.clientY - dragOffsetRef.current.y;
       if (isDraggingRef.current === "toolbar") {
         setToolbarPos({ x: nx, y: ny });
+        setToolbarDragged(true);
       } else {
-        const pos = { x: nx, y: ny };
-        setMemoPopupPos(pos);
-        localStorage.setItem("dermapdf_memo_popup_pos", JSON.stringify(pos));
+        setMemoPopup(prev => prev ? { ...prev, x: nx, y: ny } : null);
       }
     };
     const onMouseUp = () => {
@@ -911,18 +902,13 @@ export function AnalysisStockPanel() {
     if (!activeSheet) return;
     const popupW = memoPopupSize.w;
     const popupH = memoPopupSize.h;
-    // 保存済み位置があればそちらを使う
-    if (memoPopupPos) {
-      setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: memoPopupPos.x, y: memoPopupPos.y });
-      return;
-    }
     const rect = buttonEl.getBoundingClientRect();
     let px = rect.left - popupW / 2;
     let py = rect.bottom + 8;
     px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
     py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
     setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
-  }, [memoPopup, memoPopupSize, memoPopupPos]);
+  }, [memoPopup, memoPopupSize]);
 
   // キーボードショートカット: m で同時表示、Escape で閉じる
   useEffect(() => {
@@ -963,22 +949,18 @@ export function AnalysisStockPanel() {
         if (activeSheet) {
           const popupW = memoPopupSize.w;
           const popupH = memoPopupSize.h;
-          if (memoPopupPos) {
-            setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: memoPopupPos.x, y: memoPopupPos.y });
-          } else {
-            let px = fx - popupW / 2;
-            let py = rect.top - 46 - popupH - 8;
-            if (py < 10) py = rect.bottom + 8;
-            px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
-            py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
-            setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
-          }
+          let px = fx - popupW / 2;
+          let py = rect.top - 46 - popupH - 8;
+          if (py < 10) py = rect.bottom + 8;
+          px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
+          py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
+          setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
         }
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [memoPopupSize, memoPopupPos]);
+  }, [memoPopupSize]);
 
   // 書式適用後にコンテンツを保存
   const applyFormat = useCallback((command: string, value?: string) => {
@@ -2117,10 +2099,9 @@ export function AnalysisStockPanel() {
             top: toolbarPos.y,
             cursor: "grab",
           } : {
-            // transform を使わず直接座標で配置（ドラッグ時の座標系統一のため）
-            // x = 中央揃えの left、y = 選択範囲上端 - ツールバー高さ(36px) - gap(8px)
-            left: floatingToolbar.x - 170,
-            top: floatingToolbar.y - 44,
+            left: floatingToolbar.x,
+            top: floatingToolbar.y,
+            transform: "translate(-50%, calc(-100% - 8px))",
             cursor: "grab",
           }}
           onMouseDown={(e) => {
@@ -2223,11 +2204,10 @@ export function AnalysisStockPanel() {
           data-memo-popup="true"
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col relative"
           style={{
-            left: memoPopupPos?.x ?? memoPopup.x,
-            top: memoPopupPos?.y ?? memoPopup.y,
+            left: memoPopup.x,
+            top: memoPopup.y,
             width: `${memoPopupSize.w}px`,
             height: `${memoPopupSize.h}px`,
-            cursor: "grab",
           }}
           onMouseDown={(e) => {
             const tag = (e.target as HTMLElement).tagName;
