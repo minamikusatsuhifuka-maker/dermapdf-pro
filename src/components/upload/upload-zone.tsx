@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -20,7 +20,10 @@ interface UploadZoneProps {
 export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [todayStr, setTodayStr] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setTodayStr(new Date().toLocaleDateString("ja-JP")); }, []);
 
   const inputMode = useAppStore((s) => s.inputMode);
   const inputText = useAppStore((s) => s.inputText);
@@ -204,7 +207,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
             {inputText.length > 0 ? (
               <span className="text-xs text-[#378ADD]">
                 ✏️ テキスト入力 ({inputText.length}文字){" "}
-                {new Date().toLocaleDateString("ja-JP")}
+                {todayStr}
               </span>
             ) : (
               <span />
