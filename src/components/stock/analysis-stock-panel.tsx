@@ -629,12 +629,7 @@ export function AnalysisStockPanel() {
   // ドラッグ移動用state
   const [toolbarDragged, setToolbarDragged] = useState(false); // ドラッグ済みフラグ（transform切替用）
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [memoPopupPos, setMemoPopupPos] = useState<{ x: number; y: number } | null>(() => {
-    try {
-      const saved = localStorage.getItem("dermapdf_memo_popup_pos");
-      return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
-  });
+  const [memoPopupPos, setMemoPopupPos] = useState<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const resizingRef = useRef(false);
@@ -647,14 +642,7 @@ export function AnalysisStockPanel() {
   } | null>(null);
 
   // メモポップアップサイズ（設定画面から変更可能、localStorageで永続化）
-  const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>(() => {
-    try {
-      const saved = localStorage.getItem("dermapdf_memo_popup_size");
-      return saved ? JSON.parse(saved) : { w: 560, h: 460 };
-    } catch {
-      return { w: 560, h: 460 };
-    }
-  });
+  const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>({ w: 560, h: 460 });
   const [showMemoSizeSettings, setShowMemoSizeSettings] = useState(false);
 
   const saveMemoPopupSize = useCallback((size: { w: number; h: number }) => {
@@ -697,7 +685,15 @@ export function AnalysisStockPanel() {
     setCustomFolders(merged);
   }, [loadCustomFolders]);
 
-  useEffect(() => { setIsMounted(true); }, []);
+  useEffect(() => {
+    setIsMounted(true);
+    try {
+      const pos = localStorage.getItem("dermapdf_memo_popup_pos");
+      if (pos) setMemoPopupPos(JSON.parse(pos));
+      const size = localStorage.getItem("dermapdf_memo_popup_size");
+      if (size) setMemoPopupSize(JSON.parse(size));
+    } catch {}
+  }, []);
 
   useEffect(() => {
     reload();
