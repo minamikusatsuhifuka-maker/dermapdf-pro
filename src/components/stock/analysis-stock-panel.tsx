@@ -1815,6 +1815,7 @@ export function AnalysisStockPanel() {
                     />
                   ) : (
                     <span className="flex-1 truncate text-sm font-medium text-gray-700">
+                      {r.favorite && <span className="text-sm mr-0.5" style={{ color: "#f59e0b" }}>★</span>}
                       {getDisplayTitle(r)}
                       <button
                         onClick={(e) => { e.stopPropagation(); setEditingId(r.id); }}
@@ -1876,7 +1877,7 @@ export function AnalysisStockPanel() {
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleFavorite(r.id);
-                      reload();
+                      setRecords(prev => prev.map(rec => rec.id === r.id ? { ...rec, favorite: !rec.favorite } : rec));
                     }}
                     className={`rounded p-1 transition-colors ${
                       r.favorite
