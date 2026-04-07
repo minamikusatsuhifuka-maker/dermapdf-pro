@@ -3,6 +3,19 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { loadMemoSheets, appendToMemoSheet, updateMemoSheet, type MemoSheet } from "@/lib/memo-storage";
 
+// PiP小窓内にトースト通知を表示
+function showToast(pw: Window, msg: string) {
+  const el = pw.document.createElement("div");
+  el.textContent = msg;
+  Object.assign(el.style, {
+    position: "fixed", bottom: "8px", left: "50%", transform: "translateX(-50%)",
+    background: "#1e40af", color: "#fff", padding: "4px 12px", borderRadius: "8px",
+    fontSize: "11px", zIndex: "9999", whiteSpace: "nowrap",
+  });
+  pw.document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+}
+
 // PiP小窓のHTML構造を生成
 function buildPipHTML(sheets: MemoSheet[]): string {
   const activeSheet = sheets[0];
@@ -121,7 +134,9 @@ export function PipMemoPanel() {
         const sheets = loadMemoSheets();
         const lines = sheets[0]?.content.split("\n").filter((l) => l.trim()) || [];
         if (lines[idx]) {
-          navigator.clipboard.writeText(lines[idx]);
+          window.navigator.clipboard.writeText(lines[idx])
+            .then(() => showToast(pw, "✅ コピー"))
+            .catch(() => {});
         }
       });
     });
@@ -167,19 +182,22 @@ export function PipMemoPanel() {
       pw.document.write(buildPipHTML(sheets));
       pw.document.close();
 
-      // ツールバーイベント
-      const exec = (cmd: string, val?: string) => pw.document.execCommand(cmd, false, val);
-      pw.document.getElementById("btn-bold")?.addEventListener("click", () => exec("bold"));
-      pw.document.getElementById("btn-italic")?.addEventListener("click", () => exec("italic"));
-      pw.document.getElementById("btn-underline")?.addEventListener("click", () => exec("underline"));
-      pw.document.getElementById("fc-red")?.addEventListener("click", () => exec("foreColor", "#ef4444"));
-      pw.document.getElementById("fc-blue")?.addEventListener("click", () => exec("foreColor", "#3b82f6"));
-      pw.document.getElementById("fc-green")?.addEventListener("click", () => exec("foreColor", "#22c55e"));
-      pw.document.getElementById("fc-orange")?.addEventListener("click", () => exec("foreColor", "#f59e0b"));
-      pw.document.getElementById("hl-yellow")?.addEventListener("click", () => exec("backColor", "#fef08a"));
-      pw.document.getElementById("hl-sky")?.addEventListener("click", () => exec("backColor", "#bae6fd"));
-      pw.document.getElementById("hl-pink")?.addEventListener("click", () => exec("backColor", "#fecdd3"));
-      pw.document.getElementById("btn-remove")?.addEventListener("click", () => exec("removeFormat"));
+      // ツールバーイベント（mousedown + preventDefault で選択範囲を保持）
+      const bindBtn = (id: string, cmd: string, val?: string) => {
+        const el = pw.document.getElementById(id);
+        if (el) el.onmousedown = (e) => { e.preventDefault(); pw.document.execCommand(cmd, false, val); };
+      };
+      bindBtn("btn-bold", "bold");
+      bindBtn("btn-italic", "italic");
+      bindBtn("btn-underline", "underline");
+      bindBtn("fc-red", "foreColor", "#ef4444");
+      bindBtn("fc-blue", "foreColor", "#3b82f6");
+      bindBtn("fc-green", "foreColor", "#22c55e");
+      bindBtn("fc-orange", "foreColor", "#f59e0b");
+      bindBtn("hl-yellow", "backColor", "#fef08a");
+      bindBtn("hl-sky", "backColor", "#bae6fd");
+      bindBtn("hl-pink", "backColor", "#fecdd3");
+      bindBtn("btn-remove", "removeFormat");
 
       // 全消去
       pw.document.getElementById("btn-clear-all")?.addEventListener("click", () => {
@@ -219,10 +237,22 @@ export function PipMemoPanel() {
         }
       });
 
-      // 全コピー
+      // 全コピー（メインウィンドウのclipboard APIを使用）
       pw.document.getElementById("btn-copy-all")?.addEventListener("click", () => {
         const s = loadMemoSheets();
-        if (s[0]) navigator.clipboard.writeText(s[0].content);
+        if (!s[0]) return;
+        const text = s[0].content;
+        window.navigator.clipboard.writeText(text)
+          .then(() => showToast(pw, "✅ コピーしました"))
+          .catch(() => {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            showToast(pw, "✅ コピーしました");
+          });
       });
 
       // メモアイテムイベント
