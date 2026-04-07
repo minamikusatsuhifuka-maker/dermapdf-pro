@@ -653,6 +653,7 @@ export function AnalysisStockPanel() {
   // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
   const contentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const memoPopupScrollRef = useRef<HTMLDivElement | null>(null);
+  const fabRef = useRef<HTMLButtonElement>(null);
 
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
@@ -2387,32 +2388,24 @@ export function AnalysisStockPanel() {
       {/* 右下固定FAB */}
       {mainTab === "stock" && isMounted && (
         <button
-          onClick={(e) => {
+          ref={fabRef}
+          onClick={() => {
             if (memoPopup) {
               setMemoPopup(null);
-              setFloatingToolbar(null);
             } else {
               const sheets = loadMemoSheets();
               const activeSheet = sheets[0];
-              if (!activeSheet) return;
-              // ビューポートに収まるようサイズをclamp
-              const pw = Math.min(memoPopupSize.w, window.innerWidth - 20);
-              const ph = Math.min(memoPopupSize.h, window.innerHeight - 100);
-              // FABボタンの位置を基準にメモを表示（ボタン真上・右揃え）
-              const btn = e.currentTarget.getBoundingClientRect();
-              // 右端をボタン右端に合わせる
-              let px = btn.right - pw;
-              // 上端をボタン上端の8px上に配置
-              let py = btn.top - ph - 8;
-              // 画面外に出ないようclamp
-              px = Math.max(10, Math.min(px, window.innerWidth - pw - 10));
-              py = Math.max(10, Math.min(py, window.innerHeight - ph - 10));
-              setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
-              // ツールバーはメモの上に配置
-              const tbX = px + pw / 2;
-              const tbY = py;
-              setToolbarDragged(false);
-              setFloatingToolbar({ x: tbX, y: tbY, height: 0, text: "", recordId: "" });
+              if (!activeSheet || !fabRef.current) return;
+
+              const btn = fabRef.current.getBoundingClientRect();
+              const pw = memoPopupSize.w;
+              const ph = memoPopupSize.h;
+
+              // ボタンの右端に合わせて、ボタンの上に表示
+              const x = Math.max(10, btn.right - pw);
+              const y = Math.max(10, btn.top - ph - 8);
+
+              setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x, y });
             }
           }}
           className="fixed bottom-5 right-5 z-[9990] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl text-white text-sm font-medium transition-all hover:scale-105 active:scale-95"
