@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { appendToMemoSheet, loadMemoSheets } from "@/lib/memo-storage";
@@ -1252,7 +1251,7 @@ export function AnalysisStockPanel() {
   return (
     <div
       id="analysis-stock"
-      className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl"
+      className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg"
     >
       {/* タイトル行 */}
       <div className="flex items-center justify-between mb-2">
@@ -2130,8 +2129,8 @@ export function AnalysisStockPanel() {
 
       </>)}
 
-      {/* フローティングツールバー — body直下にポータル（backdrop-blur親のfixed対策） */}
-      {isMounted && floatingToolbar && createPortal(
+      {/* フローティングツールバー */}
+      {isMounted && floatingToolbar && (
         <div
           data-floating-toolbar="true"
           className="fixed z-[9999] flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs select-none"
@@ -2236,12 +2235,11 @@ export function AnalysisStockPanel() {
             <span>メモに追記</span>
           </button>
 
-        </div>,
-        document.body
+        </div>
       )}
 
-      {/* メモプレビューポップアップ — body直下にポータル（backdrop-blur親のfixed対策） */}
-      {isMounted && memoPopup && createPortal(
+      {/* メモプレビューポップアップ */}
+      {isMounted && memoPopup && (
         <div
           data-memo-popup="true"
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col relative"
@@ -2383,12 +2381,11 @@ export function AnalysisStockPanel() {
               <line x1="8" y1="10" x2="10" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
-      {/* 右下固定FAB：body直下にポータルで描画（backdrop-blur等の影響を受けないため） */}
-      {mainTab === "stock" && isMounted && createPortal(
+      {/* 右下固定FAB */}
+      {mainTab === "stock" && isMounted && (
         <button
           onClick={(e) => {
             if (memoPopup) {
@@ -2400,7 +2397,7 @@ export function AnalysisStockPanel() {
               if (!activeSheet) return;
               // ビューポートに収まるようサイズをclamp
               const pw = Math.min(memoPopupSize.w, window.innerWidth - 20);
-              const ph = Math.min(memoPopupSize.h, window.innerHeight - 20);
+              const ph = Math.min(memoPopupSize.h, window.innerHeight - 100);
               // FABボタンの位置を基準にメモを表示（ボタン真上・右揃え）
               const btn = e.currentTarget.getBoundingClientRect();
               // 右端をボタン右端に合わせる
@@ -2427,8 +2424,7 @@ export function AnalysisStockPanel() {
           {!memoPopup && (
             <span className="bg-white/25 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">M</span>
           )}
-        </button>,
-        document.body
+        </button>
       )}
 
       {/* パスワード確認モーダル */}
