@@ -5,6 +5,7 @@ import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, Exter
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { appendToMemoSheet, loadMemoSheets } from "@/lib/memo-storage";
 import MemoPadPanel from "@/components/stock/memo-pad-panel";
+import { PipMemoPanel } from "@/components/stock/pip-memo-panel";
 import {
   loadAllAnalyses,
   saveAnalysis,
@@ -619,41 +620,20 @@ export function AnalysisStockPanel() {
     x: number; y: number; height: number; text: string; recordId: string;
   } | null>(null);
 
-  // メモプレビューポップアップ
-  const [memoPopup, setMemoPopup] = useState<{
-    content: string;
-    sheetName: string;
-    x: number;
-    y: number;
-  } | null>(null);
-
-  // ドラッグ移動用state
+  // ドラッグ移動用state（ツールバー）
   const [toolbarDragged, setToolbarDragged] = useState(false);
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const isDraggingRef = useRef<"toolbar" | "memo" | null>(null);
+  const isDraggingRef = useRef<"toolbar" | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const resizingRef = useRef(false);
-  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; w: number; h: number; el: HTMLElement | null }>({ mouseX: 0, mouseY: 0, w: 0, h: 0, el: null });
 
   const pendingDragRef = useRef<{
-    type: "toolbar" | "memo";
+    type: "toolbar";
     startX: number; startY: number;
     elLeft: number; elTop: number;
   } | null>(null);
 
-  // メモポップアップサイズ（設定画面から変更可能、localStorageで永続化）
-  const [memoPopupSize, setMemoPopupSize] = useState<{ w: number; h: number }>({ w: 560, h: 460 });
-  const [showMemoSizeSettings, setShowMemoSizeSettings] = useState(false);
-
-  const saveMemoPopupSize = useCallback((size: { w: number; h: number }) => {
-    setMemoPopupSize(size);
-    localStorage.setItem("dermapdf_memo_popup_size", JSON.stringify(size));
-  }, []);
-
   // contentEditable ref管理（Reactの再レンダリングによるDOM上書き防止）
   const contentRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const memoPopupScrollRef = useRef<HTMLDivElement | null>(null);
-  const fabRef = useRef<HTMLButtonElement>(null);
 
   // カード高さ・フォントサイズ
   const [fontSize, setFontSize] = useState(13);
@@ -688,10 +668,6 @@ export function AnalysisStockPanel() {
 
   useEffect(() => {
     setIsMounted(true);
-    try {
-      const size = localStorage.getItem("dermapdf_memo_popup_size");
-      if (size) setMemoPopupSize(JSON.parse(size));
-    } catch {}
   }, []);
 
   useEffect(() => {
@@ -779,46 +755,23 @@ export function AnalysisStockPanel() {
   // onMouseUp prop 用ダミー（native addEventListener に移行済み）
   const handleContentMouseUp = useCallback((_e: React.MouseEvent, _recordId: string) => {}, []);
 
-  // メモポップアップ更新時に最下部へスクロール
-  useEffect(() => {
-    if (memoPopup && memoPopupScrollRef.current) {
-      const el = memoPopupScrollRef.current;
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [memoPopup]);
+
 
   // ツールバー外のクリックで閉じる（ツールバー・メモポップアップ自身は除外）
   useEffect(() => {
     const hide = (e: MouseEvent) => {
       const target = e.target as Element;
       if (target.closest("[data-floating-toolbar]")) return;
-      if (target.closest("[data-memo-popup]")) return;
       setFloatingToolbar(null);
     };
     document.addEventListener("mousedown", hide);
     return () => document.removeEventListener("mousedown", hide);
   }, []);
 
-  // ドラッグ移動ハンドラ
+  // ツールバードラッグ移動ハンドラ
   useEffect(() => {
     const THRESH = 5;
     const onMouseMove = (e: MouseEvent) => {
-      // リサイズ中
-      if (resizingRef.current) {
-        e.preventDefault();
-        const dx = e.clientX - resizeStartRef.current.mouseX;
-        const dy = e.clientY - resizeStartRef.current.mouseY;
-        const newW = Math.max(200, resizeStartRef.current.w + dx);
-        const newH = Math.max(160, resizeStartRef.current.h + dy);
-        // DOMを直接操作（Reactの再レンダリングを避ける）
-        if (resizeStartRef.current.el) {
-          resizeStartRef.current.el.style.width = `${newW}px`;
-          resizeStartRef.current.el.style.height = `${newH}px`;
-        }
-        return;
-      }
-
-      // pending状態: 閾値超えたら本ドラッグ開始
       if (pendingDragRef.current && !isDraggingRef.current) {
         const dx = Math.abs(e.clientX - pendingDragRef.current.startX);
         const dy = Math.abs(e.clientY - pendingDragRef.current.startY);
@@ -834,29 +787,11 @@ export function AnalysisStockPanel() {
       }
       if (!isDraggingRef.current) return;
       e.preventDefault();
-      const nx = e.clientX - dragOffsetRef.current.x;
-      const ny = e.clientY - dragOffsetRef.current.y;
-      if (isDraggingRef.current === "toolbar") {
-        setToolbarPos({ x: nx, y: ny });
-        setToolbarDragged(true);
-      } else {
-        setMemoPopup(prev => prev ? { ...prev, x: nx, y: ny } : null);
-      }
+      setToolbarPos({ x: e.clientX - dragOffsetRef.current.x, y: e.clientY - dragOffsetRef.current.y });
+      setToolbarDragged(true);
     };
     const onMouseUp = () => {
       pendingDragRef.current = null;
-      if (resizingRef.current) {
-        resizingRef.current = false;
-        // mouseup時だけstateとlocalStorageを更新
-        if (resizeStartRef.current.el) {
-          const el = resizeStartRef.current.el;
-          const finalW = Math.round(el.offsetWidth);
-          const finalH = Math.round(el.offsetHeight);
-          saveMemoPopupSize({ w: finalW, h: finalH });
-        }
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-      }
       if (isDraggingRef.current) {
         isDraggingRef.current = null;
         document.body.style.userSelect = "";
@@ -871,16 +806,13 @@ export function AnalysisStockPanel() {
     };
   }, []);
 
-  const startDrag = useCallback((type: "toolbar" | "memo", e: React.MouseEvent) => {
+  const startDrag = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    const el = (type === "toolbar"
-      ? document.querySelector("[data-floating-toolbar]")
-      : document.querySelector("[data-memo-popup]")) as HTMLElement | null;
+    const el = document.querySelector("[data-floating-toolbar]") as HTMLElement | null;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    // 即座にドラッグ開始せずpendingに登録（クリックだけでは動かない）
     pendingDragRef.current = {
-      type, startX: e.clientX, startY: e.clientY,
+      type: "toolbar", startX: e.clientX, startY: e.clientY,
       elLeft: rect.left, elTop: rect.top,
     };
   }, []);
@@ -898,73 +830,17 @@ export function AnalysisStockPanel() {
     });
   }, []);
 
-  // ボタンからメモ欄を表示
-  const showMemoForCard = useCallback((buttonEl: HTMLElement) => {
-    if (memoPopup) { setMemoPopup(null); return; } // トグル
-    const sheets = loadMemoSheets();
-    const activeSheet = sheets[0];
-    if (!activeSheet) return;
-    const popupW = memoPopupSize.w;
-    const popupH = memoPopupSize.h;
-    const rect = buttonEl.getBoundingClientRect();
-    let px = rect.left - popupW / 2;
-    let py = rect.bottom + 8;
-    px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
-    py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
-    setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
-  }, [memoPopup, memoPopupSize]);
-
-  // キーボードショートカット: m で同時表示、Escape で閉じる
+  // キーボードショートカット: Escape でツールバーを閉じる
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Escapeでツールバー・メモ両方閉じる
       if (e.key === "Escape") {
         setFloatingToolbar(null);
-        setMemoPopup(null);
         setToolbarDragged(false);
-        return;
-      }
-      // mキーでツールバー+メモ同時表示（input/textarea/contenteditable以外で）
-      if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement;
-        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-        const selection = window.getSelection();
-        if (!selection || selection.isCollapsed) return;
-        const text = selection.toString().trim();
-        if (text.length < 2) return;
-        const anchor = selection.anchorNode;
-        const stockEl = (anchor as Element)?.closest?.("[data-stock-content]")
-          ?? (anchor?.parentElement as Element)?.closest?.("[data-stock-content]");
-        if (!stockEl) return;
-        e.preventDefault();
-        const recordId = stockEl.getAttribute("data-record-id") ?? "";
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) return;
-        const toolbarW = 320;
-        let fx = rect.left + rect.width / 2;
-        if (fx - toolbarW / 2 < 10) fx = toolbarW / 2 + 10;
-        if (fx + toolbarW / 2 > window.innerWidth - 10) fx = window.innerWidth - toolbarW / 2 - 10;
-        setToolbarDragged(false);
-        setFloatingToolbar({ x: fx, y: rect.top, height: rect.height, text, recordId });
-        // メモ欄も表示
-        const sheets = loadMemoSheets();
-        const activeSheet = sheets[0];
-        if (activeSheet) {
-          const popupW = memoPopupSize.w;
-          const popupH = memoPopupSize.h;
-          let px = fx - popupW / 2;
-          let py = rect.top - 46 - popupH - 8;
-          if (py < 10) py = rect.bottom + 8;
-          px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
-          py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
-          setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
-        }
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [memoPopupSize]);
+  }, []);
 
   // 書式適用後にコンテンツを保存
   const applyFormat = useCallback((command: string, value?: string) => {
@@ -1947,16 +1823,6 @@ export function AnalysisStockPanel() {
                       >
                         ✏️ ツール
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          showMemoForCard(e.currentTarget);
-                        }}
-                        className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-[#378ADD] transition-colors"
-                        title="メモ欄を表示"
-                      >
-                        📝 メモ
-                      </button>
                     </>
                   )}
                   <button
@@ -2148,7 +2014,7 @@ export function AnalysisStockPanel() {
           onMouseDown={(e) => {
             const tag = (e.target as HTMLElement).tagName;
             if (tag === "BUTTON" || tag === "INPUT") return;
-            startDrag("toolbar", e);
+            startDrag(e);
           }}
         >
           <span className="w-px h-4 bg-gray-600 mx-0.5" />
@@ -2203,32 +2069,11 @@ export function AnalysisStockPanel() {
               e.preventDefault();
               const sheets = loadMemoSheets();
               const activeSheet = sheets[0];
-              if (activeSheet) {
-                const updated = appendToMemoSheet(activeSheet.id, floatingToolbar.text);
-                const updatedSheet = updated.find((s: { id: string }) => s.id === activeSheet.id);
+              if (activeSheet && floatingToolbar.text) {
+                appendToMemoSheet(activeSheet.id, floatingToolbar.text);
                 window.dispatchEvent(new Event("memo-updated"));
-
-                // ツールバーの実際の表示位置からメモポップアップ座標を計算
-                const toolbarEl = document.querySelector("[data-floating-toolbar]");
-                if (toolbarEl) {
-                  const tbRect = toolbarEl.getBoundingClientRect();
-                  const popupW = memoPopupSize.w;
-                  const popupH = memoPopupSize.h;
-                  let px = tbRect.left + tbRect.width / 2 - popupW / 2;
-                  let py = tbRect.top - popupH - 8; // ツールバーの上
-                  if (py < 10) py = tbRect.bottom + 8; // 上に収まらない場合は下
-                  px = Math.max(10, Math.min(px, window.innerWidth - popupW - 10));
-                  py = Math.max(10, Math.min(py, window.innerHeight - popupH - 10));
-                  setMemoPopup({
-                    content: updatedSheet?.content || "",
-                    sheetName: updatedSheet?.name || "メモ",
-                    x: px,
-                    y: py,
-                  });
-                }
+                toastOk("メモに追記しました");
               }
-              // ツールバーはそのまま維持（消さない）
-              // 選択範囲も維持
             }}
             className="flex items-center gap-1 px-2 h-6 bg-[#378ADD] hover:bg-[#185FA5] rounded-lg text-[10px] font-medium ml-0.5"
           >
@@ -2239,186 +2084,8 @@ export function AnalysisStockPanel() {
         </div>
       )}
 
-      {/* メモプレビューポップアップ */}
-      {isMounted && memoPopup && (
-        <div
-          data-memo-popup="true"
-          className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col relative"
-          style={{
-            left: memoPopup.x,
-            top: memoPopup.y,
-            width: `${memoPopupSize.w}px`,
-            maxWidth: "calc(100vw - 20px)",
-            height: `${memoPopupSize.h}px`,
-            maxHeight: "calc(100vh - 20px)",
-          }}
-          onMouseDown={(e) => {
-            const tag = (e.target as HTMLElement).tagName;
-            if (tag === "BUTTON" || tag === "INPUT") return;
-            startDrag("memo", e);
-          }}
-        >
-          {/* ヘッダー（ドラッグ可能） */}
-          <div
-            className="flex items-center justify-between px-3 py-2 bg-[#E6F1FB] border-b border-[#B5D4F4] flex-shrink-0 cursor-grab active:cursor-grabbing"
-            onMouseDown={(e) => {
-              startDrag("memo", e);
-            }}
-          >
-            <div className="flex items-center gap-1.5 text-xs font-medium text-[#185FA5]">
-              <span>📝</span>
-              <span>{memoPopup.sheetName}</span>
-              <span className="text-[10px] text-[#378ADD] bg-white px-1.5 py-0.5 rounded-full">追記済み</span>
-            </div>
-            <div className="flex items-center gap-1">
-              {/* サイズ設定ボタン */}
-              <button
-                onClick={() => setShowMemoSizeSettings((v) => !v)}
-                className="text-gray-400 hover:text-[#378ADD] transition-colors text-xs px-1"
-                title="サイズ設定"
-              >
-                ⚙
-              </button>
-              <button
-                onClick={() => setMemoPopup(null)}
-                className="text-gray-400 hover:text-gray-600 text-xs px-1"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* サイズ設定パネル（インライン） */}
-          {showMemoSizeSettings && (
-            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0 text-xs text-gray-600 space-y-1.5">
-              <div className="font-medium text-gray-700 text-[11px]">📐 メモ欄のサイズ</div>
-              <div className="flex items-center gap-2">
-                <span className="w-12 text-[10px] text-gray-500">幅</span>
-                <input
-                  type="range" min={200} max={600} step={20}
-                  value={memoPopupSize.w}
-                  onChange={(e) => saveMemoPopupSize({ ...memoPopupSize, w: Number(e.target.value) })}
-                  className="flex-1 accent-[#378ADD]"
-                />
-                <span className="w-10 text-right text-[10px] text-gray-500">{memoPopupSize.w}px</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-12 text-[10px] text-gray-500">高さ</span>
-                <input
-                  type="range" min={160} max={600} step={20}
-                  value={memoPopupSize.h}
-                  onChange={(e) => saveMemoPopupSize({ ...memoPopupSize, h: Number(e.target.value) })}
-                  className="flex-1 accent-[#378ADD]"
-                />
-                <span className="w-10 text-right text-[10px] text-gray-500">{memoPopupSize.h}px</span>
-              </div>
-              <div className="flex gap-1.5 pt-0.5">
-                {[
-                  { label: "S", w: 240, h: 200 },
-                  { label: "M", w: 560, h: 460 },
-                  { label: "L", w: 440, h: 360 },
-                  { label: "XL", w: 540, h: 460 },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => saveMemoPopupSize({ w: preset.w, h: preset.h })}
-                    className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
-                      memoPopupSize.w === preset.w && memoPopupSize.h === preset.h
-                        ? "bg-[#378ADD] text-white border-[#378ADD]"
-                        : "bg-white text-gray-600 border-gray-200 hover:border-[#378ADD]"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* コンテンツ */}
-          <div ref={memoPopupScrollRef} className="p-3 text-xs text-gray-600 leading-relaxed overflow-y-auto flex-1">
-            <div className="whitespace-pre-wrap break-words">
-              {memoPopup.content.length > 400
-                ? "..." + memoPopup.content.slice(-400)
-                : memoPopup.content}
-            </div>
-          </div>
-
-          {/* フッター */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-            <span className="text-[10px] text-gray-400">
-              {memoPopup.content.length}文字
-            </span>
-            <button
-              onClick={() => { setMemoPopup(null); setMainTab("memo"); }}
-              className="text-[10px] text-[#378ADD] hover:underline font-medium"
-            >
-              メモ帳を開く →
-            </button>
-          </div>
-
-          {/* 右下リサイズハンドル */}
-          <div
-            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 flex items-end justify-end pr-0.5 pb-0.5"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              resizingRef.current = true;
-              const popupEl = (e.currentTarget as HTMLElement).closest("[data-memo-popup]") as HTMLElement | null;
-              resizeStartRef.current = {
-                mouseX: e.clientX,
-                mouseY: e.clientY,
-                w: popupEl?.offsetWidth ?? memoPopupSize.w,
-                h: popupEl?.offsetHeight ?? memoPopupSize.h,
-                el: popupEl,
-              };
-              document.body.style.userSelect = "none";
-              document.body.style.cursor = "nwse-resize";
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" className="text-gray-300">
-              <line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              <line x1="5" y1="10" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              <line x1="8" y1="10" x2="10" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </div>
-        </div>
-      )}
-
-      {/* 右下固定FAB */}
-      {mainTab === "stock" && isMounted && (
-        <button
-          ref={fabRef}
-          onClick={() => {
-            if (memoPopup) {
-              setMemoPopup(null);
-            } else {
-              const sheets = loadMemoSheets();
-              const activeSheet = sheets[0];
-              if (!activeSheet || !fabRef.current) return;
-
-              const btn = fabRef.current.getBoundingClientRect();
-              const pw = memoPopupSize.w;
-              const ph = memoPopupSize.h;
-
-              // ボタンの右端に合わせて、ボタンの上に表示
-              const x = Math.max(10, btn.right - pw);
-              const y = Math.max(10, btn.top - ph - 8);
-
-              setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x, y });
-            }
-          }}
-          className="fixed bottom-5 right-5 z-[9990] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl text-white text-sm font-medium transition-all hover:scale-105 active:scale-95"
-          style={{ background: memoPopup ? "#1D9E75" : "#378ADD" }}
-          title="メモ帳を開く / 閉じる (M)"
-        >
-          <span className="text-base">📝</span>
-          <span>{memoPopup ? "メモを閉じる" : "メモを開く"}</span>
-          {!memoPopup && (
-            <span className="bg-white/25 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">M</span>
-          )}
-        </button>
-      )}
+      {/* PiPメモ小窓 */}
+      <PipMemoPanel />
 
       {/* パスワード確認モーダル */}
       {showPasswordModal && (
