@@ -2249,7 +2249,9 @@ export function AnalysisStockPanel() {
             left: memoPopup.x,
             top: memoPopup.y,
             width: `${memoPopupSize.w}px`,
+            maxWidth: "calc(100vw - 20px)",
             height: `${memoPopupSize.h}px`,
+            maxHeight: "calc(100vh - 20px)",
           }}
           onMouseDown={(e) => {
             const tag = (e.target as HTMLElement).tagName;
@@ -2396,12 +2398,14 @@ export function AnalysisStockPanel() {
               const sheets = loadMemoSheets();
               const activeSheet = sheets[0];
               if (!activeSheet) return;
-              const pw = memoPopupSize.w;
-              const ph = memoPopupSize.h;
+              // ビューポートに収まるようサイズをclamp
+              const pw = Math.min(memoPopupSize.w, window.innerWidth - 20);
+              const ph = Math.min(memoPopupSize.h, window.innerHeight - 20);
               // FABボタンの位置を基準にメモを表示（ボタン真上・右揃え）
               const btn = e.currentTarget.getBoundingClientRect();
-              // 右端をボタン右端に揃え、下端をボタン上端の8px上に揃える
+              // 右端をボタン右端に合わせる
               let px = btn.right - pw;
+              // 上端をボタン上端の8px上に配置
               let py = btn.top - ph - 8;
               // 画面外に出ないようclamp
               px = Math.max(10, Math.min(px, window.innerWidth - pw - 10));
