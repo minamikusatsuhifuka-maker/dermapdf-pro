@@ -16,19 +16,27 @@ function showToast(pw: Window, msg: string) {
   setTimeout(() => el.remove(), 1500);
 }
 
+// メモ行をHTML化（新しいもの上）
+function buildMemoItemsHTML(sheet: MemoSheet | undefined): string {
+  if (!sheet || !sheet.content.trim()) {
+    return '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:12px;">メモはまだありません</div>';
+  }
+  const lines = sheet.content.split("\n").filter((l) => l.trim());
+  // 新しいものを上に表示（逆順）
+  return [...lines].reverse().map((line, i) => {
+    const origIdx = lines.length - 1 - i;
+    return `
+      <div class="memo-item" style="display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(59,130,246,0.15);font-size:12px;line-height:1.5;">
+        <div style="flex:1;word-break:break-word;color:#1e3a5f;">${line}</div>
+        <button class="btn-copy-item" data-index="${origIdx}" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:2px;" title="コピー">📋</button>
+        <button class="btn-del-item" data-index="${origIdx}" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8;padding:2px;" title="削除">✕</button>
+      </div>`;
+  }).join("");
+}
+
 // PiP小窓のHTML構造を生成
 function buildPipHTML(sheets: MemoSheet[]): string {
   const activeSheet = sheets[0];
-  const memoItems = activeSheet
-    ? activeSheet.content.split("\n").filter((l) => l.trim()).map((line, i) => `
-      <div class="memo-item" style="display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(59,130,246,0.15);font-size:12px;line-height:1.5;">
-        <div class="memo-text" contenteditable="true" style="flex:1;outline:none;word-break:break-word;color:#1e3a5f;" data-index="${i}">${line}</div>
-        <button class="btn-copy-item" data-index="${i}" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:2px;" title="コピー">📋</button>
-        <button class="btn-del-item" data-index="${i}" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8;padding:2px;" title="削除">✕</button>
-      </div>
-    `).join("")
-    : '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:12px;">メモはまだありません</div>';
-
   return `<!DOCTYPE html>
 <html><head><style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -39,13 +47,14 @@ function buildPipHTML(sheets: MemoSheet[]): string {
   #pip-toolbar button { min-width:24px; height:24px; border:1px solid rgba(59,130,246,0.25); border-radius:6px; background:#fff; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; transition:background 0.15s; }
   #pip-toolbar button:hover { background:#DBEAFE; }
   .color-btn { width:18px!important; height:18px!important; min-width:18px!important; border-radius:50%!important; border:2px solid rgba(0,0,0,0.15)!important; }
+  #pip-editor-area { min-height:50px; border:1px solid rgba(59,130,246,0.3); border-radius:6px; padding:6px 8px; font-size:12px; outline:none; background:rgba(255,255,255,0.7); flex-shrink:0; margin:6px 10px; line-height:1.5; color:#1e3a5f; }
+  #pip-editor-area:empty:before { content:attr(data-placeholder); color:#94a3b8; }
   #memo-list { flex:1; overflow-y:auto; background:rgba(255,255,255,0.5); }
   #pip-footer { display:flex; gap:6px; padding:8px 10px; background:rgba(255,255,255,0.8); border-top:1px solid rgba(59,130,246,0.2); flex-shrink:0; }
   #pip-footer button { flex:1; padding:6px 8px; border:none; border-radius:8px; font-size:11px; font-weight:500; cursor:pointer; transition:opacity 0.15s; }
   #pip-footer button:hover { opacity:0.85; }
   .btn-primary { background:#378ADD; color:#fff; }
   .btn-secondary { background:#e2e8f0; color:#475569; }
-  .btn-danger { background:#fecdd3; color:#be123c; }
   .hdr-btn { background:none; border:1px solid rgba(59,130,246,0.3); border-radius:6px; padding:3px 8px; font-size:11px; cursor:pointer; color:#64748b; }
   .hdr-btn:hover { background:#DBEAFE; }
   .memo-item:hover { background:rgba(59,130,246,0.05); }
@@ -69,10 +78,11 @@ function buildPipHTML(sheets: MemoSheet[]): string {
     <button class="color-btn" id="hl-pink" style="background:#fecdd3;" title="桃ハイライト"></button>
     <button id="btn-remove" style="color:#94a3b8;">✕</button>
   </div>
-  <div id="memo-list">${memoItems}</div>
+  <div id="pip-editor-area" contenteditable="true" data-placeholder="ここに入力またはテキストを選択して書式適用..."></div>
+  <div id="memo-list">${buildMemoItemsHTML(activeSheet)}</div>
   <div id="count">${activeSheet ? activeSheet.content.length : 0}文字</div>
   <div id="pip-footer">
-    <button class="btn-primary" id="btn-save">📌 選択範囲を保存</button>
+    <button class="btn-primary" id="btn-save">📌 エディタ内容を保存</button>
     <button class="btn-secondary" id="btn-copy-all">📋 全コピー</button>
   </div>
 </body></html>`;
@@ -95,7 +105,6 @@ export function PipMemoPanel() {
       const sheets = loadMemoSheets();
       const count = sheets[0]?.content.split("\n").filter((l) => l.trim()).length || 0;
       setMemoCount(count);
-      // PiP小窓が開いていれば内容を更新
       if (pipWindowRef.current && !pipWindowRef.current.closed) {
         refreshPipContent(pipWindowRef.current);
       }
@@ -110,24 +119,14 @@ export function PipMemoPanel() {
     if (!activeSheet) return;
     const list = pw.document.getElementById("memo-list");
     const countEl = pw.document.getElementById("count");
-    if (!list) return;
-    const lines = activeSheet.content.split("\n").filter((l) => l.trim());
-    list.innerHTML = lines.length > 0
-      ? lines.map((line, i) => `
-        <div class="memo-item" style="display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(59,130,246,0.15);font-size:12px;line-height:1.5;">
-          <div class="memo-text" contenteditable="true" style="flex:1;outline:none;word-break:break-word;color:#1e3a5f;" data-index="${i}">${line}</div>
-          <button class="btn-copy-item" data-index="${i}" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:2px;" title="コピー">📋</button>
-          <button class="btn-del-item" data-index="${i}" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8;padding:2px;" title="削除">✕</button>
-        </div>
-      `).join("")
-      : '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:12px;">メモはまだありません</div>';
+    if (list) {
+      list.innerHTML = buildMemoItemsHTML(activeSheet);
+      bindMemoItemEvents(pw);
+    }
     if (countEl) countEl.textContent = `${activeSheet.content.length}文字`;
-    // メモアイテムのイベント再登録
-    bindMemoItemEvents(pw);
   }, []);
 
   const bindMemoItemEvents = useCallback((pw: Window) => {
-    // 各メモアイテムのコピー・削除ボタン
     pw.document.querySelectorAll(".btn-copy-item").forEach((btn) => {
       btn.addEventListener("click", () => {
         const idx = Number((btn as HTMLElement).dataset.index);
@@ -151,17 +150,6 @@ export function PipMemoPanel() {
         window.dispatchEvent(new Event("memo-updated"));
       });
     });
-    // contentEditable の変更を保存
-    pw.document.querySelectorAll(".memo-text").forEach((el) => {
-      el.addEventListener("blur", () => {
-        const sheets = loadMemoSheets();
-        if (!sheets[0]) return;
-        const items = pw.document.querySelectorAll(".memo-text");
-        const newContent = Array.from(items).map((item) => (item as HTMLElement).innerText.trim()).filter(Boolean).join("\n");
-        updateMemoSheet(sheets[0].id, newContent);
-        window.dispatchEvent(new Event("memo-updated"));
-      });
-    });
   }, []);
 
   const openPip = useCallback(async () => {
@@ -173,7 +161,7 @@ export function PipMemoPanel() {
     }
 
     try {
-      const pw: Window = await dPiP.requestWindow({ width: 320, height: 420 });
+      const pw: Window = await dPiP.requestWindow({ width: 320, height: 480 });
       pipWindowRef.current = pw;
       setPipActive(true);
 
@@ -182,25 +170,34 @@ export function PipMemoPanel() {
       pw.document.write(buildPipHTML(sheets));
       pw.document.close();
 
-      // ツールバーイベント（mousedown + preventDefault で選択範囲を保持）
-      const bindBtn = (id: string, cmd: string, val?: string) => {
-        const el = pw.document.getElementById(id);
-        if (el) el.onmousedown = (e) => { e.preventDefault(); pw.document.execCommand(cmd, false, val); };
+      const d = pw.document;
+      const editor = d.getElementById("pip-editor-area");
+
+      // ツールバーボタン: onmousedown + preventDefault + フォーカス戻し + execCommand
+      const setupBtn = (id: string, cmd: string, val?: string) => {
+        const btn = d.getElementById(id);
+        if (!btn) return;
+        btn.onmousedown = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (editor) editor.focus();
+          pw.document.execCommand(cmd, false, val ?? undefined);
+        };
       };
-      bindBtn("btn-bold", "bold");
-      bindBtn("btn-italic", "italic");
-      bindBtn("btn-underline", "underline");
-      bindBtn("fc-red", "foreColor", "#ef4444");
-      bindBtn("fc-blue", "foreColor", "#3b82f6");
-      bindBtn("fc-green", "foreColor", "#22c55e");
-      bindBtn("fc-orange", "foreColor", "#f59e0b");
-      bindBtn("hl-yellow", "backColor", "#fef08a");
-      bindBtn("hl-sky", "backColor", "#bae6fd");
-      bindBtn("hl-pink", "backColor", "#fecdd3");
-      bindBtn("btn-remove", "removeFormat");
+      setupBtn("btn-bold", "bold");
+      setupBtn("btn-italic", "italic");
+      setupBtn("btn-underline", "underline");
+      setupBtn("fc-red", "foreColor", "#ef4444");
+      setupBtn("fc-blue", "foreColor", "#3b82f6");
+      setupBtn("fc-green", "foreColor", "#22c55e");
+      setupBtn("fc-orange", "foreColor", "#f59e0b");
+      setupBtn("hl-yellow", "backColor", "#fef08a");
+      setupBtn("hl-sky", "backColor", "#bae6fd");
+      setupBtn("hl-pink", "backColor", "#fecdd3");
+      setupBtn("btn-remove", "removeFormat");
 
       // 全消去
-      pw.document.getElementById("btn-clear-all")?.addEventListener("click", () => {
+      d.getElementById("btn-clear-all")?.addEventListener("click", () => {
         if (pw.confirm("メモを全て消去しますか？")) {
           const s = loadMemoSheets();
           if (s[0]) {
@@ -210,35 +207,37 @@ export function PipMemoPanel() {
         }
       });
 
-      // 選択範囲を保存
-      pw.document.getElementById("btn-save")?.addEventListener("click", () => {
-        const sel = pw.getSelection();
-        if (!sel || sel.isCollapsed) {
-          const sel2 = window.getSelection();
-          if (sel2 && !sel2.isCollapsed) {
-            const text = sel2.toString().trim();
-            if (text) {
+      // エディタ内容を保存
+      d.getElementById("btn-save")?.addEventListener("click", () => {
+        if (!editor) return;
+        const text = editor.innerText.trim();
+        if (!text) {
+          // エディタが空ならメインウィンドウの選択を保存
+          const sel = window.getSelection();
+          if (sel && !sel.isCollapsed) {
+            const mainText = sel.toString().trim();
+            if (mainText) {
               const s = loadMemoSheets();
               if (s[0]) {
-                appendToMemoSheet(s[0].id, text);
+                appendToMemoSheet(s[0].id, mainText);
                 window.dispatchEvent(new Event("memo-updated"));
+                showToast(pw, "✅ メインウィンドウから保存");
               }
             }
           }
           return;
         }
-        const text = sel.toString().trim();
-        if (text) {
-          const s = loadMemoSheets();
-          if (s[0]) {
-            appendToMemoSheet(s[0].id, text);
-            window.dispatchEvent(new Event("memo-updated"));
-          }
+        const s = loadMemoSheets();
+        if (s[0]) {
+          appendToMemoSheet(s[0].id, text);
+          window.dispatchEvent(new Event("memo-updated"));
+          editor.innerHTML = "";
+          showToast(pw, "✅ 保存しました");
         }
       });
 
-      // 全コピー（メインウィンドウのclipboard APIを使用）
-      pw.document.getElementById("btn-copy-all")?.addEventListener("click", () => {
+      // 全コピー
+      d.getElementById("btn-copy-all")?.addEventListener("click", () => {
         const s = loadMemoSheets();
         if (!s[0]) return;
         const text = s[0].content;
