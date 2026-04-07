@@ -712,22 +712,24 @@ export function AnalysisStockPanel() {
     if (savedOrder) setFolderOrder(savedOrder);
   }, []);
 
-  // フォントサイズをlocalStorageから復元・保存
+  // フォントサイズをlocalStorageから復元
   useEffect(() => {
     const saved = localStorage.getItem("dermapdf_stock_fontsize");
     if (saved) setFontSize(Number(saved));
+    const savedFolder = localStorage.getItem("dermapdf_folder_fontsize");
+    if (savedFolder) setFolderFontSize(Number(savedFolder));
   }, []);
 
+  // フォントサイズ変更時に保存（初回mountはスキップ）
+  const fontInitRef = useRef(false);
   useEffect(() => {
+    if (!fontInitRef.current) { fontInitRef.current = true; return; }
     localStorage.setItem("dermapdf_stock_fontsize", String(fontSize));
   }, [fontSize]);
 
+  const folderFontInitRef = useRef(false);
   useEffect(() => {
-    const saved = localStorage.getItem("dermapdf_folder_fontsize");
-    if (saved) setFolderFontSize(Number(saved));
-  }, []);
-
-  useEffect(() => {
+    if (!folderFontInitRef.current) { folderFontInitRef.current = true; return; }
     localStorage.setItem("dermapdf_folder_fontsize", String(folderFontSize));
   }, [folderFontSize]);
 
@@ -2405,7 +2407,8 @@ export function AnalysisStockPanel() {
               setMemoPopup({ content: activeSheet.content, sheetName: activeSheet.name, x: px, y: py });
               // ツールバーはメモの上に配置
               const tbX = px + pw / 2;
-              const tbY = py - 8;
+              const tbY = py;
+              setToolbarDragged(false);
               setFloatingToolbar({ x: tbX, y: tbY, height: 0, text: "", recordId: "" });
             }
           }}
