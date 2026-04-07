@@ -43,10 +43,6 @@ function buildPipHTML(sheets: MemoSheet[]): string {
   body { font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:linear-gradient(135deg,#EBF4FF,#DBEAFE); color:#1e40af; overflow:hidden; display:flex; flex-direction:column; height:100vh; }
   #pip-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.8); border-bottom:1px solid rgba(59,130,246,0.2); flex-shrink:0; }
   #pip-header span { font-size:13px; font-weight:600; }
-  #pip-toolbar { display:flex; flex-wrap:wrap; gap:3px; padding:6px 10px; background:rgba(255,255,255,0.6); border-bottom:1px solid rgba(59,130,246,0.15); flex-shrink:0; }
-  #pip-toolbar button { min-width:24px; height:24px; border:1px solid rgba(59,130,246,0.25); border-radius:6px; background:#fff; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; transition:background 0.15s; }
-  #pip-toolbar button:hover { background:#DBEAFE; }
-  .color-btn { width:18px!important; height:18px!important; min-width:18px!important; border-radius:50%!important; border:2px solid rgba(0,0,0,0.15)!important; }
   #pip-editor-area { min-height:50px; border:1px solid rgba(59,130,246,0.3); border-radius:6px; padding:6px 8px; font-size:12px; outline:none; background:rgba(255,255,255,0.7); flex-shrink:0; margin:6px 10px; line-height:1.5; color:#1e3a5f; }
   #pip-editor-area:empty:before { content:attr(data-placeholder); color:#94a3b8; }
   #memo-list { flex:1; overflow-y:auto; background:rgba(255,255,255,0.5); }
@@ -65,20 +61,7 @@ function buildPipHTML(sheets: MemoSheet[]): string {
     <span>📝 メモ小窓</span>
     <button class="hdr-btn" id="btn-clear-all">🗑 全消去</button>
   </div>
-  <div id="pip-toolbar">
-    <button id="btn-bold" style="font-weight:bold;">B</button>
-    <button id="btn-italic" style="font-style:italic;">I</button>
-    <button id="btn-underline" style="text-decoration:underline;">U</button>
-    <button class="color-btn" id="fc-red" style="background:#ef4444;" title="赤"></button>
-    <button class="color-btn" id="fc-blue" style="background:#3b82f6;" title="青"></button>
-    <button class="color-btn" id="fc-green" style="background:#22c55e;" title="緑"></button>
-    <button class="color-btn" id="fc-orange" style="background:#f59e0b;" title="橙"></button>
-    <button class="color-btn" id="hl-yellow" style="background:#fef08a;" title="黄ハイライト"></button>
-    <button class="color-btn" id="hl-sky" style="background:#bae6fd;" title="水ハイライト"></button>
-    <button class="color-btn" id="hl-pink" style="background:#fecdd3;" title="桃ハイライト"></button>
-    <button id="btn-remove" style="color:#94a3b8;">✕</button>
-  </div>
-  <div id="pip-editor-area" contenteditable="true" data-placeholder="ここに入力またはテキストを選択して書式適用..."></div>
+  <div id="pip-editor-area" contenteditable="true" data-placeholder="ここに入力してメモに追加..."></div>
   <div id="memo-list">${buildMemoItemsHTML(activeSheet)}</div>
   <div id="count">${activeSheet ? activeSheet.content.length : 0}文字</div>
   <div id="pip-footer">
@@ -173,29 +156,6 @@ export function PipMemoPanel() {
       const d = pw.document;
       const editor = d.getElementById("pip-editor-area");
 
-      // ツールバーボタン: onmousedown + preventDefault + フォーカス戻し + execCommand
-      const setupBtn = (id: string, cmd: string, val?: string) => {
-        const btn = d.getElementById(id);
-        if (!btn) return;
-        btn.onmousedown = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (editor) editor.focus();
-          pw.document.execCommand(cmd, false, val ?? undefined);
-        };
-      };
-      setupBtn("btn-bold", "bold");
-      setupBtn("btn-italic", "italic");
-      setupBtn("btn-underline", "underline");
-      setupBtn("fc-red", "foreColor", "#ef4444");
-      setupBtn("fc-blue", "foreColor", "#3b82f6");
-      setupBtn("fc-green", "foreColor", "#22c55e");
-      setupBtn("fc-orange", "foreColor", "#f59e0b");
-      setupBtn("hl-yellow", "backColor", "#fef08a");
-      setupBtn("hl-sky", "backColor", "#bae6fd");
-      setupBtn("hl-pink", "backColor", "#fecdd3");
-      setupBtn("btn-remove", "removeFormat");
-
       // 全消去
       d.getElementById("btn-clear-all")?.addEventListener("click", () => {
         if (pw.confirm("メモを全て消去しますか？")) {
@@ -236,11 +196,12 @@ export function PipMemoPanel() {
         }
       });
 
-      // 全コピー
+      // 全コピー（表示と同じ順序＝新しいものが先頭）
       d.getElementById("btn-copy-all")?.addEventListener("click", () => {
         const s = loadMemoSheets();
         if (!s[0]) return;
-        const text = s[0].content;
+        const lines = s[0].content.split("\n").filter((l) => l.trim());
+        const text = [...lines].reverse().join("\n");
         window.navigator.clipboard.writeText(text)
           .then(() => showToast(pw, "✅ コピーしました"))
           .catch(() => {
