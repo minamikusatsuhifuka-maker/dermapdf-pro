@@ -2130,8 +2130,8 @@ export function AnalysisStockPanel() {
 
       </>)}
 
-      {/* フローティングツールバー */}
-      {floatingToolbar && (
+      {/* フローティングツールバー — body直下にポータル（backdrop-blur親のfixed対策） */}
+      {isMounted && floatingToolbar && createPortal(
         <div
           data-floating-toolbar="true"
           className="fixed z-[9999] flex items-center gap-0.5 bg-gray-900 text-white rounded-xl shadow-2xl px-2 py-1.5 text-xs select-none"
@@ -2236,11 +2236,12 @@ export function AnalysisStockPanel() {
             <span>メモに追記</span>
           </button>
 
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* メモプレビューポップアップ（選択範囲の近く、ツールバーの下に表示） */}
-      {memoPopup && (
+      {/* メモプレビューポップアップ — body直下にポータル（backdrop-blur親のfixed対策） */}
+      {isMounted && memoPopup && createPortal(
         <div
           data-memo-popup="true"
           className="fixed z-[9998] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden flex flex-col relative"
@@ -2380,7 +2381,8 @@ export function AnalysisStockPanel() {
               <line x1="8" y1="10" x2="10" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 右下固定FAB：body直下にポータルで描画（backdrop-blur等の影響を受けないため） */}
