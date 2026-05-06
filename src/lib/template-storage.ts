@@ -4,6 +4,8 @@ export interface AnalysisTemplate {
   createdAt: string;
   // Gemini分析設定
   analysisType: string;
+  // 複数選択対応（新形式）。旧テンプレートには存在しないため optional。
+  selectedTypes?: string[];
   analysisPurpose: string;
   // Genspark設定
   gensparkTarget: string;

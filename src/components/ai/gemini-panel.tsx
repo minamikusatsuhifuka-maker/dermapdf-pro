@@ -22,6 +22,7 @@ export type AnalysisType =
   // 基本分析
   | "summary"
   | "detail_summary"
+  | "genspark_slide"
   | "transcription"
   // 皮膚科・医療
   | "findings"
@@ -93,6 +94,7 @@ const ANALYSIS_GROUPS: AnalysisGroup[] = [
     options: [
       { value: "summary", label: "概要・要約" },
       { value: "detail_summary", label: "詳細にまとめる" },
+      { value: "genspark_slide", label: "Gensparkスライド資料用まとめ" },
       { value: "transcription", label: "全文書き起こし" },
     ],
   },
@@ -186,6 +188,8 @@ const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
     "この資料の内容を簡潔に要約してください。主要なポイントを箇条書きで整理し、全体像がわかるようにまとめてください。",
   detail_summary:
     "この資料の内容を、通常の要約よりも細部まで丁寧に読み取り、詳細にまとめてください。表面的なキーワードだけでなく、文脈・背景・ニュアンス・行間の意図まで汲み取り、以下の形式で出力してください。\n\n## 全体の概要\n（資料全体を3〜5文で説明）\n\n## 主要テーマと詳細内容\n（各セクション・章ごとに、見出しと詳細な説明を箇条書きで記載）\n\n## 重要なポイント・数値・固有名詞\n（見逃してはいけない具体的な情報を列挙）\n\n## 読み取れる背景・意図・示唆\n（明示されていないが文脈から読み取れる意図や示唆）\n\n## まとめと活用提案\n（この資料をどう活用できるか、具体的な提案）\n\n省略せず、資料の細部まで丁寧に反映してください。",
+  genspark_slide:
+    "この資料の内容を、Gensparkでのスライド資料作成に最適な形式でまとめてください。\n\n# スライドタイトル\n（資料全体を表す簡潔なタイトル）\n\n# エグゼクティブサマリー（1スライド分）\n（全体の要点を3〜5行で）\n\n# スライド構成案\n## スライド1: （タイトル）\n- ポイント1\n- ポイント2\n- ポイント3\n\n## スライド2: （タイトル）\n- ポイント1\n- ポイント2\n- ポイント3\n\n（以下、内容に応じて5〜10スライド分）\n\n# キーメッセージ（クロージングスライド用）\n（聴衆に最も伝えたいこと1〜2文）\n\n# 補足データ・引用\n（スライドに入れるべき数値・固有名詞・引用文）\n\n【出力ルール】\n- 各スライドは3〜5箇条書きで完結させる\n- 専門用語は平易な言葉に言い換える\n- 数値・固有名詞は正確に記載する\n- Markdown形式で出力する",
   transcription:
     "この資料に含まれる全てのテキストを正確に書き起こしてください。\n\n" +
     "【出力ルール】\n" +
@@ -319,7 +323,16 @@ export function GeminiPanel({
 }: GeminiPanelProps) {
   // 理念コンテキストを構築
   const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
-  const [analysisType, setAnalysisType] = useState<AnalysisType>("summary");
+  // 分析タイプは複数選択（Set）。デフォルトで「概要・要約」のみ選択
+  const [selectedTypes, setSelectedTypes] = useState<Set<AnalysisType>>(
+    () => new Set<AnalysisType>(["summary"])
+  );
+  // グループの折りたたみ状態。デフォルトで「📄 基本分析」のみ展開
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set([ANALYSIS_GROUPS[0].label])
+  );
+  // 表示中の結果に対応する分析タイプ（DL ファイル名・ストック保存ラベルで使用）
+  const [lastResultType, setLastResultType] = useState<AnalysisType>("summary");
   const [purpose, setPurpose] = useState("");
   const [result, setResult] = useState("");
   const [isEditingResult, setIsEditingResult] = useState(false);
@@ -327,6 +340,28 @@ export function GeminiPanel({
   const [loading, setLoading] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
+
+  const toggleType = (type: AnalysisType) => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+
+  const getLabel = (type: AnalysisType): string =>
+    ANALYSIS_GROUPS.flatMap((g) => g.options).find((o) => o.value === type)
+      ?.label ?? type;
 
   // PDFのページ数を取得
   const isPdf = fileMime === "application/pdf";
@@ -361,10 +396,14 @@ export function GeminiPanel({
     window.addEventListener("templatesUpdated", reloadTemplates);
     window.addEventListener("storage", reloadTemplates);
 
-    // テンプレート適用イベント
+    // テンプレート適用イベント（旧形式 analysisType と新形式 selectedTypes 両対応）
     const handleApplyGemini = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail.analysisType) setAnalysisType(detail.analysisType);
+      if (Array.isArray(detail.selectedTypes) && detail.selectedTypes.length > 0) {
+        setSelectedTypes(new Set(detail.selectedTypes as AnalysisType[]));
+      } else if (detail.analysisType) {
+        setSelectedTypes(new Set([detail.analysisType as AnalysisType]));
+      }
       if (detail.analysisPurpose !== undefined) setPurpose(detail.analysisPurpose);
     };
     const handleApplyGenspark = (e: Event) => {
@@ -389,9 +428,12 @@ export function GeminiPanel({
   const handleSaveTemplate = () => {
     const name = templateName.trim();
     if (!name) return;
+    const types = Array.from(selectedTypes);
     saveTemplate({
       name,
-      analysisType,
+      // 後方互換: 旧形式 analysisType には先頭の選択を保存
+      analysisType: types[0] ?? "summary",
+      selectedTypes: types,
       analysisPurpose: purpose,
       gensparkTarget: gsTarget,
       gensparkLevel: gsLevel,
@@ -408,9 +450,11 @@ export function GeminiPanel({
   const handleGsSaveTemplate = () => {
     const name = gsTemplateName.trim();
     if (!name) return;
+    const types = Array.from(selectedTypes);
     saveTemplate({
       name,
-      analysisType,
+      analysisType: types[0] ?? "summary",
+      selectedTypes: types,
       analysisPurpose: purpose,
       gensparkTarget: gsTarget,
       gensparkLevel: gsLevel,
@@ -425,7 +469,12 @@ export function GeminiPanel({
   };
 
   const handleApplyTemplateToGemini = (t: AnalysisTemplate) => {
-    setAnalysisType(t.analysisType as AnalysisType);
+    // 新形式 selectedTypes を優先、無ければ旧形式 analysisType を1件として読み込む
+    if (t.selectedTypes && t.selectedTypes.length > 0) {
+      setSelectedTypes(new Set(t.selectedTypes as AnalysisType[]));
+    } else if (t.analysisType) {
+      setSelectedTypes(new Set([t.analysisType as AnalysisType]));
+    }
     setPurpose(t.analysisPurpose);
     toastOk(`「${t.name}」を適用しました`);
   };
@@ -443,7 +492,110 @@ export function GeminiPanel({
 
   const isTextMode = inputMode === "text";
 
+  // 単一の分析タイプを実行して結果テキストを返す内部ヘルパー
+  // progressPrefix: 複数同時実行時のヘッダー（例: "(2/3) 詳細にまとめる"）
+  const analyzeOne = async (
+    type: AnalysisType,
+    progressPrefix: string
+  ): Promise<string> => {
+    // テキスト入力モード
+    if (isTextMode && inputText) {
+      setTranscriptionProgress(`${progressPrefix} 分析中...`);
+      const basePrompt = ANALYSIS_PROMPTS[type];
+      const fullPrompt =
+        (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+        philosophyContext;
+      const data = await analyzeTextWithGemini(fullPrompt, inputText);
+      if (!data.success) throw new Error(data.error || "分析に失敗しました");
+      return data.analysis;
+    }
+
+    // 以下ファイルモード
+    const isTranscription = type === "transcription";
+    const effectivePageCount = isPdf && pageCount !== null ? pageCount : 0;
+    const useBatch = isTranscription && isPdf && effectivePageCount > CHUNK_SIZE;
+
+    if (isTranscription && isPdf && effectivePageCount <= 0) {
+      // ページ数取得失敗 → 通常処理にフォールバック
+      console.warn("ページ数取得失敗、通常処理で実行します");
+      setTranscriptionProgress(`${progressPrefix} 分析中...`);
+      const basePrompt = ANALYSIS_PROMPTS[type];
+      const fullPrompt =
+        (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+        philosophyContext;
+      const data = await analyzeWithGemini(
+        fileBase64!,
+        fileMime!,
+        fullPrompt,
+        "transcription"
+      );
+      if (!data.success) throw new Error(data.error || "分析に失敗しました");
+      return data.analysis;
+    }
+
+    if (useBatch) {
+      const totalPages = effectivePageCount;
+      const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
+      let fullText = "";
+
+      for (let i = 0; i < totalChunks; i++) {
+        const startPage = i * CHUNK_SIZE;
+        const endPage = Math.min(startPage + CHUNK_SIZE - 1, totalPages - 1);
+
+        setTranscriptionProgress(
+          `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク / P.${startPage + 1}〜${endPage + 1})`
+        );
+
+        const chunkBase64 = await splitPdfPages(fileBase64!, startPage, endPage);
+        const chunkResult = await analyzeWithGemini(
+          chunkBase64,
+          "application/pdf",
+          `P.${startPage + 1}〜P.${endPage + 1} の全テキストを書き起こしてください。\n` +
+            `【出力ルール】\n` +
+            `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
+            `・図・表・手書き文字も含め全て書き起こす\n` +
+            `・一切省略せず完全に出力する`,
+          "transcription"
+        );
+
+        if (!chunkResult.success) {
+          throw new Error(
+            `P.${startPage + 1}〜${endPage + 1} の処理に失敗: ${chunkResult.error}`
+          );
+        }
+
+        fullText += `\n\n${chunkResult.analysis}`;
+
+        // チャンク間ウェイト（API rate limit対策）
+        if (i < totalChunks - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+      return fullText.trim();
+    }
+
+    // 通常の分析（画像、CHUNK_SIZE以下のPDF、transcription以外）
+    setTranscriptionProgress(`${progressPrefix} 分析中...`);
+    const basePrompt = ANALYSIS_PROMPTS[type];
+    const fullPrompt =
+      (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+      philosophyContext;
+    const data = await analyzeWithGemini(
+      fileBase64!,
+      fileMime!,
+      fullPrompt,
+      type
+    );
+    if (!data.success) throw new Error(data.error || "分析に失敗しました");
+    return data.analysis;
+  };
+
   const handleAnalyze = async () => {
+    if (selectedTypes.size === 0) {
+      toastError("分析タイプを1つ以上選択してください");
+      return;
+    }
+
     // テキストモード: テキストが必要
     if (isTextMode) {
       if (!inputText || inputText.trim().length === 0) {
@@ -458,126 +610,67 @@ export function GeminiPanel({
       }
     }
 
+    const types = Array.from(selectedTypes);
     setLoading(true);
     setResult("");
     setTranscriptionProgress("");
 
+    let lastResult = "";
+    let lastType: AnalysisType = types[0];
+    let successCount = 0;
+
     try {
-      // テキスト入力モードの場合
-      if (isTextMode && inputText) {
-        const basePrompt = ANALYSIS_PROMPTS[analysisType];
-        const fullPrompt = (purpose
-          ? `${basePrompt}\n\n目的: ${purpose}`
-          : basePrompt) + philosophyContext;
-        const data = await analyzeTextWithGemini(fullPrompt, inputText);
-        if (!data.success) throw new Error(data.error || "分析に失敗しました");
-        setResult(data.analysis);
-        onResult?.(data.analysis);
-        toastOk("AI分析が完了しました");
+      for (let i = 0; i < types.length; i++) {
+        const type = types[i];
+        const prefix =
+          types.length > 1
+            ? `(${i + 1}/${types.length}) ${getLabel(type)}:`
+            : "";
+
+        try {
+          const analysis = await analyzeOne(type, prefix);
+          lastResult = analysis;
+          lastType = type;
+          successCount += 1;
+
+          // 複数選択時は各結果を自動でストックに保存（別カードとして残す）
+          if (types.length > 1) {
+            saveAnalysis({
+              fileName: fileName ?? (isTextMode ? "テキスト入力" : "unknown"),
+              analysisType: type,
+              analysisLabel: getLabel(type),
+              content: analysis,
+              tags: [],
+              folder: "",
+            });
+          }
+        } catch (innerErr) {
+          const msg =
+            innerErr instanceof Error ? innerErr.message : "分析に失敗しました";
+          console.error(`${getLabel(type)} の分析でエラー:`, innerErr);
+          toastError(`${getLabel(type)}: ${msg}`);
+          // 複数件のうち1件失敗しても続行
+        }
+      }
+
+      if (lastResult) {
+        setResult(lastResult);
+        setLastResultType(lastType);
+        onResult?.(lastResult);
+      }
+
+      if (successCount === 0) {
+        // すでに toastError 済みなのでここでは追加メッセージ不要
         return;
       }
 
-      // 以下ファイルモード
-      // バッチ書き起こし判定: PDFかつtranscriptionかつページ数取得成功かつ10ページ超
-      const isTranscription = analysisType === "transcription";
-      const effectivePageCount = isPdf && pageCount !== null ? pageCount : 0;
-      const useBatch = isTranscription && isPdf && effectivePageCount > CHUNK_SIZE;
-
-      if (isTranscription && isPdf && effectivePageCount <= 0) {
-        // ページ数取得失敗 → 通常処理にフォールバック
-        console.warn("ページ数取得失敗、通常処理で実行します");
-        const basePrompt = ANALYSIS_PROMPTS[analysisType];
-        const fullPrompt = (purpose
-          ? `${basePrompt}\n\n目的: ${purpose}`
-          : basePrompt) + philosophyContext;
-        const data = await analyzeWithGemini(
-          fileBase64!,
-          fileMime!,
-          fullPrompt,
-          "transcription"
+      if (types.length > 1) {
+        toastOk(
+          `${successCount}/${types.length} 件の分析が完了し、ストックに保存しました`
         );
-        if (!data.success) throw new Error(data.error || "分析に失敗しました");
-        setResult(data.analysis);
-        onResult?.(data.analysis);
-        toastOk("AI分析が完了しました");
-      } else if (useBatch) {
-        const totalPages = effectivePageCount;
-        const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
-        let fullText = "";
-
-        for (let i = 0; i < totalChunks; i++) {
-          const startPage = i * CHUNK_SIZE;
-          const endPage = Math.min(startPage + CHUNK_SIZE - 1, totalPages - 1);
-
-          setTranscriptionProgress(
-            `書き起こし中... (${i + 1}/${totalChunks}チャンク / P.${startPage + 1}〜${endPage + 1})`
-          );
-
-          try {
-            const chunkBase64 = await splitPdfPages(fileBase64!, startPage, endPage);
-            const chunkResult = await analyzeWithGemini(
-              chunkBase64,
-              "application/pdf",
-              `P.${startPage + 1}〜P.${endPage + 1} の全テキストを書き起こしてください。\n` +
-                `【出力ルール】\n` +
-                `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
-                `・図・表・手書き文字も含め全て書き起こす\n` +
-                `・一切省略せず完全に出力する`,
-              "transcription"
-            );
-
-            if (!chunkResult.success) {
-              throw new Error(
-                `P.${startPage + 1}〜${endPage + 1} の処理に失敗: ${chunkResult.error}`
-              );
-            }
-
-            fullText += `\n\n${chunkResult.analysis}`;
-
-            // チャンク間ウェイト（API rate limit対策）
-            if (i < totalChunks - 1) {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-            }
-          } catch (chunkErr) {
-            console.error(`チャンク${i + 1}エラー:`, chunkErr);
-            const errMsg =
-              chunkErr instanceof Error ? chunkErr.message : String(chunkErr);
-            setTranscriptionProgress(
-              `❌ P.${startPage + 1}〜${endPage + 1} でエラー: ${errMsg}`
-            );
-            fullText += `\n\n⚠️ P.${startPage + 1}〜${endPage + 1} の処理でエラーが発生しました。\nエラー内容: ${errMsg}`;
-            setResult(fullText.trim());
-            onResult?.(fullText.trim());
-            toastError("一部エラーがありましたが途中結果を表示します");
-            return;
-          }
-        }
-
-        setResult(fullText.trim());
-        onResult?.(fullText.trim());
-        toastOk("全文書き起こしが完了しました");
       } else {
-        // 通常の分析（画像、10ページ以下のPDF、transcription以外）
-        const basePrompt = ANALYSIS_PROMPTS[analysisType];
-        const fullPrompt = (purpose
-          ? `${basePrompt}\n\n目的: ${purpose}`
-          : basePrompt) + philosophyContext;
-
-        const data = await analyzeWithGemini(
-          fileBase64!,
-          fileMime!,
-          fullPrompt,
-          analysisType
-        );
-        if (!data.success) throw new Error(data.error || "分析に失敗しました");
-
-        setResult(data.analysis);
-        onResult?.(data.analysis);
         toastOk("AI分析が完了しました");
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "分析に失敗しました";
-      toastError(msg);
     } finally {
       setLoading(false);
       setTranscriptionProgress("");
@@ -594,7 +687,7 @@ export function GeminiPanel({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `analysis_${analysisType}_${Date.now()}.txt`;
+    a.download = `analysis_${lastResultType}_${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -606,8 +699,8 @@ export function GeminiPanel({
 
     const label =
       ANALYSIS_GROUPS.flatMap((g) => g.options).find(
-        (o) => o.value === analysisType
-      )?.label ?? analysisType;
+        (o) => o.value === lastResultType
+      )?.label ?? lastResultType;
 
     // クリニック情報ブロック
     const clinicBlock =
@@ -642,7 +735,7 @@ export function GeminiPanel({
 
     const defaultPrompt =
       "- この分析内容についてさらに詳しく教えてください\n- 実践的な活用方法を提案してください";
-    const claudePrompt = claudePrompts[analysisType] || defaultPrompt;
+    const claudePrompt = claudePrompts[lastResultType] || defaultPrompt;
 
     const md = `# DermaPDF Pro 分析結果
 
@@ -686,7 +779,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
     const safeName = (fileName ?? "unknown")
       .replace(/\.[^/.]+$/, "")
       .replace(/[^\w\u3040-\u9fff]/g, "_");
-    a.download = `dermapdf_${safeName}_${analysisType}_${dateFileStr}.md`;
+    a.download = `dermapdf_${safeName}_${lastResultType}_${dateFileStr}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -761,35 +854,83 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           >
             <option value="">-- テンプレートを選択 --</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}（{t.analysisType}）
-              </option>
-            ))}
+            {templates.map((t) => {
+              const count =
+                t.selectedTypes && t.selectedTypes.length > 0
+                  ? t.selectedTypes.length
+                  : 1;
+              const summary =
+                count > 1 ? `${count}件選択` : t.analysisType;
+              return (
+                <option key={t.id} value={t.id}>
+                  {t.name}（{summary}）
+                </option>
+              );
+            })}
           </select>
         </div>
       )}
 
-      {/* 分析タイプ選択 */}
+      {/* 分析タイプ選択（複数選択可・グループ折りたたみ） */}
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-600">
-          分析タイプ
+          分析タイプ（複数選択可）
+          {selectedTypes.size > 0 && (
+            <span className="ml-2 text-xs font-normal text-[#185FA5]">
+              {selectedTypes.size}件選択中
+            </span>
+          )}
         </label>
-        <select
-          value={analysisType}
-          onChange={(e) => setAnalysisType(e.target.value as AnalysisType)}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-        >
-          {ANALYSIS_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.options.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+          {ANALYSIS_GROUPS.map((group) => {
+            const isOpen = openGroups.has(group.label);
+            const groupSelectedCount = group.options.filter((o) =>
+              selectedTypes.has(o.value)
+            ).length;
+            return (
+              <div
+                key={group.label}
+                className="border-b border-gray-100 last:border-b-0"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.label)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-700"
+                >
+                  <span>
+                    {group.label}
+                    {groupSelectedCount > 0 && (
+                      <span className="ml-2 text-xs text-[#185FA5]">
+                        （{groupSelectedCount}件選択中）
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-gray-400 text-xs">
+                    {isOpen ? "▲" : "▼"}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div className="px-3 py-2 space-y-1.5">
+                    {group.options.map((opt) => (
+                      <label
+                        key={opt.value}
+                        className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedTypes.has(opt.value)}
+                          onChange={() => toggleType(opt.value)}
+                          className="accent-[#378ADD]"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* 目的入力 */}
@@ -807,7 +948,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       </div>
 
       {/* 全文書き起こし警告 */}
-      {analysisType === "transcription" && (
+      {selectedTypes.has("transcription") && (
         <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
           {isPdf && pageCount !== null && pageCount > 30
             ? `⏱ ${Math.ceil(pageCount / CHUNK_SIZE)}回に分けて処理します（${pageCount}ページ）。${Math.ceil(pageCount / CHUNK_SIZE)}〜${Math.ceil(pageCount / CHUNK_SIZE) * 2}分かかる場合があります`
@@ -823,7 +964,11 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       <div className="flex gap-2">
         <button
           onClick={handleAnalyze}
-          disabled={loading || (isTextMode ? !inputText?.trim() : !fileBase64)}
+          disabled={
+            loading ||
+            selectedTypes.size === 0 ||
+            (isTextMode ? !inputText?.trim() : !fileBase64)
+          }
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
@@ -950,11 +1095,11 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             <button
               onClick={() => {
                 const label = ANALYSIS_GROUPS.flatMap((g) => g.options).find(
-                  (o) => o.value === analysisType
-                )?.label ?? analysisType;
+                  (o) => o.value === lastResultType
+                )?.label ?? lastResultType;
                 saveAnalysis({
                   fileName: fileName ?? "unknown",
-                  analysisType,
+                  analysisType: lastResultType,
                   analysisLabel: label,
                   content: result,
                   tags: [],

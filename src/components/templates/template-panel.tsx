@@ -49,7 +49,12 @@ export function TemplatePanel() {
   const handleApplyGemini = (t: AnalysisTemplate) => {
     window.dispatchEvent(
       new CustomEvent("applyTemplateGemini", {
-        detail: { analysisType: t.analysisType, analysisPurpose: t.analysisPurpose },
+        detail: {
+          analysisType: t.analysisType,
+          // 新形式の selectedTypes も同時に渡す（Gemini パネル側で優先される）
+          selectedTypes: t.selectedTypes,
+          analysisPurpose: t.analysisPurpose,
+        },
       })
     );
     toastOk(`「${t.name}」をGemini分析に適用しました`);
