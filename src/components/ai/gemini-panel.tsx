@@ -681,8 +681,14 @@ export function GeminiPanel({
 
           // 複数選択時は各結果を自動でストックに保存（別カードとして残す）
           if (types.length > 1) {
+            // タイトル自動生成（失敗時はフォールバックで握りつぶす）
+            const autoTitle = await generateTitleWithTimeout(
+              analysis,
+              getLabel(type),
+              buildFallbackTitle(type)
+            ).catch(() => buildFallbackTitle(type));
             saveAnalysis({
-              fileName: fileName ?? (isTextMode ? "テキスト入力" : "unknown"),
+              fileName: autoTitle,
               analysisType: type,
               analysisLabel: getLabel(type),
               content: analysis,
@@ -723,34 +729,105 @@ export function GeminiPanel({
     }
   };
 
+  // 分析結果から短いタイトルを Gemini で自動生成
+  const generateTitle = async (
+    analysisText: string,
+    analysisLabel: string,
+    fallback: string
+  ): Promise<string> => {
+    try {
+      const head = analysisText.slice(0, 300);
+      const prompt = `以下の分析結果を表す、短くわかりやすいタイトルを1つだけ生成してください。
+
+【条件】
+- 20〜40文字程度
+- 日本語
+- 内容の核心を一言で表す
+- 「〜の分析」「〜まとめ」などの形式でOK
+- タイトルだけを出力し、説明や前置きは不要
+
+【分析タイプ】${analysisLabel}
+
+【分析結果（先頭300文字）】
+${head}`;
+      const data = await analyzeTextWithGemini(prompt, head);
+      if (data.success && data.analysis) {
+        // 余分な記号・改行を除去してクリーンなタイトルにする
+        const title = data.analysis
+          .replace(/^["「『【]|["」』】]$/g, "")
+          .replace(/\n/g, "")
+          .trim()
+          .slice(0, 50);
+        return title || fallback;
+      }
+    } catch {
+      // エラー時はフォールバック
+    }
+    return fallback;
+  };
+
+  // 3秒のタイムアウト付きでタイトル生成（超過したらフォールバック）
+  const generateTitleWithTimeout = async (
+    text: string,
+    label: string,
+    fallback: string,
+    timeoutMs = 3000
+  ): Promise<string> => {
+    return Promise.race([
+      generateTitle(text, label, fallback),
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve(fallback), timeoutMs)
+      ),
+    ]);
+  };
+
+  // フォールバックタイトル（タイトル生成失敗時）: ラベル + ファイル名
+  const buildFallbackTitle = (type: AnalysisType): string => {
+    const base = fileName ?? (isTextMode ? "テキスト入力" : "unknown");
+    return `${getLabel(type)}_${base}`;
+  };
+
   // 個別結果のクリップボードコピー
   const copyText = async (text: string) => {
     await navigator.clipboard.writeText(text);
     toastOk("クリップボードにコピーしました");
   };
 
-  // 個別結果のテキスト保存
-  const downloadTxt = (type: AnalysisType, text: string) => {
+  // 個別結果のテキスト保存（タイトルは Gemini で自動生成）
+  const downloadTxt = async (type: AnalysisType, text: string) => {
+    const fallback = `analysis_${type}`;
+    const autoTitle = await generateTitleWithTimeout(
+      text,
+      getLabel(type),
+      fallback
+    );
+    const safeTitle = autoTitle.replace(/[^\w぀-鿿]/g, "_");
+    const dateStr = new Date().toISOString().split("T")[0];
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `analysis_${type}_${Date.now()}.txt`;
+    a.download = `${safeTitle}_${dateStr}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // 個別結果をストックに保存
-  const saveStock = (type: AnalysisType, text: string) => {
+  // 個別結果をストックに保存（タイトルは Gemini で自動生成）
+  const saveStock = async (type: AnalysisType, text: string) => {
+    const autoTitle = await generateTitleWithTimeout(
+      text,
+      getLabel(type),
+      buildFallbackTitle(type)
+    );
     saveAnalysis({
-      fileName: fileName ?? (isTextMode ? "テキスト入力" : "unknown"),
+      fileName: autoTitle,
       analysisType: type,
       analysisLabel: getLabel(type),
       content: text,
       tags: [],
       folder: "",
     });
-    toastOk("ストックに保存しました");
+    toastOk(`「${autoTitle}」としてストックに保存しました`);
   };
 
   // 個別結果を Gemini で平易化して上書き
@@ -790,13 +867,18 @@ export function GeminiPanel({
     onResult?.(text);
   };
 
-  // 個別結果の Markdown 保存
-  const downloadMd = (type: AnalysisType, text: string) => {
+  // 個別結果の Markdown 保存（タイトルは Gemini で自動生成）
+  const downloadMd = async (type: AnalysisType, text: string) => {
     const now = new Date();
     const dateStr = now.toLocaleString("ja-JP");
     const dateFileStr = now.toISOString().split("T")[0];
 
     const label = getLabel(type);
+    const autoTitle = await generateTitleWithTimeout(
+      text,
+      label,
+      `dermapdf_${type}`
+    );
 
     // クリニック情報ブロック
     const clinicBlock =
@@ -833,7 +915,7 @@ export function GeminiPanel({
       "- この分析内容についてさらに詳しく教えてください\n- 実践的な活用方法を提案してください";
     const claudePrompt = claudePrompts[type] || defaultPrompt;
 
-    const md = `# DermaPDF Pro 分析結果
+    const md = `# ${autoTitle}
 
 ## 基本情報
 - **ファイル名**: ${fileName ?? "unknown"}
@@ -872,10 +954,8 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const safeName = (fileName ?? "unknown")
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[^\w\u3040-\u9fff]/g, "_");
-    a.download = `dermapdf_${safeName}_${type}_${dateFileStr}.md`;
+    const safeTitle = autoTitle.replace(/[^\w\u3040-\u9fff]/g, "_");
+    a.download = `${safeTitle}_${dateFileStr}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1430,13 +1510,15 @@ function ResultPanel({
   simplifying: boolean;
   onUpdate: (text: string) => void;
   onSimplify: () => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onCopy: () => void;
-  onDownloadTxt: () => void;
-  onDownloadMd: () => void;
+  onDownloadTxt: () => void | Promise<void>;
+  onDownloadMd: () => void | Promise<void>;
 }) {
   const [editedText, setEditedText] = useState(text);
   const [isEditing, setIsEditing] = useState(false);
+  // タイトル生成を伴う非同期処理の進行中状態
+  const [pending, setPending] = useState<"save" | "txt" | "md" | null>(null);
 
   // text が外から変わった（平易化など）ときに同期
   useEffect(() => {
@@ -1444,6 +1526,21 @@ function ResultPanel({
   }, [text]);
 
   const currentLength = isEditing ? editedText.length : text.length;
+
+  // タイトル生成を伴う処理を呼び出す共通ラッパー
+  const runWithPending = async (
+    kind: "save" | "txt" | "md",
+    fn: () => void | Promise<void>
+  ) => {
+    if (pending !== null) return;
+    setPending(kind);
+    try {
+      await fn();
+    } finally {
+      setPending(null);
+    }
+  };
+  const isBusy = pending !== null;
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white/80 p-4 flex flex-col gap-3">
@@ -1477,22 +1574,49 @@ function ResultPanel({
           <Copy className="h-3 w-3" /> コピー
         </button>
         <button
-          onClick={onDownloadTxt}
-          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1"
+          onClick={() => runWithPending("txt", onDownloadTxt)}
+          disabled={isBusy}
+          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1 disabled:opacity-50"
         >
-          <Download className="h-3 w-3" /> テキスト
+          {pending === "txt" ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> 出力中...
+            </>
+          ) : (
+            <>
+              <Download className="h-3 w-3" /> テキスト
+            </>
+          )}
         </button>
         <button
-          onClick={onDownloadMd}
-          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1"
+          onClick={() => runWithPending("md", onDownloadMd)}
+          disabled={isBusy}
+          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1 disabled:opacity-50"
         >
-          <Download className="h-3 w-3" /> MD
+          {pending === "md" ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> 出力中...
+            </>
+          ) : (
+            <>
+              <Download className="h-3 w-3" /> MD
+            </>
+          )}
         </button>
         <button
-          onClick={onSave}
-          className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white inline-flex items-center gap-1"
+          onClick={() => runWithPending("save", onSave)}
+          disabled={isBusy}
+          className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white inline-flex items-center gap-1 disabled:opacity-50"
         >
-          <BookmarkPlus className="h-3 w-3" /> ストック
+          {pending === "save" ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> 保存中...
+            </>
+          ) : (
+            <>
+              <BookmarkPlus className="h-3 w-3" /> ストック
+            </>
+          )}
         </button>
         <button
           onClick={onSimplify}
