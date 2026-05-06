@@ -88,6 +88,14 @@ interface AnalysisGroup {
   options: AnalysisOption[];
 }
 
+// 結果パネル本文の高さプリセット（"全" は上限なし＝auto）
+const HEIGHT_PRESETS: { label: string; h: number }[] = [
+  { label: "S", h: 200 },
+  { label: "M", h: 350 },
+  { label: "L", h: 500 },
+  { label: "全", h: 9999 },
+];
+
 const ANALYSIS_GROUPS: AnalysisGroup[] = [
   {
     label: "\u{1F4C4} 基本分析",
@@ -1519,6 +1527,8 @@ function ResultPanel({
   const [isEditing, setIsEditing] = useState(false);
   // タイトル生成を伴う非同期処理の進行中状態
   const [pending, setPending] = useState<"save" | "txt" | "md" | null>(null);
+  // 本文エリアの高さ（プリセット値・初期値=M=350）
+  const [panelHeight, setPanelHeight] = useState<number>(350);
 
   // text が外から変わった（平易化など）ときに同期
   useEffect(() => {
@@ -1552,16 +1562,46 @@ function ResultPanel({
         </span>
       </div>
 
-      {/* 本文 */}
+      {/* 高さプリセット切替 */}
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-gray-400 mr-1">高さ:</span>
+        {HEIGHT_PRESETS.map(({ label, h }) => (
+          <button
+            key={label}
+            onClick={() => setPanelHeight(h)}
+            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+              panelHeight === h
+                ? "bg-[#378ADD] text-white border-[#378ADD]"
+                : "border-gray-200 text-gray-500 hover:border-[#378ADD]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* 本文（リサイズ可能ラッパー） */}
       {isEditing ? (
         <textarea
           value={editedText}
           onChange={(e) => setEditedText(e.target.value)}
-          className="w-full min-h-[300px] rounded-lg border-2 border-[#378ADD] bg-white p-3 text-sm leading-relaxed resize-y focus:border-[#378ADD] focus:outline-none"
+          style={{
+            height: panelHeight === 9999 ? "auto" : `${panelHeight}px`,
+            minHeight: "200px",
+          }}
+          className="w-full rounded-lg border-2 border-[#378ADD] bg-white p-3 text-sm leading-relaxed resize-y focus:border-[#378ADD] focus:outline-none"
         />
       ) : (
-        <div className="prose prose-sm max-w-none text-gray-700 max-h-[400px] overflow-y-auto">
-          <ReactMarkdown>{text}</ReactMarkdown>
+        <div
+          className="overflow-y-auto resize-y rounded border border-gray-100 p-2 bg-white/60"
+          style={{
+            height: panelHeight === 9999 ? "auto" : `${panelHeight}px`,
+            minHeight: "200px",
+          }}
+        >
+          <div className="prose prose-sm max-w-none text-gray-700 text-sm">
+            <ReactMarkdown>{text}</ReactMarkdown>
+          </div>
         </div>
       )}
 
