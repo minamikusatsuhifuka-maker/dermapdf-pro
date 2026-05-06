@@ -7,6 +7,9 @@ export interface AnalysisTemplate {
   // 複数選択対応（新形式）。旧テンプレートには存在しないため optional。
   selectedTypes?: string[];
   analysisPurpose: string;
+  // 出力文字数指定（"" | "200" | "400" | ... | "custom"）。旧テンプレートには無いため optional。
+  targetLength?: string;
+  customLength?: string;
   // Genspark設定
   gensparkTarget: string;
   gensparkLevel: string;

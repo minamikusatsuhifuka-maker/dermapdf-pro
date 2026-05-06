@@ -334,6 +334,9 @@ export function GeminiPanel({
   // 表示中の結果に対応する分析タイプ（DL ファイル名・ストック保存ラベルで使用）
   const [lastResultType, setLastResultType] = useState<AnalysisType>("summary");
   const [purpose, setPurpose] = useState("");
+  // 出力文字数の目安。"" は指定なし、"custom" でカスタム入力欄が出る
+  const [targetLength, setTargetLength] = useState<string>("");
+  const [customLength, setCustomLength] = useState<string>("500");
   const [result, setResult] = useState("");
   const [isEditingResult, setIsEditingResult] = useState(false);
   const [editedResult, setEditedResult] = useState("");
@@ -405,6 +408,8 @@ export function GeminiPanel({
         setSelectedTypes(new Set([detail.analysisType as AnalysisType]));
       }
       if (detail.analysisPurpose !== undefined) setPurpose(detail.analysisPurpose);
+      if (detail.targetLength !== undefined) setTargetLength(detail.targetLength);
+      if (detail.customLength !== undefined) setCustomLength(detail.customLength);
     };
     const handleApplyGenspark = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -435,6 +440,8 @@ export function GeminiPanel({
       analysisType: types[0] ?? "summary",
       selectedTypes: types,
       analysisPurpose: purpose,
+      targetLength,
+      customLength,
       gensparkTarget: gsTarget,
       gensparkLevel: gsLevel,
       gensparkPurpose: gsPurpose,
@@ -456,6 +463,8 @@ export function GeminiPanel({
       analysisType: types[0] ?? "summary",
       selectedTypes: types,
       analysisPurpose: purpose,
+      targetLength,
+      customLength,
       gensparkTarget: gsTarget,
       gensparkLevel: gsLevel,
       gensparkPurpose: gsPurpose,
@@ -476,6 +485,8 @@ export function GeminiPanel({
       setSelectedTypes(new Set([t.analysisType as AnalysisType]));
     }
     setPurpose(t.analysisPurpose);
+    if (t.targetLength !== undefined) setTargetLength(t.targetLength);
+    if (t.customLength !== undefined) setCustomLength(t.customLength);
     toastOk(`「${t.name}」を適用しました`);
   };
 
@@ -498,12 +509,20 @@ export function GeminiPanel({
     type: AnalysisType,
     progressPrefix: string
   ): Promise<string> => {
+    // 出力文字数の指示文（指定なしの場合は空文字）
+    const effectiveLength =
+      targetLength === "custom" ? customLength : targetLength;
+    const lengthInstruction = effectiveLength
+      ? `\n\n【出力文字数の目安】約${effectiveLength}文字程度でまとめてください。`
+      : "";
+
     // テキスト入力モード
     if (isTextMode && inputText) {
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
         (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+        lengthInstruction +
         philosophyContext;
       const data = await analyzeTextWithGemini(fullPrompt, inputText);
       if (!data.success) throw new Error(data.error || "分析に失敗しました");
@@ -522,6 +541,7 @@ export function GeminiPanel({
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
         (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+        lengthInstruction +
         philosophyContext;
       const data = await analyzeWithGemini(
         fileBase64!,
@@ -554,7 +574,8 @@ export function GeminiPanel({
             `【出力ルール】\n` +
             `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
             `・図・表・手書き文字も含め全て書き起こす\n` +
-            `・一切省略せず完全に出力する`,
+            `・一切省略せず完全に出力する` +
+            lengthInstruction,
           "transcription"
         );
 
@@ -579,6 +600,7 @@ export function GeminiPanel({
     const basePrompt = ANALYSIS_PROMPTS[type];
     const fullPrompt =
       (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+      lengthInstruction +
       philosophyContext;
     const data = await analyzeWithGemini(
       fileBase64!,
@@ -947,6 +969,47 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         />
       </div>
 
+      {/* 出力文字数指定 */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-600">
+          出力文字数の目安（任意）
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={targetLength}
+            onChange={(e) => setTargetLength(e.target.value)}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+          >
+            <option value="">指定なし（AIに任せる）</option>
+            <option value="200">200文字程度（超コンパクト）</option>
+            <option value="400">400文字程度（短め）</option>
+            <option value="600">600文字程度（標準）</option>
+            <option value="1000">1000文字程度（詳しめ）</option>
+            <option value="2000">2000文字程度（長文）</option>
+            <option value="3000">3000文字程度（非常に詳細）</option>
+            <option value="custom">カスタム指定</option>
+          </select>
+
+          {targetLength === "custom" && (
+            <input
+              type="number"
+              value={customLength}
+              onChange={(e) => setCustomLength(e.target.value)}
+              placeholder="文字数を入力"
+              min={100}
+              max={10000}
+              step={100}
+              className="w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+            />
+          )}
+          {targetLength && targetLength !== "custom" && (
+            <span className="text-xs text-gray-400">
+              約{Number(targetLength).toLocaleString()}文字
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* 全文書き起こし警告 */}
       {selectedTypes.has("transcription") && (
         <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
@@ -1071,6 +1134,11 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 <ReactMarkdown>{result}</ReactMarkdown>
               </div>
             )}
+
+            {/* 結果の文字数表示（編集中は editedResult、通常は result） */}
+            <div className="text-right text-xs text-gray-400 mt-1 pr-1">
+              {(isEditingResult ? editedResult.length : result.length).toLocaleString()} 文字
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
