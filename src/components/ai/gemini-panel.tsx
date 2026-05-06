@@ -774,12 +774,12 @@ ${head}`;
     return fallback;
   };
 
-  // 3秒のタイムアウト付きでタイトル生成（超過したらフォールバック）
+  // 4秒のタイムアウト付きでタイトル生成（超過したらフォールバック）
   const generateTitleWithTimeout = async (
     text: string,
     label: string,
     fallback: string,
-    timeoutMs = 3000
+    timeoutMs = 4000
   ): Promise<string> => {
     return Promise.race([
       generateTitle(text, label, fallback),
@@ -1620,7 +1620,7 @@ function ResultPanel({
         >
           {pending === "txt" ? (
             <>
-              <Loader2 className="h-3 w-3 animate-spin" /> 出力中...
+              <Loader2 className="h-3 w-3 animate-spin" /> タイトル生成中...
             </>
           ) : (
             <>
@@ -1635,7 +1635,7 @@ function ResultPanel({
         >
           {pending === "md" ? (
             <>
-              <Loader2 className="h-3 w-3 animate-spin" /> 出力中...
+              <Loader2 className="h-3 w-3 animate-spin" /> タイトル生成中...
             </>
           ) : (
             <>
@@ -1650,7 +1650,7 @@ function ResultPanel({
         >
           {pending === "save" ? (
             <>
-              <Loader2 className="h-3 w-3 animate-spin" /> 保存中...
+              <Loader2 className="h-3 w-3 animate-spin" /> タイトル生成中...
             </>
           ) : (
             <>
