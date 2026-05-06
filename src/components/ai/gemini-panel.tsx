@@ -760,7 +760,14 @@ export function GeminiPanel({
 ${head}`;
       // 分析結果は prompt 内に既に埋め込み済み。
       // text 引数を渡すと analyzeTextWithGemini が「分析してください」テンプレで二重に包んでしまうため省略する。
+      console.log("[generateTitle] 開始:", analysisLabel, head.slice(0, 50));
       const data = await analyzeTextWithGemini(prompt);
+      console.log(
+        "[generateTitle] 結果:",
+        data.success,
+        data.analysis?.slice(0, 50),
+        data.error
+      );
       if (data.success && data.analysis) {
         // 余分な記号・改行を除去してクリーンなタイトルにする
         const title = data.analysis
@@ -768,20 +775,22 @@ ${head}`;
           .replace(/\n/g, "")
           .trim()
           .slice(0, 50);
+        console.log("[generateTitle] 生成タイトル:", title);
         return title || fallback;
       }
-    } catch {
-      // エラー時はフォールバック
+    } catch (e) {
+      console.error("[generateTitle] 例外:", e);
     }
+    console.warn("[generateTitle] フォールバック使用:", fallback);
     return fallback;
   };
 
-  // 4秒のタイムアウト付きでタイトル生成（超過したらフォールバック）
+  // 15秒のタイムアウト付きでタイトル生成（超過したらフォールバック）
   const generateTitleWithTimeout = async (
     text: string,
     label: string,
     fallback: string,
-    timeoutMs = 4000
+    timeoutMs = 15000
   ): Promise<string> => {
     return Promise.race([
       generateTitle(text, label, fallback),
@@ -824,11 +833,13 @@ ${head}`;
 
   // 個別結果をストックに保存（タイトルは Gemini で自動生成）
   const saveStock = async (type: AnalysisType, text: string) => {
+    console.log("[saveStock] タイトル生成開始:", type, text.slice(0, 50));
     const autoTitle = await generateTitleWithTimeout(
       text,
       getLabel(type),
       buildFallbackTitle(type)
     );
+    console.log("[saveStock] 最終タイトル:", autoTitle);
     saveAnalysis({
       fileName: autoTitle,
       analysisType: type,
