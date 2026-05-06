@@ -1099,38 +1099,125 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                   <div className="px-3 py-2 space-y-1.5">
                     {group.options.map((opt) => {
                       const checked = selectedTypes.has(opt.value);
+                      const isGsSlide = opt.value === "genspark_slide";
                       return (
-                        <div
-                          key={opt.value}
-                          className="flex items-center gap-2"
-                        >
-                          <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5] flex-1">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleType(opt.value)}
-                              className="accent-[#378ADD]"
-                            />
-                            {opt.label}
-                          </label>
-                          {/* 選択中のタイプのみ個別文字数指定を表示 */}
-                          {checked && (
-                            <select
-                              value={typeLengths[opt.value] || ""}
-                              onChange={(e) =>
-                                setTypeLength(opt.value, e.target.value)
-                              }
-                              className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
-                              title="この分析タイプの出力文字数"
-                            >
-                              <option value="">文字数指定なし</option>
-                              <option value="200">200字</option>
-                              <option value="400">400字</option>
-                              <option value="600">600字</option>
-                              <option value="1000">1000字</option>
-                              <option value="2000">2000字</option>
-                              <option value="3000">3000字</option>
-                            </select>
+                        <div key={opt.value}>
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5] flex-1">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleType(opt.value)}
+                                className="accent-[#378ADD]"
+                              />
+                              {opt.label}
+                            </label>
+                            {/* 選択中のタイプのみ個別文字数指定を表示 */}
+                            {checked && (
+                              <select
+                                value={typeLengths[opt.value] || ""}
+                                onChange={(e) =>
+                                  setTypeLength(opt.value, e.target.value)
+                                }
+                                className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
+                                title="この分析タイプの出力文字数"
+                              >
+                                <option value="">文字数指定なし</option>
+                                <option value="200">200字</option>
+                                <option value="400">400字</option>
+                                <option value="600">600字</option>
+                                <option value="1000">1000字</option>
+                                <option value="2000">2000字</option>
+                                <option value="3000">3000字</option>
+                              </select>
+                            )}
+                          </div>
+
+                          {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを直下に展開 */}
+                          {isGsSlide && checked && (
+                            <div className="mt-2 ml-6 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
+                              <p className="text-xs font-semibold text-[#185FA5]">
+                                🎯 Gensparkプレゼン設定
+                              </p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-xs text-gray-500 mb-1 block">
+                                    聴講ターゲット
+                                  </label>
+                                  <select
+                                    value={gsTarget}
+                                    onChange={(e) => setGsTarget(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                                  >
+                                    {TARGET_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-500 mb-1 block">
+                                    内容レベル
+                                  </label>
+                                  <select
+                                    value={gsLevel}
+                                    onChange={(e) => setGsLevel(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                                  >
+                                    {LEVEL_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-500 mb-1 block">
+                                    プレゼンの目的
+                                  </label>
+                                  <select
+                                    value={gsPurpose}
+                                    onChange={(e) => setGsPurpose(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                                  >
+                                    {PURPOSE_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-500 mb-1 block">
+                                    スライドのトーン
+                                  </label>
+                                  <select
+                                    value={gsTone}
+                                    onChange={(e) => setGsTone(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                                  >
+                                    {TONE_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 mb-1 block">
+                                  追加要望（任意）
+                                </label>
+                                <textarea
+                                  value={gsNotes}
+                                  onChange={(e) => setGsNotes(e.target.value)}
+                                  placeholder="スライドへの追加要望..."
+                                  rows={2}
+                                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none resize-none"
+                                />
+                              </div>
+                            </div>
                           )}
                         </div>
                       );
