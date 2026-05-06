@@ -58,6 +58,25 @@ const FAVORITE_FOLDER = "⭐ お気に入り";
 const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
 const FOLDER_ORDER_KEY = "dermapdf_folder_order";
 
+// フォルダごとのカラーパレット（左端カラーバー・カラーバッジ用）
+const FOLDER_PALETTE = [
+  "#378ADD",
+  "#1D9E75",
+  "#f59e0b",
+  "#e24b4b",
+  "#8b5cf6",
+  "#06b6d4",
+  "#f97316",
+  "#10b981",
+];
+
+// フォルダパスに対して一貫した色を返す（パスが見つからない場合はグレー）
+function getFolderColor(path: string, allPaths: string[]): string {
+  const idx = allPaths.indexOf(path);
+  if (idx < 0) return "#6b7280";
+  return FOLDER_PALETTE[idx % FOLDER_PALETTE.length];
+}
+
 function saveFolderOrder(order: string[]): void {
   localStorage.setItem(FOLDER_ORDER_KEY, JSON.stringify(order));
 }
@@ -584,6 +603,8 @@ export function AnalysisStockPanel() {
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  // カテゴリ概覧グリッドの表示/非表示
+  const [showCategoryGrid, setShowCategoryGrid] = useState(true);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [showTagList, setShowTagList] = useState(false);
   const [staffLinkId, setStaffLinkId] = useState<string | null>(null);
@@ -1310,6 +1331,94 @@ export function AnalysisStockPanel() {
         )}
       </div>
 
+      {/* カテゴリ概覧（折りたたみ可） */}
+      <div className="pb-1">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-gray-500">📂 カテゴリ概覧</span>
+          <button
+            onClick={() => setShowCategoryGrid((v) => !v)}
+            className="text-xs text-[#378ADD] hover:underline"
+          >
+            {showCategoryGrid ? "▲ 折りたたむ" : "▼ 展開"}
+          </button>
+        </div>
+        {showCategoryGrid && (() => {
+          const flatFolders = getFlatFolderList(folderTree);
+          const allFolderPaths = flatFolders.map((f) => f.path);
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-3">
+              {/* 「すべて」カード */}
+              <button
+                onClick={() => setActiveFolder(null)}
+                className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all text-left ${
+                  activeFolder === null
+                    ? "border-[#378ADD] bg-[#E6F1FB]"
+                    : "border-gray-100 bg-white/60 hover:border-[#B5D4F4]"
+                }`}
+              >
+                <span className="text-lg mb-1">📂</span>
+                <span className="text-xs font-semibold text-gray-700 truncate w-full">
+                  すべて
+                </span>
+                <div className="flex items-end gap-1">
+                  <span className="text-xl font-bold text-[#378ADD]">
+                    {records.length}
+                  </span>
+                  <span className="text-[10px] text-gray-400 mb-0.5">件</span>
+                </div>
+              </button>
+
+              {/* 各フォルダカード */}
+              {flatFolders.map((f) => {
+                const isActive = activeFolder === f.path;
+                const folderColor = getFolderColor(f.path, allFolderPaths);
+                return (
+                  <button
+                    key={f.path}
+                    onClick={() => setActiveFolder(f.path)}
+                    className={`flex flex-col items-start p-3 pl-4 rounded-xl border-2 transition-all text-left relative ${
+                      isActive
+                        ? "border-[#378ADD] bg-[#E6F1FB]"
+                        : "border-gray-100 bg-white/60 hover:border-[#B5D4F4]"
+                    }`}
+                  >
+                    {/* 左端カラーバー */}
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                      style={{ background: folderColor }}
+                    />
+                    <span className="text-lg mb-1">📁</span>
+                    <span className="text-xs font-semibold text-gray-700 truncate w-full">
+                      {f.displayName}
+                    </span>
+                    <div className="flex items-end gap-1">
+                      <span
+                        className="text-xl font-bold"
+                        style={{ color: folderColor }}
+                      >
+                        {folderCounts[f.path] || 0}
+                      </span>
+                      <span className="text-[10px] text-gray-400 mb-0.5">
+                        件
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* フォルダ追加カード */}
+              <button
+                onClick={() => setShowAddFolder(true)}
+                className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-dashed border-gray-200 hover:border-[#378ADD] transition-all text-gray-400 hover:text-[#378ADD]"
+              >
+                <span className="text-2xl mb-1">+</span>
+                <span className="text-xs">フォルダ追加</span>
+              </button>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* フォルダツリー */}
       <div className="space-y-1 pb-2">
         {/* 固定タブ: すべて + ロック済み */}
@@ -1490,30 +1599,82 @@ export function AnalysisStockPanel() {
 
       {/* 一括操作パネル */}
       {selectedIds.size > 0 && (
-        <div className="flex flex-col gap-2 rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] p-3">
-          {/* 1行目: ラベル + フォルダ + タグ */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-[#185FA5]">
-              📋 {selectedIds.size}件を一括操作：
+        <div className="flex flex-col gap-2 rounded-xl border-2 border-[#378ADD] bg-[#E6F1FB] p-3">
+          {/* ヘッダ: 件数表示と選択解除 */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-[#185FA5]">
+              📋 {selectedIds.size}件を選択中
             </span>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              選択解除
+            </button>
+          </div>
 
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-600">📁</span>
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) bulkSetFolder(e.target.value);
+          {/* カテゴリ（フォルダ）への一括移動 — 視覚的に強調 */}
+          <div>
+            <p className="text-xs font-semibold text-[#185FA5] mb-1.5">
+              📁 カテゴリに移動
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {(() => {
+                const flatFolders = getFlatFolderList(folderTree);
+                const allFolderPaths = flatFolders.map((f) => f.path);
+                return flatFolders.map((f) => {
+                  const folderColor = getFolderColor(f.path, allFolderPaths);
+                  return (
+                    <button
+                      key={f.path}
+                      onClick={() => {
+                        const count = selectedIds.size;
+                        bulkSetFolder(f.path);
+                        setSelectedIds(new Set());
+                        toastOk(
+                          `${count}件を「${f.displayName}」に移動しました`
+                        );
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium border bg-white hover:bg-[#378ADD] hover:text-white hover:border-[#378ADD] transition-all inline-flex items-center gap-1.5"
+                      style={{ borderColor: folderColor }}
+                    >
+                      <span
+                        className="inline-block w-2 h-2 rounded-full"
+                        style={{ background: folderColor }}
+                      />
+                      {f.displayName}
+                    </button>
+                  );
+                });
+              })()}
+              {/* 新規カテゴリに直接移動 */}
+              <button
+                onClick={() => {
+                  const name = window.prompt("新しいカテゴリ名を入力してください");
+                  const trimmed = name?.trim();
+                  if (!trimmed) return;
+                  const count = selectedIds.size;
+                  if (!customFolders.includes(trimmed)) {
+                    saveCustomFolders([...customFolders, trimmed]);
+                  }
+                  bulkSetFolder(trimmed);
+                  setSelectedIds(new Set());
+                  toastOk(
+                    `「${trimmed}」を作成して${count}件を移動しました`
+                  );
                 }}
-                className="rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#B5D4F4]"
-                title="選択した項目をフォルダに移動"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-[#378ADD] text-[#378ADD] hover:bg-[#E6F1FB] transition-all"
               >
-                <option value="">フォルダ選択...</option>
-                {getFlatFolderList(folderTree).map((f) => (
-                  <option key={f.path} value={f.path}>{f.displayName}</option>
-                ))}
-              </select>
+                + 新規カテゴリ
+              </button>
             </div>
+          </div>
 
+          {/* 区切り線 */}
+          <div className="border-t border-[#B5D4F4]" />
+
+          {/* タグ追加 */}
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
               <span className="text-xs text-gray-600">🏷</span>
               <input
@@ -1625,10 +1786,19 @@ export function AnalysisStockPanel() {
             : "検索条件に一致する結果がありません"}
         </p>
       ) : (
+        (() => {
+          const folderPaths = getFlatFolderList(folderTree).map((f) => f.path);
+          return (
         <div className="space-y-2">
           {filtered.map((r) => {
             const isExpanded = expandedId === r.id;
             const isGensparkActive = activeGensparkId === r.id;
+            const folderColor = r.folder
+              ? getFolderColor(r.folder, folderPaths)
+              : "#6b7280";
+            const folderDisplayName = r.folder
+              ? getFolderName(r.folder)
+              : "";
             return (
               <div
                 key={r.id}
@@ -1654,9 +1824,13 @@ export function AnalysisStockPanel() {
                     {r.analysisLabel}
                   </span>
                   {r.folder && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                      <FolderOpen className="mr-0.5 inline h-2.5 w-2.5" />
-                      {r.folder}
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                      style={{ background: folderColor }}
+                      title={r.folder}
+                    >
+                      <FolderOpen className="inline h-2.5 w-2.5" />
+                      {folderDisplayName}
                     </span>
                   )}
                   {r.locked && (
@@ -1992,6 +2166,8 @@ export function AnalysisStockPanel() {
             );
           })}
         </div>
+          );
+        })()
       )}
 
       </>)}
