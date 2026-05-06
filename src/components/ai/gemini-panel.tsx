@@ -758,7 +758,9 @@ export function GeminiPanel({
 
 【分析結果（先頭300文字）】
 ${head}`;
-      const data = await analyzeTextWithGemini(prompt, head);
+      // 分析結果は prompt 内に既に埋め込み済み。
+      // text 引数を渡すと analyzeTextWithGemini が「分析してください」テンプレで二重に包んでしまうため省略する。
+      const data = await analyzeTextWithGemini(prompt);
       if (data.success && data.analysis) {
         // 余分な記号・改行を除去してクリーンなタイトルにする
         const title = data.analysis
