@@ -337,12 +337,23 @@ export function GeminiPanel({
   // 出力文字数の目安。"" は指定なし、"custom" でカスタム入力欄が出る
   const [targetLength, setTargetLength] = useState<string>("");
   const [customLength, setCustomLength] = useState<string>("500");
+  // 旧UI互換用: 最後に成功した結果を保持（Gensparkプロンプト生成の入力に使用）
   const [result, setResult] = useState("");
-  const [isEditingResult, setIsEditingResult] = useState(false);
-  const [editedResult, setEditedResult] = useState("");
+  // 複数結果を分析タイプ別に保持
+  const [results, setResults] = useState<Map<AnalysisType, string>>(
+    () => new Map()
+  );
+  // 各分析タイプの個別出力文字数指定（""=指定なし）
+  const [typeLengths, setTypeLengths] = useState<Record<string, string>>({});
+  // 「わかりやすく変換」処理中の分析タイプ
+  const [simplifying, setSimplifying] = useState<AnalysisType | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
+
+  const setTypeLength = (type: AnalysisType, value: string) => {
+    setTypeLengths((prev) => ({ ...prev, [type]: value }));
+  };
 
   const toggleType = (type: AnalysisType) => {
     setSelectedTypes((prev) => {
@@ -505,13 +516,16 @@ export function GeminiPanel({
 
   // 単一の分析タイプを実行して結果テキストを返す内部ヘルパー
   // progressPrefix: 複数同時実行時のヘッダー（例: "(2/3) 詳細にまとめる"）
+  // lengthOverride: 個別文字数指定（あればグローバルの targetLength より優先）
   const analyzeOne = async (
     type: AnalysisType,
-    progressPrefix: string
+    progressPrefix: string,
+    lengthOverride?: string
   ): Promise<string> => {
-    // 出力文字数の指示文（指定なしの場合は空文字）
-    const effectiveLength =
+    // 個別指定 > グローバル指定 の優先順
+    const globalLength =
       targetLength === "custom" ? customLength : targetLength;
+    const effectiveLength = lengthOverride || globalLength;
     const lengthInstruction = effectiveLength
       ? `\n\n【出力文字数の目安】約${effectiveLength}文字程度でまとめてください。`
       : "";
@@ -635,6 +649,7 @@ export function GeminiPanel({
     const types = Array.from(selectedTypes);
     setLoading(true);
     setResult("");
+    setResults(new Map());
     setTranscriptionProgress("");
 
     let lastResult = "";
@@ -650,10 +665,19 @@ export function GeminiPanel({
             : "";
 
         try {
-          const analysis = await analyzeOne(type, prefix);
+          // 個別文字数指定（無ければ analyzeOne 内でグローバル設定にフォールバック）
+          const lengthForType = typeLengths[type] || "";
+          const analysis = await analyzeOne(type, prefix, lengthForType);
           lastResult = analysis;
           lastType = type;
           successCount += 1;
+
+          // results Map に追加（左右並列表示用）
+          setResults((prev) => {
+            const next = new Map(prev);
+            next.set(type, analysis);
+            return next;
+          });
 
           // 複数選択時は各結果を自動でストックに保存（別カードとして残す）
           if (types.length > 1) {
@@ -699,30 +723,80 @@ export function GeminiPanel({
     }
   };
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(result);
+  // 個別結果のクリップボードコピー
+  const copyText = async (text: string) => {
+    await navigator.clipboard.writeText(text);
     toastOk("クリップボードにコピーしました");
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([result], { type: "text/plain;charset=utf-8" });
+  // 個別結果のテキスト保存
+  const downloadTxt = (type: AnalysisType, text: string) => {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `analysis_${lastResultType}_${Date.now()}.txt`;
+    a.download = `analysis_${type}_${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadMarkdown = () => {
+  // 個別結果をストックに保存
+  const saveStock = (type: AnalysisType, text: string) => {
+    saveAnalysis({
+      fileName: fileName ?? (isTextMode ? "テキスト入力" : "unknown"),
+      analysisType: type,
+      analysisLabel: getLabel(type),
+      content: text,
+      tags: [],
+      folder: "",
+    });
+    toastOk("ストックに保存しました");
+  };
+
+  // 個別結果を Gemini で平易化して上書き
+  const simplifyOne = async (type: AnalysisType, text: string) => {
+    setSimplifying(type);
+    try {
+      const prompt = `以下の文章を、専門用語を使わずに誰でも理解できる平易な言葉でわかりやすく書き直してください。意味・内容は変えずに、表現だけをシンプルにしてください。\n\n${text}`;
+      const data = await analyzeTextWithGemini(prompt, text);
+      if (!data.success) throw new Error(data.error || "変換に失敗しました");
+      setResults((prev) => {
+        const next = new Map(prev);
+        next.set(type, data.analysis);
+        return next;
+      });
+      // Gensparkプロンプト生成の入力を最新版に更新
+      setResult(data.analysis);
+      setLastResultType(type);
+      onResult?.(data.analysis);
+      toastOk(`${getLabel(type)}をわかりやすく変換しました`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "変換に失敗しました";
+      toastError(msg);
+    } finally {
+      setSimplifying(null);
+    }
+  };
+
+  // ResultPanel からの編集確定を Map に反映
+  const updateResult = (type: AnalysisType, text: string) => {
+    setResults((prev) => {
+      const next = new Map(prev);
+      next.set(type, text);
+      return next;
+    });
+    setResult(text);
+    setLastResultType(type);
+    onResult?.(text);
+  };
+
+  // 個別結果の Markdown 保存
+  const downloadMd = (type: AnalysisType, text: string) => {
     const now = new Date();
     const dateStr = now.toLocaleString("ja-JP");
     const dateFileStr = now.toISOString().split("T")[0];
 
-    const label =
-      ANALYSIS_GROUPS.flatMap((g) => g.options).find(
-        (o) => o.value === lastResultType
-      )?.label ?? lastResultType;
+    const label = getLabel(type);
 
     // クリニック情報ブロック
     const clinicBlock =
@@ -730,8 +804,8 @@ export function GeminiPanel({
         ? `## クリニック情報\n- **クリニック名**: ${clinicSettings.clinicName}${clinicSettings.purpose ? "\n- **理念**: " + clinicSettings.purpose : ""}${clinicSettings.mission ? "\n- **ミッション**: " + clinicSettings.mission : ""}\n\n`
         : "";
 
-    // 分析内容をMarkdown見出しに変換
-    const formattedAnalysis = result
+    // 分析内容（軽い整形）
+    const formattedAnalysis = text
       .replace(/\*\*(.+?)\*\*/g, "**$1**")
       .replace(/^#{1,6}\s/gm, (match) => match);
 
@@ -757,7 +831,7 @@ export function GeminiPanel({
 
     const defaultPrompt =
       "- この分析内容についてさらに詳しく教えてください\n- 実践的な活用方法を提案してください";
-    const claudePrompt = claudePrompts[lastResultType] || defaultPrompt;
+    const claudePrompt = claudePrompts[type] || defaultPrompt;
 
     const md = `# DermaPDF Pro 分析結果
 
@@ -801,7 +875,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
     const safeName = (fileName ?? "unknown")
       .replace(/\.[^/.]+$/, "")
       .replace(/[^\w\u3040-\u9fff]/g, "_");
-    a.download = `dermapdf_${safeName}_${lastResultType}_${dateFileStr}.md`;
+    a.download = `dermapdf_${safeName}_${type}_${dateFileStr}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -933,20 +1007,44 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 </button>
                 {isOpen && (
                   <div className="px-3 py-2 space-y-1.5">
-                    {group.options.map((opt) => (
-                      <label
-                        key={opt.value}
-                        className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedTypes.has(opt.value)}
-                          onChange={() => toggleType(opt.value)}
-                          className="accent-[#378ADD]"
-                        />
-                        {opt.label}
-                      </label>
-                    ))}
+                    {group.options.map((opt) => {
+                      const checked = selectedTypes.has(opt.value);
+                      return (
+                        <div
+                          key={opt.value}
+                          className="flex items-center gap-2"
+                        >
+                          <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5] flex-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleType(opt.value)}
+                              className="accent-[#378ADD]"
+                            />
+                            {opt.label}
+                          </label>
+                          {/* 選択中のタイプのみ個別文字数指定を表示 */}
+                          {checked && (
+                            <select
+                              value={typeLengths[opt.value] || ""}
+                              onChange={(e) =>
+                                setTypeLength(opt.value, e.target.value)
+                              }
+                              className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
+                              title="この分析タイプの出力文字数"
+                            >
+                              <option value="">文字数指定なし</option>
+                              <option value="200">200字</option>
+                              <option value="400">400字</option>
+                              <option value="600">600字</option>
+                              <option value="1000">1000字</option>
+                              <option value="2000">2000字</option>
+                              <option value="3000">3000字</option>
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1085,101 +1183,30 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         </div>
       )}
 
-      {/* 結果表示 */}
-      {result && (
-        <div className="space-y-3">
-          <div className="relative rounded-xl border border-gray-100 bg-white/80 p-4">
-            <div className="absolute right-2 top-2 z-10 flex gap-2">
-              {!isEditingResult ? (
-                <button
-                  onClick={() => {
-                    setEditedResult(result);
-                    setIsEditingResult(true);
-                  }}
-                  className="rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs backdrop-blur-sm transition-colors hover:border-[#B5D4F4] hover:text-[#378ADD]"
-                >
-                  ✏️ 編集
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
-                      setResult(editedResult);
-                      onResult?.(editedResult);
-                      setIsEditingResult(false);
-                      toastOk("分析結果を更新しました");
-                    }}
-                    className="rounded-lg bg-[#378ADD] px-3 py-1 text-xs text-white transition-colors hover:bg-[#185FA5]"
-                  >
-                    ✅ 保存
-                  </button>
-                  <button
-                    onClick={() => setIsEditingResult(false)}
-                    className="rounded-lg border border-gray-200 px-2 py-1 text-xs transition-colors hover:bg-gray-50"
-                  >
-                    ✕ キャンセル
-                  </button>
-                </>
-              )}
-            </div>
-
-            {isEditingResult ? (
-              <textarea
-                value={editedResult}
-                onChange={(e) => setEditedResult(e.target.value)}
-                className="w-full min-h-[400px] rounded-lg border-2 border-[#378ADD] bg-white p-3 text-sm leading-relaxed resize-y font-[inherit] focus:border-[#378ADD] focus:outline-none"
-              />
-            ) : (
-              <div className="prose prose-sm max-w-none text-gray-700 pr-16">
-                <ReactMarkdown>{result}</ReactMarkdown>
-              </div>
-            )}
-
-            {/* 結果の文字数表示（編集中は editedResult、通常は result） */}
-            <div className="text-right text-xs text-gray-400 mt-1 pr-1">
-              {(isEditingResult ? editedResult.length : result.length).toLocaleString()} 文字
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white/60 px-4 py-2 text-sm font-medium text-gray-600 shadow-sm backdrop-blur-sm hover:bg-white/80"
-            >
-              <Copy className="h-3.5 w-3.5" /> コピー
-            </button>
-            <button
-              onClick={handleDownload}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white/60 px-4 py-2 text-sm font-medium text-gray-600 shadow-sm backdrop-blur-sm hover:bg-white/80"
-            >
-              <Download className="h-3.5 w-3.5" /> テキスト保存
-            </button>
-            <button
-              onClick={handleDownloadMarkdown}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-[#B5D4F4] hover:text-[#378ADD] transition-colors"
-            >
-              <Download className="h-3.5 w-3.5" /> MD保存
-            </button>
-            <button
-              onClick={() => {
-                const label = ANALYSIS_GROUPS.flatMap((g) => g.options).find(
-                  (o) => o.value === lastResultType
-                )?.label ?? lastResultType;
-                saveAnalysis({
-                  fileName: fileName ?? "unknown",
-                  analysisType: lastResultType,
-                  analysisLabel: label,
-                  content: result,
-                  tags: [],
-                  folder: "",
-                });
-                toastOk("ストックに保存しました");
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-2 text-sm font-medium text-white shadow-sm"
-            >
-              <BookmarkPlus className="h-3.5 w-3.5" /> ストックに保存
-            </button>
-          </div>
+      {/* 結果表示（複数選択時は2カラムグリッド、単一は1カラム） */}
+      {results.size > 0 && (
+        <div
+          className={`grid gap-4 ${
+            results.size >= 2
+              ? "grid-cols-1 lg:grid-cols-2"
+              : "grid-cols-1"
+          }`}
+        >
+          {Array.from(results.entries()).map(([type, text]) => (
+            <ResultPanel
+              key={type}
+              type={type}
+              label={getLabel(type)}
+              text={text}
+              simplifying={simplifying === type}
+              onUpdate={(newText) => updateResult(type, newText)}
+              onSimplify={() => simplifyOne(type, text)}
+              onSave={() => saveStock(type, text)}
+              onCopy={() => copyText(text)}
+              onDownloadTxt={() => downloadTxt(type, text)}
+              onDownloadMd={() => downloadMd(type, text)}
+            />
+          ))}
         </div>
       )}
 
@@ -1381,6 +1408,136 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// 個別結果パネル（左右並列表示の各カード）
+function ResultPanel({
+  label,
+  text,
+  simplifying,
+  onUpdate,
+  onSimplify,
+  onSave,
+  onCopy,
+  onDownloadTxt,
+  onDownloadMd,
+}: {
+  type: AnalysisType;
+  label: string;
+  text: string;
+  simplifying: boolean;
+  onUpdate: (text: string) => void;
+  onSimplify: () => void;
+  onSave: () => void;
+  onCopy: () => void;
+  onDownloadTxt: () => void;
+  onDownloadMd: () => void;
+}) {
+  const [editedText, setEditedText] = useState(text);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // text が外から変わった（平易化など）ときに同期
+  useEffect(() => {
+    setEditedText(text);
+  }, [text]);
+
+  const currentLength = isEditing ? editedText.length : text.length;
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white/80 p-4 flex flex-col gap-3">
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-[#378ADD]">{label}</span>
+        <span className="text-xs text-gray-400">
+          {currentLength.toLocaleString()} 文字
+        </span>
+      </div>
+
+      {/* 本文 */}
+      {isEditing ? (
+        <textarea
+          value={editedText}
+          onChange={(e) => setEditedText(e.target.value)}
+          className="w-full min-h-[300px] rounded-lg border-2 border-[#378ADD] bg-white p-3 text-sm leading-relaxed resize-y focus:border-[#378ADD] focus:outline-none"
+        />
+      ) : (
+        <div className="prose prose-sm max-w-none text-gray-700 max-h-[400px] overflow-y-auto">
+          <ReactMarkdown>{text}</ReactMarkdown>
+        </div>
+      )}
+
+      {/* アクションボタン群 */}
+      <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+        <button
+          onClick={onCopy}
+          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1"
+        >
+          <Copy className="h-3 w-3" /> コピー
+        </button>
+        <button
+          onClick={onDownloadTxt}
+          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1"
+        >
+          <Download className="h-3 w-3" /> テキスト
+        </button>
+        <button
+          onClick={onDownloadMd}
+          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1"
+        >
+          <Download className="h-3 w-3" /> MD
+        </button>
+        <button
+          onClick={onSave}
+          className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white inline-flex items-center gap-1"
+        >
+          <BookmarkPlus className="h-3 w-3" /> ストック
+        </button>
+        <button
+          onClick={onSimplify}
+          disabled={simplifying}
+          className="text-xs px-3 py-1.5 rounded-lg bg-[#1D9E75] hover:bg-[#167a5c] text-white disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          {simplifying ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> 変換中...
+            </>
+          ) : (
+            <>✨ わかりやすく変換</>
+          )}
+        </button>
+        {!isEditing ? (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
+          >
+            ✏️ 編集
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={() => {
+                onUpdate(editedText);
+                setIsEditing(false);
+                toastOk("分析結果を更新しました");
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white"
+            >
+              ✅ 完了
+            </button>
+            <button
+              onClick={() => {
+                setEditedText(text);
+                setIsEditing(false);
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
+            >
+              ✕ キャンセル
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
