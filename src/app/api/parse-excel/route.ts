@@ -70,7 +70,14 @@ JSON: ${jsonSchema}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents,
-          generationConfig: { temperature: 0, maxOutputTokens: 1024 },
+          // Gemini 3.x は thinking が既定ON。構造化JSON抽出では思考トークンが
+          // 出力枠(1024)を食い潰しJSONが途中で切れる(finishReason=MAX_TOKENS)ため、
+          // 低レイテンシ・低コスト維持の thinkingLevel:"minimal" で思考を抑制する。
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 1024,
+            thinkingConfig: { thinkingLevel: "minimal" },
+          },
         }),
       }
     );
