@@ -118,7 +118,7 @@ export function Header({ apiStatus }: HeaderProps) {
                 より新しいGeminiモデルが利用可能です（現在: {CURRENT_MODEL}）：
                 <strong>{modelCheck.newerModels.join(", ")}</strong>
               </span>
-              <span className="text-amber-600">※ preview版は有料のみ。現在のgemini-2.5-proは安定・無料枠あり。</span>
+              <span className="text-amber-600">※ preview版は有料のみ。現在のgemini-3.5-flashは安定・無料枠あり。</span>
               <button
                 onClick={handleForceCheck}
                 className="ml-auto text-amber-600 underline"
