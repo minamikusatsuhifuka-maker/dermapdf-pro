@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import MarkdownView from "@/components/ui/markdown-view";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini, analyzeTextWithGemini } from "@/lib/gemini-client";
@@ -1699,8 +1699,8 @@ function ResultPanel({
             minHeight: "200px",
           }}
         >
-          <div className="prose prose-sm max-w-none text-gray-700 text-sm">
-            <ReactMarkdown>{text}</ReactMarkdown>
+          <div className="max-w-none text-gray-700 text-sm">
+            <MarkdownView>{text}</MarkdownView>
           </div>
         </div>
       )}
