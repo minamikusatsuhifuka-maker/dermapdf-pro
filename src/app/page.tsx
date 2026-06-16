@@ -7,7 +7,6 @@ import { useAppStore } from "@/store/app-store";
 import { PageGrid } from "@/components/pdf/page-grid";
 import { ImageGrid } from "@/components/image/image-grid";
 import { ProgressBar } from "@/components/progress/progress-bar";
-import { QuickActions } from "@/components/actions/quick-actions";
 import { PdfActions } from "@/components/actions/pdf-actions";
 import { GeminiPanel } from "@/components/ai/gemini-panel";
 import type { AnalysisType } from "@/components/ai/gemini-panel";
@@ -29,7 +28,26 @@ import {
 } from "@/components/settings/settings-modal";
 import { toastOk, toastInfo } from "@/components/ui/toast-provider";
 
-type ActivePanel = "gemini" | "genspark" | "message" | null;
+type ActivePanel =
+  | "gemini"
+  | "genspark"
+  | "message"
+  | "pdf"
+  | "workflow"
+  | null;
+
+// 上部のコンパクトな機能切替ボタン（アコーディオン）。Gemini AI分析を主役に。
+const PANEL_BUTTONS: {
+  id: Exclude<ActivePanel, null>;
+  label: string;
+  primary?: boolean;
+}[] = [
+  { id: "gemini", label: "🧠 Gemini AI分析", primary: true },
+  { id: "genspark", label: "🖥 プレゼン生成" },
+  { id: "message", label: "💬 メッセージ生成" },
+  { id: "pdf", label: "📄 PDFアクション" },
+  { id: "workflow", label: "🗂 ワークフロー" },
+];
 
 export default function Home() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -37,7 +55,7 @@ export default function Home() {
     { id: string; name: string; url: string }[]
   >([]);
   const [progress, setProgress] = useState<number | null>(null);
-  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const [activePanel, setActivePanel] = useState<ActivePanel>("gemini");
   const [analysisResult, setAnalysisResult] = useState("");
 
   // ファイルのBase64データ（AI分析用）
@@ -136,26 +154,6 @@ export default function Home() {
     }
   }, []);
 
-  const handleQuickAction = useCallback((actionId: string) => {
-    switch (actionId) {
-      case "gemini":
-        setActivePanel("gemini");
-        break;
-      case "presentation":
-        setActivePanel("genspark");
-        break;
-      case "message":
-        setActivePanel("message");
-        break;
-      case "compress":
-      case "resize":
-      case "crop":
-      case "remove-bg":
-        toastInfo(`${actionId} 機能を実行します`);
-        break;
-    }
-  }, []);
-
   const handleWorkflowAnalysisType = useCallback((type: AnalysisType) => {
     setActivePanel("gemini");
     toastInfo(`分析タイプ「${type}」をセットしました`);
@@ -177,11 +175,8 @@ export default function Home() {
           <UploadZone onFilesSelected={handleFiles} onTextInput={handleTextInput} />
         </section>
 
-        {/* クイックアクション */}
+        {/* ナビゲーションチップ */}
         <section className="space-y-3">
-          <div className="flex items-center gap-3">
-            <QuickActions onAction={handleQuickAction} />
-          </div>
           <div className="flex flex-wrap gap-2">
             {flags.staffKarute && (
               <button
@@ -270,16 +265,6 @@ export default function Home() {
                 }
               />
             </section>
-
-            <section>
-              <PdfActions
-                onCompress={(q) => toastInfo(`品質「${q}」で圧縮します`)}
-                onResize={(s) => toastInfo(`${s}にリサイズします`)}
-                onGemini={() => setActivePanel("gemini")}
-                onPresentation={() => setActivePanel("genspark")}
-                onMessage={() => setActivePanel("message")}
-              />
-            </section>
           </>
         )}
 
@@ -304,44 +289,70 @@ export default function Home() {
           </section>
         )}
 
-        {/* ワークフロー */}
-        <section>
-          <WorkflowPanel onSelectAnalysisType={handleWorkflowAnalysisType} />
-        </section>
+        {/* 機能パネル（アコーディオン：押したパネルだけ展開、他は閉じる） */}
+        <section className="w-full space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {PANEL_BUTTONS.map((b) => {
+              const active = activePanel === b.id;
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => setActivePanel(active ? null : b.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition-colors ${
+                    b.primary
+                      ? active
+                        ? "bg-[#0F6E56] text-white"
+                        : "bg-[#1D9E75] text-white hover:bg-[#0F6E56]"
+                      : active
+                        ? "bg-[#185FA5] text-white"
+                        : "border border-gray-200 bg-white text-gray-600 hover:border-[#378ADD] hover:text-[#185FA5]"
+                  }`}
+                >
+                  {b.label}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* AIパネル */}
-        <div className="w-full space-y-8">
-          {(activePanel === "gemini" || activePanel === null) && (
-            <section className="w-full">
-              <GeminiPanel
-                fileBase64={fileBase64}
-                fileMime={fileMime}
-                fileName={inputMode === "text" ? inputTextFileName : fileName}
-                inputMode={inputMode}
-                inputText={inputText}
-                onResult={(r) => setAnalysisResult(r)}
-                clinicSettings={settings}
-              />
-            </section>
+          {activePanel === "gemini" && (
+            <GeminiPanel
+              fileBase64={fileBase64}
+              fileMime={fileMime}
+              fileName={inputMode === "text" ? inputTextFileName : fileName}
+              inputMode={inputMode}
+              inputText={inputText}
+              onResult={(r) => setAnalysisResult(r)}
+              clinicSettings={settings}
+            />
           )}
 
           {activePanel === "genspark" && (
-            <section className="w-full">
-              <GensparkPanel analysisResult={analysisResult} />
-            </section>
+            <GensparkPanel analysisResult={analysisResult} />
           )}
 
           {activePanel === "message" && (
-            <section className="w-full">
-              <MessagePanel
-                fileBase64={fileBase64}
-                fileMime={fileMime}
-                fileName={fileName}
-                clinicContext={clinicContext}
-              />
-            </section>
+            <MessagePanel
+              fileBase64={fileBase64}
+              fileMime={fileMime}
+              fileName={fileName}
+              clinicContext={clinicContext}
+            />
           )}
-        </div>
+
+          {activePanel === "pdf" && (
+            <PdfActions
+              onCompress={(q) => toastInfo(`品質「${q}」で圧縮します`)}
+              onResize={(s) => toastInfo(`${s}にリサイズします`)}
+              onGemini={() => setActivePanel("gemini")}
+              onPresentation={() => setActivePanel("genspark")}
+              onMessage={() => setActivePanel("message")}
+            />
+          )}
+
+          {activePanel === "workflow" && (
+            <WorkflowPanel onSelectAnalysisType={handleWorkflowAnalysisType} />
+          )}
+        </section>
 
         {/* テンプレートパネル */}
         {flags.templatePanel && (

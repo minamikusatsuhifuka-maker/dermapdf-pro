@@ -333,7 +333,7 @@ export function GeminiPanel({
   const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
   // 分析タイプは複数選択（Set）。デフォルトで「概要・要約」のみ選択
   const [selectedTypes, setSelectedTypes] = useState<Set<AnalysisType>>(
-    () => new Set<AnalysisType>(["summary"])
+    () => new Set<AnalysisType>()
   );
   // グループの折りたたみ状態。デフォルトで「📄 基本分析」のみ展開
   const [openGroups, setOpenGroups] = useState<Set<string>>(
