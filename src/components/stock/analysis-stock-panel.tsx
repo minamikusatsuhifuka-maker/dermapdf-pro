@@ -70,6 +70,21 @@ const FOLDER_PALETTE = [
   "#10b981",
 ];
 
+// ストック本文の可視テキスト文字数を算出（読み取り専用・保存処理には影響しない）。
+// HTML保存（contentEditable由来）はタグを除去、markdown/プレーンはそのまま数える。
+function visibleTextLength(content: string): number {
+  if (!content) return 0;
+  const stripped = /<[a-z!/][\s\S]*?>/i.test(content)
+    ? content.replace(/<[^>]+>/g, "")
+    : content;
+  return stripped
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim().length;
+}
+
 // フォルダパスに対して一貫した色を返す（パスが見つからない場合はグレー）
 function getFolderColor(path: string, allPaths: string[]): string {
   const idx = allPaths.indexOf(path);
@@ -1880,6 +1895,9 @@ export function AnalysisStockPanel() {
                   )}
                   <span className="text-xs text-gray-400">
                     {new Date(r.createdAt).toLocaleString("ja-JP")}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {visibleTextLength(r.content).toLocaleString()} 文字
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingTagId(editingTagId === r.id ? null : r.id); }}
