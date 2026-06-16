@@ -190,7 +190,7 @@ const ANALYSIS_GROUPS: AnalysisGroup[] = [
   },
 ];
 
-const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
+export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
   // 基本分析
   summary:
     "この資料の内容を簡潔に要約してください。主要なポイントを箇条書きで整理し、全体像がわかるようにまとめてください。",

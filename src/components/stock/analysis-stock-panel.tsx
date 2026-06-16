@@ -40,6 +40,8 @@ import {
   type FolderNode,
 } from "@/lib/analysis-storage";
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
+import { analyzeTextWithGemini } from "@/lib/gemini-client";
+import { ANALYSIS_PROMPTS } from "@/components/ai/gemini-panel";
 import {
   TARGET_OPTIONS,
   LEVEL_OPTIONS,
@@ -83,6 +85,25 @@ function visibleTextLength(content: string): number {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .trim().length;
+}
+
+// ストック本文（HTML/markdown/プレーン）を可視テキストへ変換（要約入力用・改行は保持）。
+// 読み取り専用：保存処理には影響しない。
+function htmlToText(content: string): string {
+  if (!content) return "";
+  if (/<[a-z!/][\s\S]*?>/i.test(content)) {
+    return content
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+  return content.trim();
 }
 
 // フォルダパスに対して一貫した色を返す（パスが見つからない場合はグレー）
@@ -902,6 +923,45 @@ export function AnalysisStockPanel() {
     }, 500),
     []
   );
+
+  // ストックの全文書き起こしカードから「詳細にまとめる」をテキストモードで実行（チェイン要約）。
+  // 既存の detail_summary プロンプト＋ analyzeTextWithGemini を再利用し、新カードとして保存する。
+  const [summarizingId, setSummarizingId] = useState<string | null>(null);
+  const [summaryLengths, setSummaryLengths] = useState<Record<string, string>>({});
+
+  const summarizeFromStock = async (record: AnalysisRecord, length: string) => {
+    if (summarizingId) return;
+    setSummarizingId(record.id);
+    try {
+      const sourceText = htmlToText(record.content);
+      const lengthInstr = length
+        ? `\n\n【出力文字数の目安】約${length}文字程度でまとめてください。`
+        : "";
+      const prompt = ANALYSIS_PROMPTS.detail_summary + lengthInstr;
+      const tokenOverride = length
+        ? Math.min(65536, Math.max(8192, Math.ceil(Number(length) * 2.2)))
+        : undefined;
+      const data = await analyzeTextWithGemini(prompt, sourceText, tokenOverride);
+      if (!data.success) throw new Error(data.error || "まとめに失敗しました");
+      const title = length ? `詳細にまとめる（${length}字）` : "詳細にまとめる";
+      // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
+      saveAnalysis({
+        fileName: record.fileName,
+        analysisType: "detail_summary",
+        analysisLabel: "詳細にまとめる",
+        content: data.analysis,
+        tags: [],
+        folder: record.folder,
+        title,
+      });
+      reload();
+      toastOk(`「${title}」をストックに保存しました`);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "まとめに失敗しました");
+    } finally {
+      setSummarizingId(null);
+    }
+  };
 
   const allFolders = Array.from(new Set([...DEFAULT_FOLDERS, ...customFolders]));
 
@@ -1919,6 +1979,45 @@ export function AnalysisStockPanel() {
                   >
                     Gensparkへ
                   </button>
+                  {r.analysisType === "transcription" && (
+                    <>
+                      <select
+                        value={summaryLengths[r.id] || ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          const v = e.target.value;
+                          setSummaryLengths((prev) => ({ ...prev, [r.id]: v }));
+                        }}
+                        disabled={summarizingId === r.id}
+                        className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px] text-gray-500 disabled:opacity-50"
+                        title="詳細まとめの出力文字数"
+                      >
+                        <option value="">文字数指定なし</option>
+                        <option value="3000">3000字</option>
+                        <option value="5000">5000字</option>
+                        <option value="8000">8000字</option>
+                        <option value="12000">12000字</option>
+                      </select>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          summarizeFromStock(r, summaryLengths[r.id] || "");
+                        }}
+                        disabled={summarizingId === r.id}
+                        className="inline-flex items-center gap-1 rounded bg-[#378ADD] hover:bg-[#185FA5] px-2 py-1 text-[10px] font-semibold text-white transition-opacity disabled:opacity-50"
+                        title="この書き起こしを詳細にまとめて新カードとして保存"
+                      >
+                        {summarizingId === r.id ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" /> まとめ中...
+                          </>
+                        ) : (
+                          "📝 詳細にまとめる"
+                        )}
+                      </button>
+                    </>
+                  )}
                   {staffProfiles.length > 0 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setStaffLinkId(staffLinkId === r.id ? null : r.id); }}
