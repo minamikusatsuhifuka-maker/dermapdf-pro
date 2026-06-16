@@ -884,7 +884,9 @@ export function AnalysisStockPanel() {
     if (floatingToolbar) {
       const el = document.querySelector(`[data-record-id="${floatingToolbar.recordId}"]`);
       if (el) {
-        updateAnalysisContent(floatingToolbar.recordId, el.innerHTML);
+        // 空・空白のみの保存は既存内容を消すため拒否（データ保全）。
+        const visible = el.innerHTML.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+        if (visible) updateAnalysisContent(floatingToolbar.recordId, el.innerHTML);
       }
     }
   }, [floatingToolbar]);
@@ -892,6 +894,10 @@ export function AnalysisStockPanel() {
   // contentEditable の onInput を debounce で自動保存
   const debouncedSave = useMemo(
     () => debounce((id: string, html: string) => {
+      // 空・空白のみの保存は既存内容を消すため拒否（データ保全）。
+      // 再マウント直後の空contentEditableからの誤保存で本文が消えるのを防ぐ。
+      const visible = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+      if (!visible) return;
       updateAnalysisContent(id, html);
     }, 500),
     []
@@ -2079,8 +2085,12 @@ export function AnalysisStockPanel() {
                     <div>
                       <div
                         ref={(el) => {
-                          if (el && !contentRefs.current[r.id]) {
-                            contentRefs.current[r.id] = el;
+                          contentRefs.current[r.id] = el;
+                          // 展開（折りたたみ後の再マウント含む）時、空のときだけ本文を流し込む。
+                          // 既に内容のある再レンダー時は上書きせず、編集中の入力を保持する。
+                          // ※以前は contentRefs に古いノードが残り再展開時に本文が再描画されず
+                          //   空表示になっていた（開き直すと本文が消えるバグの原因）。
+                          if (el && el.innerHTML === "") {
                             el.innerHTML = r.content || "";
                           }
                         }}
