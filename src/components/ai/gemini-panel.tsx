@@ -358,9 +358,10 @@ export function GeminiPanel({
   const [loading, setLoading] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
-  // 全文書き起こしオプション（既定は現行挙動: 手書きメモ含める／空欄そのまま）
-  const [excludeHandwriting, setExcludeHandwriting] = useState(false); // true=手書きメモを含めない
-  const [fillBlanks, setFillBlanks] = useState(false); // true=空欄を同ページ回答で補足
+  // 全文書き起こしオプション（既定: 手書きメモ含めない／空欄補足／著作権表記含めない）
+  const [excludeHandwriting, setExcludeHandwriting] = useState(true); // true=手書きメモを含めない
+  const [fillBlanks, setFillBlanks] = useState(true); // true=空欄を同ページ回答で補足
+  const [excludeCopyright, setExcludeCopyright] = useState(true); // true=著作権表記を含めない
 
   const setTypeLength = (type: AnalysisType, value: string) => {
     setTypeLengths((prev) => ({ ...prev, [type]: value }));
@@ -566,6 +567,11 @@ export function GeminiPanel({
       if (excludeHandwriting && fillBlanks) {
         opt.push(
           "ただし、記入欄に書かれた回答は「手書きメモ」ではなく回答として扱い、補足対象に含めてください。\n除外するのは、余白の補足的な書き込み・感想・矢印などのメモのみです。"
+        );
+      }
+      if (excludeCopyright) {
+        opt.push(
+          "各ページのフッター等にある著作権表記は書き起こしに含めないでください。\n（例：「Copyright 2021 Achievement Corp. All Rights Reserved.」「無断転載複製禁止」、ページ番号付きのコピーライト行など。会社名・年号が異なる場合も同様に除外する。）"
         );
       }
       if (opt.length > 0)
@@ -1385,6 +1391,19 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             >
               <option value="keep">そのまま</option>
               <option value="fill">同ページの回答を参照して補足</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">
+              著作権表記
+            </label>
+            <select
+              value={excludeCopyright ? "exclude" : "include"}
+              onChange={(e) => setExcludeCopyright(e.target.value === "exclude")}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+            >
+              <option value="exclude">含めない</option>
+              <option value="include">含める</option>
             </select>
           </div>
         </div>
