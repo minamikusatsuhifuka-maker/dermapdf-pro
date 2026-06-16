@@ -383,7 +383,8 @@ ${record.content}
   const safeName = (record.title || record.fileName)
     .replace(/\.[^/.]+$/, "")
     .replace(/[^\w\u3040-\u9fff]/g, "_");
-  a.download = `dermapdf_${safeName}_${dateFileStr}.md`;
+  const safeLabel = record.analysisLabel.replace(/[^\w\u3040-\u9fff]/g, "_");
+  a.download = `dermapdf_${safeName}_${safeLabel}_${dateFileStr}.md`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -482,7 +483,8 @@ export async function exportSingleAnalysisAsPdf(record: AnalysisRecord): Promise
   const a = document.createElement("a");
   a.href = url;
   const safeName = title.replace(/[^\w\u3040-\u9fff]/g, "_").slice(0, 30);
-  a.download = `dermapdf_${safeName}_${new Date().toISOString().split("T")[0]}.pdf`;
+  const safeLabel = record.analysisLabel.replace(/[^\w\u3040-\u9fff]/g, "_");
+  a.download = `dermapdf_${safeName}_${safeLabel}_${new Date().toISOString().split("T")[0]}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -683,7 +685,8 @@ ${r.content}
     const a = document.createElement("a");
     a.href = url;
     const safeName = title.replace(/[^\w\u3040-\u9fff]/g, "_").slice(0, 30);
-    a.download = `dermapdf_${safeName}_${dateFileStr}.txt`;
+    const safeLabel = r.analysisLabel.replace(/[^\w\u3040-\u9fff]/g, "_");
+    a.download = `dermapdf_${safeName}_${safeLabel}_${dateFileStr}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }

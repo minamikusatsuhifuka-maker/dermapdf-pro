@@ -900,12 +900,13 @@ ${head}`;
       fallback
     );
     const safeTitle = autoTitle.replace(/[^\w぀-鿿]/g, "_");
+    const safeLabel = getLabel(type).replace(/[^\w぀-鿿]/g, "_");
     const dateStr = new Date().toISOString().split("T")[0];
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${safeTitle}_${dateStr}.txt`;
+    a.download = `${safeTitle}_${safeLabel}_${dateStr}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1086,7 +1087,8 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
     const a = document.createElement("a");
     a.href = url;
     const safeTitle = autoTitle.replace(/[^\w\u3040-\u9fff]/g, "_");
-    a.download = `${safeTitle}_${dateFileStr}.md`;
+    const safeLabel = label.replace(/[^\w\u3040-\u9fff]/g, "_");
+    a.download = `${safeTitle}_${safeLabel}_${dateFileStr}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
