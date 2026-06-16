@@ -355,6 +355,8 @@ export function GeminiPanel({
   const [typeLengths, setTypeLengths] = useState<Record<string, string>>({});
   // 「わかりやすく変換」処理中の分析タイプ
   const [simplifying, setSimplifying] = useState<AnalysisType | null>(null);
+  // 書き起こし→詳細にまとめる のチェイン処理中フラグ
+  const [summarizing, setSummarizing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
@@ -541,6 +543,12 @@ export function GeminiPanel({
     const lengthInstruction = effectiveLength
       ? `\n\n【出力文字数の目安】約${effectiveLength}文字程度でまとめてください。`
       : "";
+    // 選択文字数（特に詳細まとめの〜12000字）で出力が途中で切れないよう、
+    // 目安文字数に応じて出力トークン枠を引き上げる（書き起こしは既定65536を維持）。
+    const outputTokenOverride =
+      type !== "transcription" && effectiveLength
+        ? Math.min(65536, Math.max(8192, Math.ceil(Number(effectiveLength) * 2.2)))
+        : undefined;
 
     // 「目的・Geminiへの指示」欄の入力を、選んだ全分析タイプへ追加指示として注入する。
     // trim後に空なら注入しない（従来どおりの挙動を維持）。
@@ -586,7 +594,11 @@ export function GeminiPanel({
         basePrompt + purposeInstruction + transcriptionOptionInstruction +
         lengthInstruction +
         philosophyContext;
-      const data = await analyzeTextWithGemini(fullPrompt, inputText);
+      const data = await analyzeTextWithGemini(
+        fullPrompt,
+        inputText,
+        outputTokenOverride
+      );
       if (!data.success) throw new Error(data.error || "分析に失敗しました");
       return data.analysis;
     }
@@ -685,7 +697,8 @@ export function GeminiPanel({
       fileBase64!,
       fileMime!,
       fullPrompt,
-      type
+      type,
+      outputTokenOverride
     );
     if (!data.success) throw new Error(data.error || "分析に失敗しました");
     return data.analysis;
@@ -930,6 +943,37 @@ ${head}`;
       toastError(msg);
     } finally {
       setSimplifying(null);
+    }
+  };
+
+  // 全文書き起こしの結果テキストから「詳細にまとめる」をテキストモードで実行（チェイン）。
+  // 既存の detail_summary プロンプト＋テキストモード経路を再利用し、新カードとして追加表示する。
+  const summarizeFromText = async (sourceText: string, length: string) => {
+    if (summarizing) return;
+    setSummarizing(true);
+    try {
+      const lengthInstr = length
+        ? `\n\n【出力文字数の目安】約${length}文字程度でまとめてください。`
+        : "";
+      const prompt = ANALYSIS_PROMPTS.detail_summary + lengthInstr;
+      const tokenOverride = length
+        ? Math.min(65536, Math.max(8192, Math.ceil(Number(length) * 2.2)))
+        : undefined;
+      const data = await analyzeTextWithGemini(prompt, sourceText, tokenOverride);
+      if (!data.success) throw new Error(data.error || "まとめに失敗しました");
+      setResults((prev) => {
+        const next = new Map(prev);
+        next.set("detail_summary", data.analysis);
+        return next;
+      });
+      setResult(data.analysis);
+      setLastResultType("detail_summary");
+      onResult?.(data.analysis);
+      toastOk("詳細まとめを作成しました");
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "まとめに失敗しました");
+    } finally {
+      setSummarizing(false);
     }
   };
 
@@ -1191,12 +1235,23 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                                 title="この分析タイプの出力文字数"
                               >
                                 <option value="">文字数指定なし</option>
-                                <option value="200">200字</option>
-                                <option value="400">400字</option>
-                                <option value="600">600字</option>
-                                <option value="1000">1000字</option>
-                                <option value="2000">2000字</option>
-                                <option value="3000">3000字</option>
+                                {opt.value === "detail_summary" ? (
+                                  <>
+                                    <option value="3000">3000字</option>
+                                    <option value="5000">5000字</option>
+                                    <option value="8000">8000字</option>
+                                    <option value="12000">12000字</option>
+                                  </>
+                                ) : (
+                                  <>
+                                    <option value="200">200字</option>
+                                    <option value="400">400字</option>
+                                    <option value="600">600字</option>
+                                    <option value="1000">1000字</option>
+                                    <option value="2000">2000字</option>
+                                    <option value="3000">3000字</option>
+                                  </>
+                                )}
                               </select>
                             )}
                           </div>
@@ -1487,6 +1542,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               label={getLabel(type)}
               text={text}
               simplifying={simplifying === type}
+              showSummarize={type === "transcription"}
+              summarizing={summarizing}
+              onSummarize={(length) => summarizeFromText(text, length)}
               onUpdate={(newText) => updateResult(type, newText)}
               onSimplify={() => simplifyOne(type, text)}
               onSave={() => saveStock(type, text)}
@@ -1705,6 +1763,9 @@ function ResultPanel({
   label,
   text,
   simplifying,
+  showSummarize,
+  summarizing,
+  onSummarize,
   onUpdate,
   onSimplify,
   onSave,
@@ -1716,6 +1777,9 @@ function ResultPanel({
   label: string;
   text: string;
   simplifying: boolean;
+  showSummarize?: boolean;
+  summarizing?: boolean;
+  onSummarize?: (length: string) => void;
   onUpdate: (text: string) => void;
   onSimplify: () => void;
   onSave: () => void | Promise<void>;
@@ -1725,6 +1789,8 @@ function ResultPanel({
 }) {
   const [editedText, setEditedText] = useState(text);
   const [isEditing, setIsEditing] = useState(false);
+  // チェイン「詳細にまとめる」の出力文字数選択（書き起こしカードのみ）
+  const [summaryLength, setSummaryLength] = useState("");
   // タイトル生成を伴う非同期処理の進行中状態
   const [pending, setPending] = useState<"save" | "txt" | "md" | null>(null);
   // 本文エリアの高さ（プリセット値・初期値=M=350）
@@ -1871,6 +1937,36 @@ function ResultPanel({
             <>✨ わかりやすく変換</>
           )}
         </button>
+        {showSummarize && (
+          <>
+            <select
+              value={summaryLength}
+              onChange={(e) => setSummaryLength(e.target.value)}
+              disabled={summarizing}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-500 disabled:opacity-50"
+              title="詳細まとめの出力文字数"
+            >
+              <option value="">文字数指定なし</option>
+              <option value="3000">3000字</option>
+              <option value="5000">5000字</option>
+              <option value="8000">8000字</option>
+              <option value="12000">12000字</option>
+            </select>
+            <button
+              onClick={() => onSummarize?.(summaryLength)}
+              disabled={summarizing}
+              className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white disabled:opacity-50 inline-flex items-center gap-1"
+            >
+              {summarizing ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" /> まとめ中...
+                </>
+              ) : (
+                <>📝 詳細にまとめる</>
+              )}
+            </button>
+          </>
+        )}
         {!isEditing ? (
           <button
             onClick={() => setIsEditing(true)}

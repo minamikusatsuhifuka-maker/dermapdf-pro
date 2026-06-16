@@ -60,10 +60,11 @@ export async function analyzeWithGemini(
   base64: string,
   mimeType: string,
   prompt: string,
-  analysisType?: string
+  analysisType?: string,
+  maxTokensOverride?: number
 ): Promise<GeminiResult> {
   const isTranscription = analysisType === "transcription";
-  const maxOutputTokens = isTranscription ? 65536 : 8192;
+  const maxOutputTokens = maxTokensOverride ?? (isTranscription ? 65536 : 8192);
   const temperature = isTranscription ? 0.1 : 0.3;
 
   const callGemini = async (): Promise<GeminiResult> => {
@@ -161,7 +162,8 @@ export async function analyzeWithGemini(
  */
 export async function analyzeTextWithGemini(
   prompt: string,
-  text?: string
+  text?: string,
+  maxTokensOverride?: number
 ): Promise<GeminiResult> {
   const basePrompt = text
     ? `以下のテキストを分析してください。\n\n【テキスト内容】\n${text}\n\n【分析指示】\n${prompt}`
@@ -182,7 +184,10 @@ export async function analyzeTextWithGemini(
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 16384 },
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: maxTokensOverride ?? 16384,
+          },
         }),
       });
       clearTimeout(timeoutId);
