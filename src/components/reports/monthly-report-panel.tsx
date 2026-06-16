@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import MarkdownView from "@/components/ui/markdown-view";
 import { Copy, Download, Loader2, BookmarkPlus, Sparkles } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { loadAllAnalyses, saveAnalysis, getDisplayTitle } from "@/lib/analysis-storage";
@@ -337,7 +337,7 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
         <div className="space-y-3">
           <div className="rounded-xl border border-gray-100 bg-white/80 p-4">
             <div className="prose prose-sm max-w-none text-gray-700">
-              <ReactMarkdown>{result}</ReactMarkdown>
+              <MarkdownView>{result}</MarkdownView>
             </div>
           </div>
 

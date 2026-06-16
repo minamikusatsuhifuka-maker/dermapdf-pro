@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import MarkdownView from "@/components/ui/markdown-view";
 import { Plus, X, Trash2, ChevronDown, ChevronUp, Loader2, Copy, BookmarkPlus, Download } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
@@ -457,7 +457,7 @@ ${philosophyContext}
             {aiResult && (
               <div className="space-y-2 rounded-xl border border-[#B5D4F4] bg-[#E6F1FB]/30 p-4">
                 <div className="prose prose-sm max-w-none text-gray-700">
-                  <ReactMarkdown>{aiResult}</ReactMarkdown>
+                  <MarkdownView>{aiResult}</MarkdownView>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handleCopyAi} className="inline-flex items-center gap-1 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-white/80">
