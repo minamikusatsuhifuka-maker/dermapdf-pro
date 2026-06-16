@@ -538,12 +538,19 @@ export function GeminiPanel({
       ? `\n\n【出力文字数の目安】約${effectiveLength}文字程度でまとめてください。`
       : "";
 
+    // 「目的・Geminiへの指示」欄の入力を、選んだ全分析タイプへ追加指示として注入する。
+    // trim後に空なら注入しない（従来どおりの挙動を維持）。
+    const trimmedPurpose = purpose.trim();
+    const purposeInstruction = trimmedPurpose
+      ? `\n\n【ユーザーからの追加指示】\n${trimmedPurpose}\n\n上記の追加指示にも必ず従って、分析・作業を行ってください。`
+      : "";
+
     // テキスト入力モード
     if (isTextMode && inputText) {
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
-        (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+        basePrompt + purposeInstruction +
         lengthInstruction +
         philosophyContext;
       const data = await analyzeTextWithGemini(fullPrompt, inputText);
@@ -562,7 +569,7 @@ export function GeminiPanel({
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
-        (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+        basePrompt + purposeInstruction +
         lengthInstruction +
         philosophyContext;
       const data = await analyzeWithGemini(
@@ -597,7 +604,8 @@ export function GeminiPanel({
             `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
             `・図・表・手書き文字も含め全て書き起こす\n` +
             `・一切省略せず完全に出力する` +
-            lengthInstruction,
+            lengthInstruction +
+            purposeInstruction,
           "transcription"
         );
 
@@ -621,7 +629,7 @@ export function GeminiPanel({
     setTranscriptionProgress(`${progressPrefix} 分析中...`);
     const basePrompt = ANALYSIS_PROMPTS[type];
     const fullPrompt =
-      (purpose ? `${basePrompt}\n\n目的: ${purpose}` : basePrompt) +
+      basePrompt + purposeInstruction +
       lengthInstruction +
       philosophyContext;
     const data = await analyzeWithGemini(
@@ -1244,12 +1252,12 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       {/* 目的入力 */}
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-600">
-          目的（任意）
+          目的・Geminiへの指示（任意）
         </label>
         <textarea
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}
-          placeholder="分析の目的や追加の指示を入力..."
+          placeholder="分析の目的や、Geminiに追加でやってほしい作業・指示を入力..."
           rows={2}
           className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
         />
