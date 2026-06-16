@@ -42,6 +42,7 @@ import {
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { ANALYSIS_PROMPTS } from "@/components/ai/gemini-panel";
+import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import {
   TARGET_OPTIONS,
   LEVEL_OPTIONS,
@@ -928,6 +929,8 @@ export function AnalysisStockPanel() {
   // 既存の detail_summary プロンプト＋ analyzeTextWithGemini を再利用し、新カードとして保存する。
   const [summarizingId, setSummarizingId] = useState<string | null>(null);
   const [summaryLengths, setSummaryLengths] = useState<Record<string, string>>({});
+  // 校正モーダルの対象レコード（テキストカードから起動）
+  const [proofreadRecord, setProofreadRecord] = useState<AnalysisRecord | null>(null);
 
   const summarizeFromStock = async (record: AnalysisRecord, length: string) => {
     if (summarizingId) return;
@@ -2018,6 +2021,13 @@ export function AnalysisStockPanel() {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setProofreadRecord(r); }}
+                    className="rounded bg-purple-500 hover:bg-purple-600 px-2 py-1 text-[10px] font-semibold text-white transition-opacity"
+                    title="誤字・脱字・表記揺れを校正"
+                  >
+                    🔎 校正
+                  </button>
                   {staffProfiles.length > 0 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setStaffLinkId(staffLinkId === r.id ? null : r.id); }}
@@ -2389,6 +2399,27 @@ export function AnalysisStockPanel() {
 
       {/* PiPメモ小窓 */}
       <PipMemoPanel />
+
+      {/* 校正モーダル */}
+      {proofreadRecord && (
+        <ProofreadModal
+          sourceText={htmlToText(proofreadRecord.content)}
+          sourceTitle={getDisplayTitle(proofreadRecord)}
+          onClose={() => setProofreadRecord(null)}
+          onSaveCard={(title, content) => {
+            saveAnalysis({
+              fileName: proofreadRecord.fileName,
+              analysisType: "proofread",
+              analysisLabel: "校正済み",
+              content,
+              tags: [],
+              folder: proofreadRecord.folder,
+              title,
+            });
+            reload();
+          }}
+        />
+      )}
 
       {/* パスワード確認モーダル */}
       {showPasswordModal && (

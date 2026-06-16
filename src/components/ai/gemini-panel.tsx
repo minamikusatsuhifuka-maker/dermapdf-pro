@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
+import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini, analyzeTextWithGemini } from "@/lib/gemini-client";
@@ -1802,6 +1803,8 @@ function ResultPanel({
   const [isEditing, setIsEditing] = useState(false);
   // チェイン「詳細にまとめる」の出力文字数選択（書き起こしカードのみ）
   const [summaryLength, setSummaryLength] = useState("");
+  // 校正モーダルの表示
+  const [showProofread, setShowProofread] = useState(false);
   // タイトル生成を伴う非同期処理の進行中状態
   const [pending, setPending] = useState<"save" | "txt" | "md" | null>(null);
   // 本文エリアの高さ（プリセット値・初期値=M=350）
@@ -1978,6 +1981,12 @@ function ResultPanel({
             </button>
           </>
         )}
+        <button
+          onClick={() => setShowProofread(true)}
+          className="text-xs px-3 py-1.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-white inline-flex items-center gap-1"
+        >
+          🔎 校正
+        </button>
         {!isEditing ? (
           <button
             onClick={() => setIsEditing(true)}
@@ -2009,6 +2018,25 @@ function ResultPanel({
           </>
         )}
       </div>
+
+      {showProofread && (
+        <ProofreadModal
+          sourceText={text}
+          sourceTitle={label}
+          onClose={() => setShowProofread(false)}
+          onSaveCard={(title, content) => {
+            saveAnalysis({
+              fileName: label,
+              analysisType: "proofread",
+              analysisLabel: "校正済み",
+              content,
+              tags: [],
+              folder: "",
+              title,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
