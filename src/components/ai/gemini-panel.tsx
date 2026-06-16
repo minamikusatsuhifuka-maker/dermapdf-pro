@@ -358,6 +358,9 @@ export function GeminiPanel({
   const [loading, setLoading] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
+  // 全文書き起こしオプション（既定は現行挙動: 手書きメモ含める／空欄そのまま）
+  const [excludeHandwriting, setExcludeHandwriting] = useState(false); // true=手書きメモを含めない
+  const [fillBlanks, setFillBlanks] = useState(false); // true=空欄を同ページ回答で補足
 
   const setTypeLength = (type: AnalysisType, value: string) => {
     setTypeLengths((prev) => ({ ...prev, [type]: value }));
@@ -518,7 +521,7 @@ export function GeminiPanel({
     toastOk(`「${t.name}」を適用しました`);
   };
 
-  const CHUNK_SIZE = 5;
+  const CHUNK_SIZE = 3;
 
   const isTextMode = inputMode === "text";
 
@@ -545,12 +548,36 @@ export function GeminiPanel({
       ? `\n\n【ユーザーからの追加指示】\n${trimmedPurpose}\n\n上記の追加指示にも必ず従って、分析・作業を行ってください。`
       : "";
 
+    // 全文書き起こしオプション（手書きメモ除外／空欄補足）をプロンプトへ条件付き追記。
+    // 既定の組み合わせ（含める／そのまま）なら何も追記しない＝現行どおり。
+    let transcriptionOptionInstruction = "";
+    if (type === "transcription") {
+      const opt: string[] = [];
+      if (excludeHandwriting) {
+        opt.push(
+          "印刷された本文のみを書き起こしてください。手書きの書き込み・注釈・余白のメモは出力に含めないでください。"
+        );
+      }
+      if (fillBlanks) {
+        opt.push(
+          "下線・括弧などの記入欄（空欄）は、同じページ内に記入された回答内容を参照して補ってください。\n該当する回答が見当たらない場合は ____ のまま残してください。"
+        );
+      }
+      if (excludeHandwriting && fillBlanks) {
+        opt.push(
+          "ただし、記入欄に書かれた回答は「手書きメモ」ではなく回答として扱い、補足対象に含めてください。\n除外するのは、余白の補足的な書き込み・感想・矢印などのメモのみです。"
+        );
+      }
+      if (opt.length > 0)
+        transcriptionOptionInstruction = "\n\n" + opt.join("\n\n");
+    }
+
     // テキスト入力モード
     if (isTextMode && inputText) {
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
-        basePrompt + purposeInstruction +
+        basePrompt + purposeInstruction + transcriptionOptionInstruction +
         lengthInstruction +
         philosophyContext;
       const data = await analyzeTextWithGemini(fullPrompt, inputText);
@@ -569,7 +596,7 @@ export function GeminiPanel({
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
-        basePrompt + purposeInstruction +
+        basePrompt + purposeInstruction + transcriptionOptionInstruction +
         lengthInstruction +
         philosophyContext;
       const data = await analyzeWithGemini(
@@ -596,18 +623,34 @@ export function GeminiPanel({
         );
 
         const chunkBase64 = await splitPdfPages(fileBase64!, startPage, endPage);
-        const chunkResult = await analyzeWithGemini(
+        const chunkPrompt =
+          `P.${startPage + 1}〜P.${endPage + 1} の全テキストを書き起こしてください。\n` +
+          `【出力ルール】\n` +
+          `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
+          `・図・表・手書き文字も含め全て書き起こす\n` +
+          `・一切省略せず完全に出力する` +
+          lengthInstruction +
+          transcriptionOptionInstruction +
+          purposeInstruction;
+
+        // A-7: チャンク失敗（タイムアウト等）時は1回だけ自動リトライ
+        let chunkResult = await analyzeWithGemini(
           chunkBase64,
           "application/pdf",
-          `P.${startPage + 1}〜P.${endPage + 1} の全テキストを書き起こしてください。\n` +
-            `【出力ルール】\n` +
-            `・各ページの冒頭に「--- P.${startPage + 1} ---」のようにページ番号を入れる\n` +
-            `・図・表・手書き文字も含め全て書き起こす\n` +
-            `・一切省略せず完全に出力する` +
-            lengthInstruction +
-            purposeInstruction,
+          chunkPrompt,
           "transcription"
         );
+        if (!chunkResult.success) {
+          setTranscriptionProgress(
+            `${progressPrefix} 再試行中... (${i + 1}/${totalChunks}チャンク / P.${startPage + 1}〜${endPage + 1})`
+          );
+          chunkResult = await analyzeWithGemini(
+            chunkBase64,
+            "application/pdf",
+            chunkPrompt,
+            "transcription"
+          );
+        }
 
         if (!chunkResult.success) {
           throw new Error(
@@ -629,7 +672,7 @@ export function GeminiPanel({
     setTranscriptionProgress(`${progressPrefix} 分析中...`);
     const basePrompt = ANALYSIS_PROMPTS[type];
     const fullPrompt =
-      basePrompt + purposeInstruction +
+      basePrompt + purposeInstruction + transcriptionOptionInstruction +
       lengthInstruction +
       philosophyContext;
     const data = await analyzeWithGemini(
@@ -1314,6 +1357,36 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               : isPdf && pageCount !== null && pageCount > 0
                 ? `⏱ 処理に30秒〜1分かかる場合があります（${pageCount}ページ）`
                 : "⏱ 処理に30秒〜1分かかる場合があります"}
+        </div>
+      )}
+
+      {/* 全文書き起こしオプション（全文書き起こし選択時のみ） */}
+      {selectedTypes.has("transcription") && (
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">
+              手書きメモ
+            </label>
+            <select
+              value={excludeHandwriting ? "exclude" : "include"}
+              onChange={(e) => setExcludeHandwriting(e.target.value === "exclude")}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+            >
+              <option value="include">含める</option>
+              <option value="exclude">含めない</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">空欄</label>
+            <select
+              value={fillBlanks ? "fill" : "keep"}
+              onChange={(e) => setFillBlanks(e.target.value === "fill")}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+            >
+              <option value="keep">そのまま</option>
+              <option value="fill">同ページの回答を参照して補足</option>
+            </select>
+          </div>
         </div>
       )}
 

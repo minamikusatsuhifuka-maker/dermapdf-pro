@@ -70,7 +70,7 @@ export async function analyzeWithGemini(
     const apiKey = await getGeminiKey();
 
     const controller = new AbortController();
-    const timeoutMs = isTranscription ? 180000 : 120000;
+    const timeoutMs = isTranscription ? 280000 : 120000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     let res: Response;
@@ -96,6 +96,11 @@ export async function analyzeWithGemini(
           generationConfig: {
             temperature,
             maxOutputTokens,
+            // A-6: 全文書き起こしは推論不要。Gemini 3.x の既定thinkingは純粋な遅延に
+            // なるため最小化して生成を高速化する（他45タイプは既定thinkingのまま維持）。
+            ...(isTranscription
+              ? { thinkingConfig: { thinkingLevel: "minimal" } }
+              : {}),
           },
         }),
       });
