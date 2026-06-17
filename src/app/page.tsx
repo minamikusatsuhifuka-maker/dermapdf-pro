@@ -26,7 +26,8 @@ import {
   PhilosophyBanner,
   useClinicSettings,
 } from "@/components/settings/settings-modal";
-import { toastOk, toastInfo } from "@/components/ui/toast-provider";
+import { toastOk, toastInfo, toastError } from "@/components/ui/toast-provider";
+import { mergeImagesToPdf } from "@/lib/image-to-pdf";
 
 type ActivePanel =
   | "gemini"
@@ -159,6 +160,55 @@ export default function Home() {
     toastInfo(`分析タイプ「${type}」をセットしました`);
   }, []);
 
+  // 選択画像を1本のPDFに統合する。analyze=true ならAI分析パネルも開く。
+  // リサイズ＋JPEG圧縮・タイムアウト・進捗・1枚失敗スキップで「固まる」を解消。
+  const handleMergePdf = useCallback(
+    async (ids: string[], analyze: boolean) => {
+      const urls = ids
+        .map((id) => images.find((img) => img.id === id)?.url)
+        .filter((u): u is string => !!u);
+      if (urls.length === 0) {
+        toastError("統合対象の画像が見つかりません");
+        return;
+      }
+
+      setProgress(0);
+      toastInfo(`${urls.length} 枚をPDFに統合します`);
+      try {
+        const result = await mergeImagesToPdf(urls, {
+          onProgress: (done, total) =>
+            setProgress(Math.round((done / total) * 100)),
+        });
+
+        // 生成PDFを表示＆AI分析用データとしてセット
+        setPdfUrl(URL.createObjectURL(result.blob));
+        setFileBase64(result.base64);
+        setFileMime("application/pdf");
+        setFileName(`統合_${result.pageCount}枚.pdf`);
+
+        toastOk(
+          result.skipped > 0
+            ? `${result.pageCount} 枚をPDFに統合しました（${result.skipped} 枚は読み込み失敗のためスキップ）`
+            : `${result.pageCount} 枚をPDFに統合しました`,
+        );
+
+        if (analyze) {
+          setActivePanel("gemini");
+          toastInfo("統合PDFでAI分析できます");
+        }
+      } catch (e) {
+        toastError(
+          `PDF統合に失敗しました: ${
+            e instanceof Error ? e.message : "不明なエラー"
+          }`,
+        );
+      } finally {
+        setProgress(null);
+      }
+    },
+    [images],
+  );
+
   return (
     <div className="flex min-h-full flex-col">
       <Header apiStatus={{ pdfCo: true, removeBg: true, gemini: true }} />
@@ -279,12 +329,8 @@ export default function Home() {
               onRemoveBg={(ids) =>
                 toastInfo(`${ids.length} 枚の背景除去を開始します`)
               }
-              onMergePdf={(ids) =>
-                toastInfo(`${ids.length} 枚をPDFに統合します`)
-              }
-              onMergePdfAndAnalyze={(ids) =>
-                toastInfo(`${ids.length} 枚をPDF統合してAI分析します`)
-              }
+              onMergePdf={(ids) => handleMergePdf(ids, false)}
+              onMergePdfAndAnalyze={(ids) => handleMergePdf(ids, true)}
             />
           </section>
         )}
