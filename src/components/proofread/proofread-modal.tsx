@@ -53,11 +53,14 @@ export function ProofreadModal({
   sourceTitle,
   onSaveCard,
   onClose,
+  onComparison,
 }: {
   sourceText: string;
   sourceTitle: string;
   onSaveCard: (title: string, content: string) => void;
   onClose: () => void;
+  // 指定時：適用後の「校正前/校正後」をメイン画面に大きく表示する導線を出す
+  onComparison?: (before: string, after: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -394,6 +397,17 @@ ${numbered}`;
                 すべて適用
               </button>
             </>
+          )}
+          {onComparison && (
+            <button
+              onClick={() => {
+                onComparison(sourceText, workText);
+                onClose();
+              }}
+              className="rounded-lg bg-[#378ADD] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#185FA5]"
+            >
+              📋 メイン画面で大きく前後比較
+            </button>
           )}
           <button
             onClick={handleSave}

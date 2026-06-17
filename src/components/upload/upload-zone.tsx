@@ -5,6 +5,7 @@ import { Upload, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
+import { ProofreadComparison } from "@/components/proofread/proofread-comparison";
 import { saveAnalysis } from "@/lib/analysis-storage";
 
 const ACCEPTED_TYPES = [
@@ -24,6 +25,11 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [todayStr, setTodayStr] = useState("");
   const [showProofread, setShowProofread] = useState(false);
+  // メイン画面に大きく表示する校正前後比較
+  const [comparison, setComparison] = useState<{
+    before: string;
+    after: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setTodayStr(new Date().toLocaleDateString("ja-JP")); }, []);
@@ -201,8 +207,8 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
             placeholder={
               "分析したいテキストをここに入力してください。\n\n例：会議の議事録、スタッフへのフィードバック、研修メモ、アイデアなど..."
             }
-            rows={10}
-            className="w-full resize-y rounded-xl border border-[#B5D4F4] bg-white/80 px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+            rows={14}
+            className="w-full resize-y rounded-xl border border-[#B5D4F4] bg-white/80 px-4 py-3 text-sm leading-relaxed text-gray-700 placeholder:text-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           />
 
           {/* 校正ボタン（テキスト入力直下） */}
@@ -237,6 +243,9 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
               sourceText={inputText}
               sourceTitle={`テキスト入力_${todayStr}`}
               onClose={() => setShowProofread(false)}
+              onComparison={(before, after) =>
+                setComparison({ before, after })
+              }
               onSaveCard={(title, content) => {
                 saveAnalysis({
                   fileName: `テキスト入力_${todayStr}`,
@@ -251,6 +260,16 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
             />
           )}
         </div>
+      )}
+
+      {/* 校正の前後比較（メイン画面に大きく表示） */}
+      {comparison && (
+        <ProofreadComparison
+          before={comparison.before}
+          after={comparison.after}
+          title={`テキスト入力_${todayStr}`}
+          onClose={() => setComparison(null)}
+        />
       )}
     </div>
   );
