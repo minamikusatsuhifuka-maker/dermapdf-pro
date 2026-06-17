@@ -107,6 +107,16 @@ export function ProofreadComparison({
   fixes?: AppliedFix[];
   onClose: () => void;
 }) {
+  // 校正後の素テキストをそのままコピー（色・HTMLは含めず、貼り付け先では全て黒になる）
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(after);
+      toastOk("コピーしました");
+    } catch {
+      // 失敗時は何もしない（クリップボード権限不可など）
+    }
+  };
+
   const handleSave = () => {
     saveAnalysis({
       fileName: title,
@@ -153,12 +163,19 @@ export function ProofreadComparison({
         </div>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={handleSave}
           className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0F6E56]"
         >
           校正内容を保存
+        </button>
+        <button
+          onClick={handleCopy}
+          className="rounded-lg border border-[#1D9E75] px-5 py-2.5 text-sm font-semibold text-[#1D9E75] hover:bg-[#1D9E75]/10"
+          title="校正後テキストをコピー（色なしのプレーンテキスト）"
+        >
+          📋 コピー
         </button>
       </div>
     </section>
