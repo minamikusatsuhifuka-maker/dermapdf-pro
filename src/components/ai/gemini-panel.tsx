@@ -336,10 +336,9 @@ export function GeminiPanel({
   const [selectedTypes, setSelectedTypes] = useState<Set<AnalysisType>>(
     () => new Set<AnalysisType>()
   );
-  // グループの折りたたみ状態。デフォルトで「📄 基本分析」のみ展開
-  const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set([ANALYSIS_GROUPS[0].label])
-  );
+  // 専門グループ（基本分析以外）の表示トグルと、チップアコーディオンの開閉
+  const [showSpecializedGroups, setShowSpecializedGroups] = useState(false);
+  const [openChip, setOpenChip] = useState<string | null>(null);
   // 表示中の結果に対応する分析タイプ（DL ファイル名・ストック保存ラベルで使用）
   const [lastResultType, setLastResultType] = useState<AnalysisType>("summary");
   const [purpose, setPurpose] = useState("");
@@ -379,18 +378,149 @@ export function GeminiPanel({
     });
   };
 
-  const toggleGroup = (label: string) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  };
-
   const getLabel = (type: AnalysisType): string =>
     ANALYSIS_GROUPS.flatMap((g) => g.options).find((o) => o.value === type)
       ?.label ?? type;
+
+  // グループ内の分析タイプ一覧（チェックボックス・個別文字数・Genspark設定）を描画。
+  // 基本分析・専門グループ（チップ展開時）の両方で再利用する。
+  const renderGroupOptions = (group: AnalysisGroup) => (
+    <div className="px-3 py-2 space-y-1.5">
+      {group.options.map((opt) => {
+        const checked = selectedTypes.has(opt.value);
+        const isGsSlide = opt.value === "genspark_slide";
+        return (
+          <div key={opt.value}>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5] flex-1">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleType(opt.value)}
+                  className="accent-[#378ADD]"
+                />
+                {opt.label}
+              </label>
+              {checked && (
+                <select
+                  value={typeLengths[opt.value] || ""}
+                  onChange={(e) => setTypeLength(opt.value, e.target.value)}
+                  className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
+                  title="この分析タイプの出力文字数"
+                >
+                  <option value="">文字数指定なし</option>
+                  {opt.value === "detail_summary" ? (
+                    <>
+                      <option value="3000">3000字</option>
+                      <option value="5000">5000字</option>
+                      <option value="8000">8000字</option>
+                      <option value="12000">12000字</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="200">200字</option>
+                      <option value="400">400字</option>
+                      <option value="600">600字</option>
+                      <option value="1000">1000字</option>
+                      <option value="2000">2000字</option>
+                      <option value="3000">3000字</option>
+                    </>
+                  )}
+                </select>
+              )}
+            </div>
+
+            {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを直下に展開 */}
+            {isGsSlide && checked && (
+              <div className="mt-2 ml-6 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
+                <p className="text-xs font-semibold text-[#185FA5]">
+                  🎯 Gensparkプレゼン設定
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      聴講ターゲット
+                    </label>
+                    <select
+                      value={gsTarget}
+                      onChange={(e) => setGsTarget(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                    >
+                      {TARGET_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      内容レベル
+                    </label>
+                    <select
+                      value={gsLevel}
+                      onChange={(e) => setGsLevel(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                    >
+                      {LEVEL_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      プレゼンの目的
+                    </label>
+                    <select
+                      value={gsPurpose}
+                      onChange={(e) => setGsPurpose(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                    >
+                      {PURPOSE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      スライドのトーン
+                    </label>
+                    <select
+                      value={gsTone}
+                      onChange={(e) => setGsTone(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                    >
+                      {TONE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    追加要望（任意）
+                  </label>
+                  <textarea
+                    value={gsNotes}
+                    onChange={(e) => setGsNotes(e.target.value)}
+                    placeholder="スライドへの追加要望..."
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none resize-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   // PDFのページ数を取得
   const isPdf = fileMime === "application/pdf";
@@ -1192,176 +1322,86 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           )}
         </label>
         <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-          {ANALYSIS_GROUPS.map((group) => {
-            const isOpen = openGroups.has(group.label);
-            const groupSelectedCount = group.options.filter((o) =>
-              selectedTypes.has(o.value)
-            ).length;
-            return (
-              <div
-                key={group.label}
-                className="border-b border-gray-100 last:border-b-0"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.label)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-700"
-                >
-                  <span>
-                    {group.label}
-                    {groupSelectedCount > 0 && (
-                      <span className="ml-2 text-xs text-[#185FA5]">
-                        （{groupSelectedCount}件選択中）
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-gray-400 text-xs">
-                    {isOpen ? "▲" : "▼"}
-                  </span>
-                </button>
-                {isOpen && (
-                  <div className="px-3 py-2 space-y-1.5">
-                    {group.options.map((opt) => {
-                      const checked = selectedTypes.has(opt.value);
-                      const isGsSlide = opt.value === "genspark_slide";
-                      return (
-                        <div key={opt.value}>
-                          <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5] flex-1">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleType(opt.value)}
-                                className="accent-[#378ADD]"
-                              />
-                              {opt.label}
-                            </label>
-                            {/* 選択中のタイプのみ個別文字数指定を表示 */}
-                            {checked && (
-                              <select
-                                value={typeLengths[opt.value] || ""}
-                                onChange={(e) =>
-                                  setTypeLength(opt.value, e.target.value)
-                                }
-                                className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
-                                title="この分析タイプの出力文字数"
-                              >
-                                <option value="">文字数指定なし</option>
-                                {opt.value === "detail_summary" ? (
-                                  <>
-                                    <option value="3000">3000字</option>
-                                    <option value="5000">5000字</option>
-                                    <option value="8000">8000字</option>
-                                    <option value="12000">12000字</option>
-                                  </>
-                                ) : (
-                                  <>
-                                    <option value="200">200字</option>
-                                    <option value="400">400字</option>
-                                    <option value="600">600字</option>
-                                    <option value="1000">1000字</option>
-                                    <option value="2000">2000字</option>
-                                    <option value="3000">3000字</option>
-                                  </>
-                                )}
-                              </select>
-                            )}
-                          </div>
+          {/* 基本分析（常時表示） */}
+          <div className="border-b border-gray-100">
+            <div className="px-3 py-2 bg-gray-50 text-sm font-medium text-gray-700">
+              {ANALYSIS_GROUPS[0].label}
+            </div>
+            {renderGroupOptions(ANALYSIS_GROUPS[0])}
+          </div>
 
-                          {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを直下に展開 */}
-                          {isGsSlide && checked && (
-                            <div className="mt-2 ml-6 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
-                              <p className="text-xs font-semibold text-[#185FA5]">
-                                🎯 Gensparkプレゼン設定
-                              </p>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <label className="text-xs text-gray-500 mb-1 block">
-                                    聴講ターゲット
-                                  </label>
-                                  <select
-                                    value={gsTarget}
-                                    onChange={(e) => setGsTarget(e.target.value)}
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                                  >
-                                    {TARGET_OPTIONS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="text-xs text-gray-500 mb-1 block">
-                                    内容レベル
-                                  </label>
-                                  <select
-                                    value={gsLevel}
-                                    onChange={(e) => setGsLevel(e.target.value)}
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                                  >
-                                    {LEVEL_OPTIONS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="text-xs text-gray-500 mb-1 block">
-                                    プレゼンの目的
-                                  </label>
-                                  <select
-                                    value={gsPurpose}
-                                    onChange={(e) => setGsPurpose(e.target.value)}
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                                  >
-                                    {PURPOSE_OPTIONS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="text-xs text-gray-500 mb-1 block">
-                                    スライドのトーン
-                                  </label>
-                                  <select
-                                    value={gsTone}
-                                    onChange={(e) => setGsTone(e.target.value)}
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                                  >
-                                    {TONE_OPTIONS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-500 mb-1 block">
-                                  追加要望（任意）
-                                </label>
-                                <textarea
-                                  value={gsNotes}
-                                  onChange={(e) => setGsNotes(e.target.value)}
-                                  placeholder="スライドへの追加要望..."
-                                  rows={2}
-                                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none resize-none"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+          {/* その他の分析タイプ（トグル → 小チップの折り返しグリッド） */}
+          <button
+            type="button"
+            onClick={() => setShowSpecializedGroups((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-700"
+          >
+            <span>
+              ＋ その他の分析タイプ
+              {(() => {
+                const n = ANALYSIS_GROUPS.slice(1).reduce(
+                  (a, g) =>
+                    a + g.options.filter((o) => selectedTypes.has(o.value)).length,
+                  0
+                );
+                return n > 0 ? (
+                  <span className="ml-2 text-xs text-[#185FA5]">
+                    （{n}件選択中）
+                  </span>
+                ) : null;
+              })()}
+            </span>
+            <span className="text-gray-400 text-xs">
+              {showSpecializedGroups ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {showSpecializedGroups && (
+            <div className="px-3 py-2 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {ANALYSIS_GROUPS.slice(1).map((group) => {
+                  const count = group.options.filter((o) =>
+                    selectedTypes.has(o.value)
+                  ).length;
+                  const active = openChip === group.label;
+                  return (
+                    <button
+                      key={group.label}
+                      type="button"
+                      onClick={() =>
+                        setOpenChip(active ? null : group.label)
+                      }
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        active
+                          ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-[#378ADD]"
+                      }`}
+                    >
+                      {group.label}
+                      {count > 0 && (
+                        <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#378ADD] px-1 text-[10px] font-bold text-white">
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
+
+              {openChip &&
+                (() => {
+                  const group = ANALYSIS_GROUPS.find(
+                    (g) => g.label === openChip
+                  );
+                  if (!group) return null;
+                  return (
+                    <div className="rounded-lg border border-gray-100 bg-gray-50/40">
+                      {renderGroupOptions(group)}
+                    </div>
+                  );
+                })()}
+            </div>
+          )}
         </div>
       </div>
 
