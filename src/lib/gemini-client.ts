@@ -157,6 +157,105 @@ export async function analyzeWithGemini(
   }
 }
 
+/**
+ * 複数画像をPDFに統合せず、inline_data の画像パートとして直接 Gemini に渡して分析する。
+ * analyzeWithGemini の複数画像版（プロンプト・トークン枠・thinking設定の方針は共通）。
+ */
+export async function analyzeImagesWithGemini(
+  images: { base64: string; mime: string }[],
+  prompt: string,
+  analysisType?: string,
+  maxTokensOverride?: number
+): Promise<GeminiResult> {
+  const isTranscription = analysisType === "transcription";
+  const maxOutputTokens = maxTokensOverride ?? (isTranscription ? 65536 : 8192);
+  const temperature = isTranscription ? 0.1 : 0.3;
+
+  if (images.length === 0) {
+    return { success: false, analysis: "", error: "分析対象の画像がありません" };
+  }
+
+  const callGemini = async (): Promise<GeminiResult> => {
+    const apiKey = await getGeminiKey();
+
+    const controller = new AbortController();
+    const timeoutMs = isTranscription ? 280000 : 120000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const parts = [
+      ...images.map((img) => ({
+        inline_data: { mime_type: img.mime, data: img.base64 },
+      })),
+      { text: systemInstruction + prompt },
+    ];
+
+    let res: Response;
+    try {
+      res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: {
+            temperature,
+            maxOutputTokens,
+            ...(isTranscription
+              ? { thinkingConfig: { thinkingLevel: "minimal" } }
+              : {}),
+          },
+        }),
+      });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error("タイムアウトしました。枚数を減らすか、再度お試しください。");
+      }
+      throw err;
+    }
+
+    let responseData: {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+      error?: { message?: string };
+    };
+
+    try {
+      const text = await res.text();
+      responseData = JSON.parse(text);
+    } catch {
+      return { success: false, analysis: "", error: "Gemini APIのレスポンス解析に失敗しました" };
+    }
+
+    if (responseData.error) {
+      return {
+        success: false,
+        analysis: "",
+        error: responseData.error.message || "Gemini APIエラー",
+      };
+    }
+
+    const analysis =
+      responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+    return { success: true, analysis: cleanAnalysisResult(analysis) };
+  };
+
+  try {
+    const result = await callGemini();
+    if (result.success) return result;
+    return await callGemini();
+  } catch (e) {
+    return {
+      success: false,
+      analysis: "",
+      error: e instanceof Error ? e.message : "AI分析に失敗しました",
+    };
+  }
+}
+
 /** テキストのみでGemini APIを呼び出す（ファイル不要）
  *  text を省略すると prompt のみで呼び出す（従来互換）
  */

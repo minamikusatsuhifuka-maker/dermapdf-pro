@@ -27,7 +27,7 @@ import {
   useClinicSettings,
 } from "@/components/settings/settings-modal";
 import { toastOk, toastInfo, toastError } from "@/components/ui/toast-provider";
-import { mergeImagesToPdf } from "@/lib/image-to-pdf";
+import { mergeImagesToPdf, compressImagesToParts } from "@/lib/image-to-pdf";
 
 type ActivePanel =
   | "gemini"
@@ -63,6 +63,11 @@ export default function Home() {
   const [fileBase64, setFileBase64] = useState<string | undefined>();
   const [fileMime, setFileMime] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
+
+  // 「画像のままAI分析」用：PDFに統合せず直接AIへ渡す画像群（あれば優先）
+  const [imageParts, setImageParts] = useState<
+    { base64: string; mime: string }[]
+  >([]);
 
   const [stockCount, setStockCount] = useState(0);
   const [templateCount, setTemplateCount] = useState(0);
@@ -116,6 +121,8 @@ export default function Home() {
   }, [refreshStockCount, refreshTemplateCount, refreshStaffCount]);
 
   const handleFiles = useCallback(async (files: File[]) => {
+    // 新規ファイル読み込み時は画像直接分析モードを解除（通常のファイル/PDF経路に戻す）
+    setImageParts([]);
     const pdf = files.find((f) => f.type === "application/pdf");
     if (pdf) {
       setPdfUrl(URL.createObjectURL(pdf));
@@ -172,6 +179,8 @@ export default function Home() {
         return;
       }
 
+      // PDF統合経路を使うので、画像直接分析の入力はクリアして排他にする。
+      setImageParts([]);
       setProgress(0);
       toastInfo(`${urls.length} 枚をPDFに統合します`);
       try {
@@ -199,6 +208,57 @@ export default function Home() {
       } catch (e) {
         toastError(
           `PDF統合に失敗しました: ${
+            e instanceof Error ? e.message : "不明なエラー"
+          }`,
+        );
+      } finally {
+        setProgress(null);
+      }
+    },
+    [images],
+  );
+
+  // 選択画像をPDFに統合せず、圧縮した画像群として直接AI分析へ渡す。
+  const handleAnalyzeImages = useCallback(
+    async (ids: string[]) => {
+      // 選択順を保持して対象画像のURLを取得
+      const urls = ids
+        .map((id) => images.find((img) => img.id === id)?.url)
+        .filter((u): u is string => !!u);
+      if (urls.length === 0) {
+        toastError("分析対象の画像が見つかりません");
+        return;
+      }
+
+      setProgress(0);
+      toastInfo(`${urls.length} 枚を画像のままAI分析します`);
+      try {
+        const { parts, skipped } = await compressImagesToParts(urls, {
+          onProgress: (done, total) =>
+            setProgress(Math.round((done / total) * 100)),
+        });
+
+        if (parts.length === 0) {
+          toastError("すべての画像の読み込みに失敗しました");
+          return;
+        }
+
+        // 画像直接分析モードへ。PDF経路の入力はクリアして排他にする。
+        setImageParts(parts);
+        setPdfUrl(null);
+        setFileBase64(undefined);
+        setFileMime(undefined);
+        setFileName(`画像${parts.length}枚`);
+        setActivePanel("gemini");
+
+        toastOk(
+          skipped > 0
+            ? `${parts.length} 枚を読み込みました（${skipped} 枚は失敗のためスキップ）。分析タイプを選んで実行してください`
+            : `${parts.length} 枚を読み込みました。分析タイプを選んで実行してください`,
+        );
+      } catch (e) {
+        toastError(
+          `画像の準備に失敗しました: ${
             e instanceof Error ? e.message : "不明なエラー"
           }`,
         );
@@ -331,6 +391,7 @@ export default function Home() {
               }
               onMergePdf={(ids) => handleMergePdf(ids, false)}
               onMergePdfAndAnalyze={(ids) => handleMergePdf(ids, true)}
+              onAnalyzeImages={(ids) => handleAnalyzeImages(ids)}
             />
           </section>
         )}
@@ -369,6 +430,7 @@ export default function Home() {
               inputText={inputText}
               onResult={(r) => setAnalysisResult(r)}
               clinicSettings={settings}
+              imageParts={imageParts}
             />
           )}
 

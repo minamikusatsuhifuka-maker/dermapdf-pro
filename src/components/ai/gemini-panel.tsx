@@ -5,7 +5,11 @@ import MarkdownView from "@/components/ui/markdown-view";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
-import { analyzeWithGemini, analyzeTextWithGemini } from "@/lib/gemini-client";
+import {
+  analyzeWithGemini,
+  analyzeTextWithGemini,
+  analyzeImagesWithGemini,
+} from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
 import { splitPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
@@ -316,6 +320,9 @@ interface GeminiPanelProps {
   inputText?: string;
   onResult?: (result: string) => void;
   clinicSettings?: ClinicSettings;
+  // PDFに統合せず画像群を直接AIへ渡す経路（「画像のままAI分析」）。
+  // セットされている場合、ファイル/PDFより優先してこの画像群を分析する。
+  imageParts?: { base64: string; mime: string }[];
 }
 
 // TARGET_OPTIONS, LEVEL_OPTIONS, PURPOSE_OPTIONS, TONE_OPTIONS, getTechniqueFlags
@@ -329,6 +336,7 @@ export function GeminiPanel({
   inputText,
   onResult,
   clinicSettings,
+  imageParts,
 }: GeminiPanelProps) {
   // 理念コンテキストを構築
   const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
@@ -743,6 +751,85 @@ export function GeminiPanel({
       return data.analysis;
     }
 
+    // 画像のままAI分析（PDF統合を経由せず、画像群を inline_data で直接送信）。
+    // プロンプト・分析タイプ・チャンク方針・進捗は既存PDF経路を踏襲し、入力だけ差し替える。
+    if (imageParts && imageParts.length > 0) {
+      const basePrompt = ANALYSIS_PROMPTS[type];
+
+      // 全文書き起こし: 既存PDF版と同様に CHUNK_SIZE 枚ずつ分割し順次送信して結合。
+      if (type === "transcription") {
+        const total = imageParts.length;
+        const totalChunks = Math.ceil(total / CHUNK_SIZE);
+        let fullText = "";
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, total);
+          const chunk = imageParts.slice(start, end);
+
+          setTranscriptionProgress(
+            `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク / ${start + 1}〜${end}枚目)`
+          );
+
+          const chunkPrompt =
+            `${start + 1}〜${end}枚目の画像の全テキストを書き起こしてください。\n` +
+            `【出力ルール】\n` +
+            `・各画像の冒頭に「--- ${start + 1}枚目 ---」のように番号を入れる\n` +
+            `・図・表・手書き文字も含め全て書き起こす\n` +
+            `・一切省略せず完全に出力する` +
+            lengthInstruction +
+            transcriptionOptionInstruction +
+            purposeInstruction;
+
+          // チャンク失敗（タイムアウト等）時は1回だけ自動リトライ（既存PDF版と同様）。
+          let chunkResult = await analyzeImagesWithGemini(
+            chunk,
+            chunkPrompt,
+            "transcription"
+          );
+          if (!chunkResult.success) {
+            setTranscriptionProgress(
+              `${progressPrefix} 再試行中... (${i + 1}/${totalChunks}チャンク / ${start + 1}〜${end}枚目)`
+            );
+            chunkResult = await analyzeImagesWithGemini(
+              chunk,
+              chunkPrompt,
+              "transcription"
+            );
+          }
+          if (!chunkResult.success) {
+            throw new Error(
+              `${start + 1}〜${end}枚目の処理に失敗: ${chunkResult.error}`
+            );
+          }
+
+          fullText += `\n\n${chunkResult.analysis}`;
+
+          // チャンク間ウェイト（API rate limit対策）
+          if (i < totalChunks - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
+        return fullText.trim();
+      }
+
+      // 要約系など: 全画像を1リクエストで渡す（現PDF版が全ページ1回で要約するのと同じ挙動）。
+      setTranscriptionProgress(`${progressPrefix} 分析中...`);
+      const fullPrompt =
+        basePrompt +
+        purposeInstruction +
+        transcriptionOptionInstruction +
+        lengthInstruction +
+        philosophyContext;
+      const data = await analyzeImagesWithGemini(
+        imageParts,
+        fullPrompt,
+        type,
+        outputTokenOverride
+      );
+      if (!data.success) throw new Error(data.error || "分析に失敗しました");
+      return data.analysis;
+    }
+
     // 以下ファイルモード
     const isTranscription = type === "transcription";
     const effectivePageCount = isPdf && pageCount !== null ? pageCount : 0;
@@ -856,6 +943,8 @@ export function GeminiPanel({
         toastError("テキストが入力されていません");
         return;
       }
+    } else if (imageParts && imageParts.length > 0) {
+      // 画像のままAI分析: 画像群があればOK（ファイル/PDF不要）
     } else {
       // ファイルモード: ファイルが必要
       if (!fileBase64 || !fileMime || !fileName) {
@@ -1523,7 +1612,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           disabled={
             loading ||
             selectedTypes.size === 0 ||
-            (isTextMode ? !inputText?.trim() : !fileBase64)
+            (isTextMode
+              ? !inputText?.trim()
+              : !fileBase64 && !(imageParts && imageParts.length > 0))
           }
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >

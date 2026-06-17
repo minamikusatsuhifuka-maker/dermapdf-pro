@@ -70,6 +70,40 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+// PDFに統合せず、各画像を縮小＋JPEG圧縮して AI へ直接渡すための
+// {base64, mime} 配列に変換する。選択順を保持し、1枚失敗してもスキップして継続。
+export interface CompressedImagePart {
+  base64: string; // data:プレフィックスを含まない純粋なBase64
+  mime: string; // 常に "image/jpeg"
+}
+
+export async function compressImagesToParts(
+  urls: string[],
+  options: {
+    maxEdge?: number;
+    quality?: number;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
+): Promise<{ parts: CompressedImagePart[]; skipped: number }> {
+  const { maxEdge = 1800, quality = 0.8, onProgress } = options;
+  const parts: CompressedImagePart[] = [];
+  let skipped = 0;
+  const total = urls.length;
+
+  for (let i = 0; i < total; i++) {
+    try {
+      const bytes = await imageToJpegBytes(urls[i], maxEdge, quality);
+      parts.push({ base64: uint8ToBase64(bytes), mime: "image/jpeg" });
+    } catch {
+      // 1枚失敗しても全体は止めない。
+      skipped++;
+    }
+    onProgress?.(i + 1, total);
+  }
+
+  return { parts, skipped };
+}
+
 // 複数画像を1本のPDFへ統合する本体。タイムアウト付き。
 export async function mergeImagesToPdf(
   urls: string[],

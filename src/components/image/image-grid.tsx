@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eraser, FileOutput, BrainCircuit } from "lucide-react";
+import { Eraser, FileOutput, BrainCircuit, Images } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageItem {
@@ -15,6 +15,7 @@ interface ImageGridProps {
   onRemoveBg?: (ids: string[]) => void;
   onMergePdf?: (ids: string[]) => void;
   onMergePdfAndAnalyze?: (ids: string[]) => void;
+  onAnalyzeImages?: (ids: string[]) => void;
 }
 
 export function ImageGrid({
@@ -22,6 +23,7 @@ export function ImageGrid({
   onRemoveBg,
   onMergePdf,
   onMergePdfAndAnalyze,
+  onAnalyzeImages,
 }: ImageGridProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -79,6 +81,13 @@ export function ImageGrid({
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
           >
             <BrainCircuit className="h-3.5 w-3.5" /> PDF統合してAI分析
+          </button>
+          <button
+            disabled={selected.size === 0}
+            onClick={() => onAnalyzeImages?.(selectedArray)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+          >
+            <Images className="h-3.5 w-3.5" /> 画像のままAI分析
           </button>
         </div>
       </div>
