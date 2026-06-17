@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
+import { ProofreadModal } from "@/components/proofread/proofread-modal";
+import { saveAnalysis } from "@/lib/analysis-storage";
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -21,6 +23,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [todayStr, setTodayStr] = useState("");
+  const [showProofread, setShowProofread] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setTodayStr(new Date().toLocaleDateString("ja-JP")); }, []);
@@ -202,6 +205,18 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
             className="w-full resize-y rounded-xl border border-[#B5D4F4] bg-white/80 px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           />
 
+          {/* 校正ボタン（テキスト入力直下） */}
+          <div className="mt-2">
+            <button
+              onClick={() => setShowProofread(true)}
+              disabled={inputText.trim().length === 0}
+              className="inline-flex items-center gap-1 rounded-lg bg-purple-500 hover:bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              title="貼り付けたテキストの誤字・脱字・表記揺れを校正"
+            >
+              🔎 校正
+            </button>
+          </div>
+
           {/* 文字数カウンター + ファイル情報 */}
           <div className="mt-2 flex items-center justify-between">
             {inputText.length > 0 ? (
@@ -216,6 +231,25 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
               {inputText.length} 文字
             </span>
           </div>
+
+          {showProofread && (
+            <ProofreadModal
+              sourceText={inputText}
+              sourceTitle={`テキスト入力_${todayStr}`}
+              onClose={() => setShowProofread(false)}
+              onSaveCard={(title, content) => {
+                saveAnalysis({
+                  fileName: `テキスト入力_${todayStr}`,
+                  analysisType: "proofread",
+                  analysisLabel: "校正済み",
+                  content,
+                  tags: [],
+                  folder: "",
+                  title,
+                });
+              }}
+            />
+          )}
         </div>
       )}
     </div>
