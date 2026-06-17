@@ -2071,7 +2071,7 @@ function ResultPanel({
               analysisLabel: "校正済み",
               content,
               tags: [],
-              folder: "",
+              folder: "校正",
               title,
             });
           }}

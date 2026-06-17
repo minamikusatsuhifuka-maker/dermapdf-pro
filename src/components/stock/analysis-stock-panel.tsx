@@ -2413,7 +2413,7 @@ export function AnalysisStockPanel() {
               analysisLabel: "校正済み",
               content,
               tags: [],
-              folder: proofreadRecord.folder,
+              folder: "校正",
               title,
             });
             reload();

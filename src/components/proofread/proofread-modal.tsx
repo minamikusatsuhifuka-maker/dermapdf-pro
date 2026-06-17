@@ -340,14 +340,36 @@ ${numbered}`;
                 </div>
               ))}
 
-              {/* 本文プレビュー（現在の作業テキスト） */}
+              {/* 校正前｜校正後 の比較ビュー（左右並列・独立スクロール、狭幅は縦積み） */}
               <div>
-                <div className="mb-1 text-xs text-gray-500">
-                  プレビュー（適用後の本文）
+                <div className="mb-1 text-xs text-gray-500">校正前 ｜ 校正後</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-[10px] font-semibold text-red-600">
+                      校正前（原文）
+                    </div>
+                    <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap rounded-lg border border-red-100 bg-red-50/30 p-3 text-xs text-gray-700">
+                      {sourceText}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[10px] font-semibold text-green-600">
+                      校正後
+                    </div>
+                    <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap rounded-lg border border-green-100 bg-green-50/30 p-3 text-xs text-gray-700">
+                      {workText}
+                    </pre>
+                  </div>
                 </div>
-                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-xs text-gray-700">
-                  {workText}
-                </pre>
+                {/* 比較ビュー直下の保存ボタン */}
+                <div className="mt-3">
+                  <button
+                    onClick={handleSave}
+                    className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0F6E56]"
+                  >
+                    校正内容を保存
+                  </button>
+                </div>
               </div>
             </div>
           )}
