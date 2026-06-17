@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
-import { ProofreadModal } from "@/components/proofread/proofread-modal";
+import {
+  ProofreadModal,
+  type AppliedFix,
+} from "@/components/proofread/proofread-modal";
 import { ProofreadComparison } from "@/components/proofread/proofread-comparison";
 import { saveAnalysis } from "@/lib/analysis-storage";
 
@@ -29,6 +32,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
   const [comparison, setComparison] = useState<{
     before: string;
     after: string;
+    fixes: AppliedFix[];
   } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -243,8 +247,8 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
               sourceText={inputText}
               sourceTitle={`テキスト入力_${todayStr}`}
               onClose={() => setShowProofread(false)}
-              onComparison={(before, after) =>
-                setComparison({ before, after })
+              onComparison={(before, after, fixes) =>
+                setComparison({ before, after, fixes })
               }
               onSaveCard={(title, content) => {
                 saveAnalysis({
@@ -267,6 +271,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
         <ProofreadComparison
           before={comparison.before}
           after={comparison.after}
+          fixes={comparison.fixes}
           title={`テキスト入力_${todayStr}`}
           onClose={() => setComparison(null)}
         />

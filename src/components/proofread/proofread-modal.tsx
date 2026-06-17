@@ -5,8 +5,16 @@ import { Loader2, X } from "lucide-react";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { toastOk } from "@/components/ui/toast-provider";
 
-type IssueScope = "line" | "all";
+export type IssueScope = "line" | "all";
 type IssueStatus = "pending" | "applied" | "rejected" | "manual";
+
+// 前後比較ペインのハイライト描画に渡す「適用済み修正」1件分
+export interface AppliedFix {
+  original: string;
+  suggestion: string;
+  line: number;
+  scope: IssueScope;
+}
 
 interface RawIssue {
   line?: number;
@@ -60,7 +68,8 @@ export function ProofreadModal({
   onSaveCard: (title: string, content: string) => void;
   onClose: () => void;
   // 指定時：適用後の「校正前/校正後」をメイン画面に大きく表示する導線を出す
-  onComparison?: (before: string, after: string) => void;
+  // fixes は適用済み修正の一覧で、比較ペインの該当箇所ハイライトに使う
+  onComparison?: (before: string, after: string, fixes: AppliedFix[]) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -401,7 +410,15 @@ ${numbered}`;
           {onComparison && (
             <button
               onClick={() => {
-                onComparison(sourceText, workText);
+                const fixes: AppliedFix[] = issues
+                  .filter((i) => i.status === "applied")
+                  .map((i) => ({
+                    original: i.original,
+                    suggestion: i.suggestion,
+                    line: i.line,
+                    scope: i.scope,
+                  }));
+                onComparison(sourceText, workText, fixes);
                 onClose();
               }}
               className="rounded-lg bg-[#378ADD] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#185FA5]"

@@ -1,19 +1,110 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import type { AppliedFix } from "@/components/proofread/proofread-modal";
 import { toastOk } from "@/components/ui/toast-provider";
+
+// 1行内で targets に一致する全箇所を <mark> でハイライトする。
+// 見つからなければ素のテキストをそのまま返す（誤ハイライト・クラッシュ防止）。
+function highlightLine(
+  line: string,
+  targets: string[],
+  cls: string,
+  keyBase: string
+): ReactNode {
+  // 空文字を除き、長い一致を優先（部分一致の取りこぼし防止）
+  const uniq = Array.from(new Set(targets.filter((t) => t.length > 0))).sort(
+    (a, b) => b.length - a.length
+  );
+  if (uniq.length === 0) return line;
+
+  const ranges: { start: number; end: number }[] = [];
+  for (const t of uniq) {
+    let from = 0;
+    while (true) {
+      const i = line.indexOf(t, from);
+      if (i === -1) break;
+      ranges.push({ start: i, end: i + t.length });
+      from = i + t.length;
+    }
+  }
+  if (ranges.length === 0) return line;
+
+  // 重なり区間をマージ
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end) {
+      last.end = Math.max(last.end, r.end);
+    } else {
+      merged.push({ ...r });
+    }
+  }
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  merged.forEach((m, idx) => {
+    if (m.start > cursor) nodes.push(line.slice(cursor, m.start));
+    nodes.push(
+      <mark key={`${keyBase}-${idx}`} className={cls}>
+        {line.slice(m.start, m.end)}
+      </mark>
+    );
+    cursor = m.end;
+  });
+  if (cursor < line.length) nodes.push(line.slice(cursor));
+  return nodes;
+}
+
+// テキスト全体を行ごとにハイライト描画する。
+// mode==="before": 各修正の original を赤文字、"after": suggestion を緑文字で強調。
+// scope==="all" は全行の全出現箇所、"line" は該当行のみ。
+function renderPane(
+  text: string,
+  fixes: AppliedFix[],
+  mode: "before" | "after"
+): ReactNode {
+  const pick = (f: AppliedFix) => (mode === "before" ? f.original : f.suggestion);
+  const allTargets = fixes.filter((f) => f.scope === "all").map(pick);
+  const cls =
+    mode === "before"
+      ? "rounded bg-red-100 px-0.5 font-semibold text-red-600"
+      : "rounded bg-green-100 px-0.5 font-semibold text-green-700";
+
+  const lines = text.split("\n");
+  return lines.map((line, i) => {
+    const lineNo = i + 1;
+    const targets = [
+      ...allTargets,
+      ...fixes
+        .filter((f) => f.scope === "line" && f.line === lineNo)
+        .map(pick),
+    ];
+    return (
+      <span key={i}>
+        {highlightLine(line, targets, cls, `${mode}-${i}`)}
+        {i < lines.length - 1 ? "\n" : ""}
+      </span>
+    );
+  });
+}
 
 // 校正の「校正前｜校正後」をメイン画面に大きく表示し、校正後を「校正」フォルダへ新カード保存する。
 export function ProofreadComparison({
   before,
   after,
   title,
+  fixes = [],
   onClose,
 }: {
   before: string;
   after: string;
   title: string;
+  // 適用済み修正の一覧。該当箇所を校正前=赤／校正後=緑でハイライトする。
+  fixes?: AppliedFix[];
   onClose: () => void;
 }) {
   const handleSave = () => {
@@ -46,16 +137,18 @@ export function ProofreadComparison({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
           <div className="mb-1 text-xs font-semibold text-red-600">
-            校正前（原文）
+            校正前（原文・赤字＝修正箇所）
           </div>
           <pre className="min-h-[50vh] max-h-[72vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50/30 p-4 text-sm leading-relaxed text-gray-700">
-            {before}
+            {renderPane(before, fixes, "before")}
           </pre>
         </div>
         <div>
-          <div className="mb-1 text-xs font-semibold text-green-600">校正後</div>
+          <div className="mb-1 text-xs font-semibold text-green-600">
+            校正後（緑字＝修正箇所）
+          </div>
           <pre className="min-h-[50vh] max-h-[72vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-green-200 bg-green-50/30 p-4 text-sm leading-relaxed text-gray-700">
-            {after}
+            {renderPane(after, fixes, "after")}
           </pre>
         </div>
       </div>
