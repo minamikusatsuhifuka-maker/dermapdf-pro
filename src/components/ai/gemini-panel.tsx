@@ -2064,7 +2064,7 @@ function ResultPanel({
           sourceText={text}
           sourceTitle={label}
           onClose={() => setShowProofread(false)}
-          onSaveCard={(title, content) => {
+          onSaveCard={(title, content, before) => {
             saveAnalysis({
               fileName: label,
               analysisType: "proofread",
@@ -2073,6 +2073,7 @@ function ResultPanel({
               tags: [],
               folder: "校正",
               title,
+              proofreadBefore: before,
             });
           }}
         />

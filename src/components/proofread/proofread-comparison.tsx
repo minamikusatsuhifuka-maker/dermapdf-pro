@@ -107,10 +107,10 @@ export function ProofreadComparison({
   fixes?: AppliedFix[];
   onClose: () => void;
 }) {
-  // 校正後の素テキストをそのままコピー（色・HTMLは含めず、貼り付け先では全て黒になる）
-  const handleCopy = async () => {
+  // 素テキストをそのままコピー（色・HTMLは含めず、貼り付け先では全て黒になる）
+  const handleCopy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(after);
+      await navigator.clipboard.writeText(text);
       toastOk("コピーしました");
     } catch {
       // 失敗時は何もしない（クリップボード権限不可など）
@@ -126,6 +126,7 @@ export function ProofreadComparison({
       tags: [],
       folder: "校正",
       title: `【校正済み】${title}`,
+      proofreadBefore: before,
     });
     toastOk("校正内容を「校正」フォルダに保存しました");
     onClose();
@@ -171,11 +172,18 @@ export function ProofreadComparison({
           校正内容を保存
         </button>
         <button
-          onClick={handleCopy}
+          onClick={() => handleCopy(after)}
           className="rounded-lg border border-[#1D9E75] px-5 py-2.5 text-sm font-semibold text-[#1D9E75] hover:bg-[#1D9E75]/10"
           title="校正後テキストをコピー（色なしのプレーンテキスト）"
         >
           📋 コピー
+        </button>
+        <button
+          onClick={() => handleCopy(before)}
+          className="rounded-lg border border-red-300 px-5 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+          title="校正前（原文）をコピー（色なしのプレーンテキスト）"
+        >
+          📋 校正前をコピー
         </button>
       </div>
     </section>

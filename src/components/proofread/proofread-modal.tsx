@@ -65,7 +65,8 @@ export function ProofreadModal({
 }: {
   sourceText: string;
   sourceTitle: string;
-  onSaveCard: (title: string, content: string) => void;
+  // before は校正前（原文）。校正後カードに紐づけて保持するため渡す。
+  onSaveCard: (title: string, content: string, before: string) => void;
   onClose: () => void;
   // 指定時：適用後の「校正前/校正後」をメイン画面に大きく表示する導線を出す
   // fixes は適用済み修正の一覧で、比較ペインの該当箇所ハイライトに使う
@@ -183,7 +184,7 @@ ${numbered}`;
   };
 
   const handleSave = () => {
-    onSaveCard(`【校正済み】${sourceTitle}`, workText);
+    onSaveCard(`【校正済み】${sourceTitle}`, workText, sourceText);
     toastOk("校正済みカードを保存しました");
     onClose();
   };

@@ -10,6 +10,8 @@ export interface AnalysisRecord {
   title?: string;
   updatedAt?: string;
   originalContent?: string;
+  // 校正前（原文）。校正後本文(content)はクリーンに保ちつつ原文を紐づけ保持する。
+  proofreadBefore?: string;
   locked?: boolean;
   favorite?: boolean;
 }

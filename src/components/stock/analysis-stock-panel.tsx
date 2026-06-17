@@ -2044,6 +2044,15 @@ export function AnalysisStockPanel() {
                   >
                     <Copy className="h-3.5 w-3.5 text-gray-400" />
                   </button>
+                  {r.proofreadBefore && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCopy(r.proofreadBefore!); }}
+                      className="rounded px-1.5 py-1 text-[10px] font-semibold text-red-500 hover:bg-red-50"
+                      title="校正前（原文）をコピー（色なしのプレーンテキスト）"
+                    >
+                      校正前をコピー
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsMarkdown(r); }}
                     className="rounded p-1 text-gray-400 hover:text-[#378ADD] transition-colors"
@@ -2406,7 +2415,7 @@ export function AnalysisStockPanel() {
           sourceText={htmlToText(proofreadRecord.content)}
           sourceTitle={getDisplayTitle(proofreadRecord)}
           onClose={() => setProofreadRecord(null)}
-          onSaveCard={(title, content) => {
+          onSaveCard={(title, content, before) => {
             saveAnalysis({
               fileName: proofreadRecord.fileName,
               analysisType: "proofread",
@@ -2415,6 +2424,7 @@ export function AnalysisStockPanel() {
               tags: [],
               folder: "校正",
               title,
+              proofreadBefore: before,
             });
             reload();
           }}

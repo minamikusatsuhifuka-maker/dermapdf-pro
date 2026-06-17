@@ -250,7 +250,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
               onComparison={(before, after, fixes) =>
                 setComparison({ before, after, fixes })
               }
-              onSaveCard={(title, content) => {
+              onSaveCard={(title, content, before) => {
                 saveAnalysis({
                   fileName: `テキスト入力_${todayStr}`,
                   analysisType: "proofread",
@@ -259,6 +259,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
                   tags: [],
                   folder: "校正",
                   title,
+                  proofreadBefore: before,
                 });
               }}
             />
