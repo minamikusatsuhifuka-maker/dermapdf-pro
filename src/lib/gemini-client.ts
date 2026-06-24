@@ -116,7 +116,7 @@ export async function analyzeWithGemini(
 
     let responseData: {
       candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
+        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
       }>;
       error?: { message?: string };
     };
@@ -136,8 +136,12 @@ export async function analyzeWithGemini(
       };
     }
 
-    const analysis =
-      responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    // 応答が複数パートに分割されても先頭1パートだけ拾わないよう、thinkingパートを除く
+    // 全textパートを連結する（画像版と同一ロジック・単一パートでは結果不変＝回帰なし）。
+    const analysis = (responseData.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought && typeof p.text === "string")
+      .map((p) => p.text)
+      .join("");
 
     return { success: true, analysis: cleanAnalysisResult(analysis) };
   };
@@ -304,7 +308,7 @@ export async function analyzeTextWithGemini(
 
     let responseData: {
       candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
+        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
       }>;
       error?: { message?: string };
     };
@@ -320,7 +324,12 @@ export async function analyzeTextWithGemini(
       return { success: false, analysis: "", error: responseData.error.message || "Gemini APIエラー" };
     }
 
-    const analysis = responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    // 応答が複数パートに分割されても先頭1パートだけ拾わないよう、thinkingパートを除く
+    // 全textパートを連結する（画像版と同一ロジック・単一パートでは結果不変＝回帰なし）。
+    const analysis = (responseData.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought && typeof p.text === "string")
+      .map((p) => p.text)
+      .join("");
     return { success: true, analysis: cleanAnalysisResult(analysis) };
   };
 
