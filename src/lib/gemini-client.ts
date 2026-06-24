@@ -217,7 +217,7 @@ export async function analyzeImagesWithGemini(
 
     let responseData: {
       candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
+        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
       }>;
       error?: { message?: string };
     };
@@ -237,8 +237,12 @@ export async function analyzeImagesWithGemini(
       };
     }
 
-    const analysis =
-      responseData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    // 複数画像を1チャンクで渡すと、Geminiは画像ごとに content.parts[] を分割して返す。
+    // parts[0] だけだと先頭1枚分しか拾えないため、thinkingパートを除く全textパートを連結する。
+    const analysis = (responseData.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought && typeof p.text === "string")
+      .map((p) => p.text)
+      .join("");
 
     return { success: true, analysis: cleanAnalysisResult(analysis) };
   };
