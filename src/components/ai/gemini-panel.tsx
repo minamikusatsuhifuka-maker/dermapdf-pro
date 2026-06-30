@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
-import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X } from "lucide-react";
+import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X, Check } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   analyzeWithGemini,
@@ -400,15 +400,31 @@ export function GeminiPanel({
         return (
           <div key={opt.value}>
             <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-[#185FA5] flex-1">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleType(opt.value)}
-                  className="accent-[#378ADD]"
-                />
-                {opt.label}
-              </label>
+              {/* トグルボタン化：ボタン全体がクリック対象（当たり判定を拡大）。
+                  選択中はソフトブルー塗り＋チェック、未選択は枠線／中立色。
+                  文字数select・Genspark設定はこのボタンの「外側」に配置するため、
+                  それらの操作でトグルは反応しない（誤操作防止）。 */}
+              <button
+                type="button"
+                onClick={() => toggleType(opt.value)}
+                aria-pressed={checked}
+                className={`flex-1 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-left transition-colors ${
+                  checked
+                    ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5] font-semibold"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-[#B5D4F4] hover:bg-[#F0F7FF] hover:text-[#185FA5]"
+                }`}
+              >
+                <span
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                    checked
+                      ? "border-[#378ADD] bg-[#378ADD] text-white"
+                      : "border-gray-300 bg-white"
+                  }`}
+                >
+                  {checked && <Check className="h-3 w-3" />}
+                </span>
+                <span className="flex-1">{opt.label}</span>
+              </button>
               {checked && (
                 <select
                   value={typeLengths[opt.value] || ""}
