@@ -387,6 +387,37 @@ export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
     "次の文書を、配布用のA4 1枚に収まるハンドアウトとして要約してください。タイトル、最重要ポイント3つ、補足の要点、（あれば）注意事項の順で、箇条書き中心に簡潔にまとめてください。元の文書にない情報は足さないでください。",
 };
 
+// 読み手レベル（フェーズ2）。「指定なし」以外が選ばれているときのみ、対象タイプの
+// プロンプト先頭へ読み手指示を前置注入する。localStorageは新規キーを使用（既存キー非流用）。
+const READER_LEVEL_KEY = "dermapdf_reader_level";
+// 前置注入の対象＝フェーズ1で追加した「わかりやすく」「プレゼン」9タイプのみ。
+// 書き起こし等のmechanical系・校正には適用しない。
+const READER_LEVEL_TYPES: Set<AnalysisType> = new Set<AnalysisType>([
+  "yasashii_summary",
+  "structured_summary",
+  "prep_summary",
+  "easy_rewrite",
+  "glossary",
+  "qa_anticipated",
+  "key_messages",
+  "slide_outline",
+  "handout_a4",
+]);
+const READER_LEVEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "指定なし" },
+  { value: "patient", label: "患者向け" },
+  { value: "staff", label: "スタッフ向け" },
+  { value: "director", label: "院長向け" },
+];
+const READER_LEVEL_INSTRUCTIONS: Record<string, string> = {
+  patient:
+    "読み手は当院に来院する患者さんです。専門用語は避け、安心感のある丁寧でやさしい表現にしてください。",
+  staff:
+    "読み手は当院のスタッフです。業務で使える正確さを保ちつつ、簡潔で実務的な表現にしてください。",
+  director:
+    "読み手は院長本人です。要点と判断材料を密度高くまとめ、専門用語はそのままで構いません。",
+};
+
 interface GeminiPanelProps {
   fileBase64?: string;
   fileMime?: string;
@@ -430,6 +461,8 @@ export function GeminiPanel({
   // 表示中の結果に対応する分析タイプ（DL ファイル名・ストック保存ラベルで使用）
   const [lastResultType, setLastResultType] = useState<AnalysisType>("summary");
   const [purpose, setPurpose] = useState("");
+  // 読み手レベル（""=指定なし／patient／staff／director）。マウント後にlocalStorageから復元。
+  const [readerLevel, setReaderLevel] = useState<string>("");
   // 出力文字数の目安。"" は指定なし、"custom" でカスタム入力欄が出る
   const [targetLength, setTargetLength] = useState<string>("");
   const [customLength, setCustomLength] = useState<string>("500");
@@ -476,6 +509,26 @@ export function GeminiPanel({
   useEffect(() => {
     setBasicOrder(loadBasicOrder());
   }, []);
+
+  // 読み手レベルをlocalStorageから復元（保存済みの妥当な値のみ採用）。
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(READER_LEVEL_KEY);
+      if (saved && READER_LEVEL_INSTRUCTIONS[saved]) setReaderLevel(saved);
+    } catch {
+      /* localStorage不可でも既定（指定なし）で動作 */
+    }
+  }, []);
+
+  // 読み手レベル選択を即localStorageへ保存（再読込後も維持）。
+  const updateReaderLevel = (value: string) => {
+    setReaderLevel(value);
+    try {
+      window.localStorage.setItem(READER_LEVEL_KEY, value);
+    } catch {
+      /* 保存不可でも当該セッションでは反映される */
+    }
+  };
 
   // 基本分析の options を保存順に並べ替え（未登録は末尾・欠落は無視）。表示順のみ。
   const orderBasicOptions = (options: AnalysisOption[]): AnalysisOption[] => {
@@ -892,6 +945,15 @@ export function GeminiPanel({
       ? `\n\n【ユーザーからの追加指示】\n${trimmedPurpose}\n\n上記の追加指示にも必ず従って、分析・作業を行ってください。`
       : "";
 
+    // 読み手レベル（フェーズ2）。「指定なし」以外かつ対象9タイプのときのみ、プロンプト先頭に
+    // 読み手指示を1行前置する。既定（指定なし）・対象外タイプでは空＝従来挙動を一切変えない。
+    const readerLevelInstruction =
+      readerLevel &&
+      READER_LEVEL_TYPES.has(type) &&
+      READER_LEVEL_INSTRUCTIONS[readerLevel]
+        ? READER_LEVEL_INSTRUCTIONS[readerLevel] + "\n\n"
+        : "";
+
     // 全文書き起こしオプション（手書きメモ除外／空欄補足）をプロンプトへ条件付き追記。
     // 既定の組み合わせ（含める／そのまま）なら何も追記しない＝現行どおり。
     let transcriptionOptionInstruction = "";
@@ -935,6 +997,7 @@ export function GeminiPanel({
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const basePrompt = ANALYSIS_PROMPTS[type];
       const fullPrompt =
+        readerLevelInstruction +
         basePrompt + purposeInstruction + transcriptionOptionInstruction +
         lengthInstruction +
         philosophyContext;
@@ -1011,6 +1074,7 @@ export function GeminiPanel({
       // 要約系など: 全画像を1リクエストで渡す（現PDF版が全ページ1回で要約するのと同じ挙動）。
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
       const fullPrompt =
+        readerLevelInstruction +
         basePrompt +
         purposeInstruction +
         transcriptionOptionInstruction +
@@ -1118,6 +1182,7 @@ export function GeminiPanel({
     setTranscriptionProgress(`${progressPrefix} 分析中...`);
     const basePrompt = ANALYSIS_PROMPTS[type];
     const fullPrompt =
+      readerLevelInstruction +
       basePrompt + purposeInstruction + transcriptionOptionInstruction +
       lengthInstruction +
       philosophyContext;
@@ -1779,6 +1844,34 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           )}
         </div>
       </div>
+
+      {/* 読み手レベル（フェーズ2）。対象（わかりやすく／プレゼン）タイプ選択時のみ表示。
+          文字数指定と同じ流儀で、条件表示・配置を踏襲する。 */}
+      {Array.from(selectedTypes).some((t) => READER_LEVEL_TYPES.has(t)) && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-600">
+            読み手レベル（任意・わかりやすく／プレゼン系に適用）
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={readerLevel}
+              onChange={(e) => updateReaderLevel(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+            >
+              {READER_LEVEL_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {readerLevel && (
+              <span className="text-xs text-gray-400">
+                出力の語り口を読み手に合わせます
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 全文書き起こし警告 */}
       {selectedTypes.has("transcription") && (
