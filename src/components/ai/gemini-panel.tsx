@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
-import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X, Check } from "lucide-react";
+import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X, Check, GripVertical } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
   analyzeWithGemini,
@@ -194,6 +194,31 @@ const ANALYSIS_GROUPS: AnalysisGroup[] = [
     ],
   },
 ];
+
+// 基本分析タイプの表示順（DnD並べ替え）をlocalStorageに保存するキーと既定順。
+const BASIC_ORDER_KEY = "dermapdf_basic_analysis_order";
+const BASIC_OPTION_VALUES: AnalysisType[] = ANALYSIS_GROUPS[0].options.map(
+  (o) => o.value
+);
+
+// 保存済み順序と現在のタイプ一覧の不一致でも壊れないように正規化：
+// 既知タイプを保存順に並べ、保存順に無い新タイプは末尾、存在しないタイプは無視。
+function loadBasicOrder(): AnalysisType[] {
+  try {
+    const raw =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(BASIC_ORDER_KEY)
+        : null;
+    const saved: AnalysisType[] = raw ? JSON.parse(raw) : [];
+    const inSaved = (Array.isArray(saved) ? saved : []).filter((v) =>
+      BASIC_OPTION_VALUES.includes(v)
+    );
+    const rest = BASIC_OPTION_VALUES.filter((v) => !inSaved.includes(v));
+    return [...inSaved, ...rest];
+  } catch {
+    return [...BASIC_OPTION_VALUES];
+  }
+}
 
 export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
   // 基本分析
@@ -391,46 +416,144 @@ export function GeminiPanel({
     });
   };
 
+  // 基本分析ボタンの表示順（DnD並べ替え）。初期は既定順、マウント後にlocalStorageから復元。
+  const [basicOrder, setBasicOrder] = useState<AnalysisType[]>(() => [
+    ...BASIC_OPTION_VALUES,
+  ]);
+  // ドラッグ中の基本分析ボタンのインデックス（null=ドラッグなし）
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setBasicOrder(loadBasicOrder());
+  }, []);
+
+  // 基本分析の options を保存順に並べ替え（未登録は末尾・欠落は無視）。表示順のみ。
+  const orderBasicOptions = (options: AnalysisOption[]): AnalysisOption[] => {
+    const byValue = new Map(options.map((o) => [o.value, o]));
+    const ordered = basicOrder
+      .map((v) => byValue.get(v))
+      .filter((o): o is AnalysisOption => !!o);
+    const extras = options.filter((o) => !basicOrder.includes(o.value));
+    return [...ordered, ...extras];
+  };
+
+  // 基本分析ボタンを from → to へ移動し、新しい順序をlocalStorageへ保存。
+  const moveBasic = (from: number, to: number) => {
+    if (from === to) return;
+    const current = orderBasicOptions(ANALYSIS_GROUPS[0].options).map(
+      (o) => o.value
+    );
+    if (from < 0 || from >= current.length || to < 0 || to >= current.length)
+      return;
+    const next = [...current];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setBasicOrder(next);
+    try {
+      window.localStorage.setItem(BASIC_ORDER_KEY, JSON.stringify(next));
+    } catch {
+      /* localStorage不可でも表示順は維持 */
+    }
+  };
+
   const getLabel = (type: AnalysisType): string =>
     ANALYSIS_GROUPS.flatMap((g) => g.options).find((o) => o.value === type)
       ?.label ?? type;
 
   // グループ内の分析タイプ一覧（チェックボックス・個別文字数・Genspark設定）を描画。
   // 基本分析・専門グループ（チップ展開時）の両方で再利用する。
-  const renderGroupOptions = (group: AnalysisGroup) => (
-    <div className="px-3 py-2 space-y-1.5">
-      {group.options.map((opt) => {
-        const checked = selectedTypes.has(opt.value);
-        const isGsSlide = opt.value === "genspark_slide";
-        return (
-          <div key={opt.value}>
-            <div className="flex items-center gap-2">
-              {/* トグルボタン化：ボタン全体がクリック対象（当たり判定を拡大）。
-                  選択中はソフトブルー塗り＋チェック、未選択は枠線／中立色。
-                  文字数select・Genspark設定はこのボタンの「外側」に配置するため、
-                  それらの操作でトグルは反応しない（誤操作防止）。 */}
-              <button
-                type="button"
-                onClick={() => toggleType(opt.value)}
-                aria-pressed={checked}
-                className={`flex-1 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-left transition-colors ${
-                  checked
-                    ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5] font-semibold"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-[#B5D4F4] hover:bg-[#F0F7FF] hover:text-[#185FA5]"
+  // group: 描画するグループ。reorderable: 基本分析のみ true（DnD並べ替え・順序保存対象）。
+  const renderGroupOptions = (group: AnalysisGroup, reorderable = false) => {
+    const options = reorderable
+      ? orderBasicOptions(group.options)
+      : group.options;
+    const selectedOpts = options.filter((o) => selectedTypes.has(o.value));
+    return (
+      <div className="px-3 py-2 space-y-3">
+        {/* 分析タイプ＝短い横並びボタン（少し大きめ・狭い画面だけ折り返し）。
+            選択中はソフトブルー塗り＋チェック＋太字、未選択は枠線／中立色。複数選択トグル。 */}
+        <div className="flex flex-wrap gap-2">
+          {options.map((opt, idx) => {
+            const checked = selectedTypes.has(opt.value);
+            return (
+              <div
+                key={opt.value}
+                onDragOver={
+                  reorderable
+                    ? (e) => {
+                        if (dragIndex !== null) e.preventDefault();
+                      }
+                    : undefined
+                }
+                onDrop={
+                  reorderable
+                    ? (e) => {
+                        e.preventDefault();
+                        if (dragIndex !== null) moveBasic(dragIndex, idx);
+                        setDragIndex(null);
+                      }
+                    : undefined
+                }
+                className={`inline-flex ${
+                  reorderable && dragIndex === idx ? "opacity-40" : ""
                 }`}
               >
-                <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                <button
+                  type="button"
+                  onClick={() => toggleType(opt.value)}
+                  aria-pressed={checked}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm text-left transition-colors ${
                     checked
-                      ? "border-[#378ADD] bg-[#378ADD] text-white"
-                      : "border-gray-300 bg-white"
+                      ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5] font-semibold"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-[#B5D4F4] hover:bg-[#F0F7FF] hover:text-[#185FA5]"
                   }`}
                 >
-                  {checked && <Check className="h-3 w-3" />}
+                  {/* ドラッグハンドル（基本分析のみ）。ここからのドラッグ＝並べ替え。
+                      クリックはトグルへ伝播させない＝短い操作は確実にトグル。 */}
+                  {reorderable && (
+                    <span
+                      draggable
+                      onDragStart={(e) => {
+                        setDragIndex(idx);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => setDragIndex(null)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="cursor-grab text-gray-300 hover:text-gray-500 active:cursor-grabbing"
+                      title="ドラッグで並べ替え"
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </span>
+                  )}
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      checked
+                        ? "border-[#378ADD] bg-[#378ADD] text-white"
+                        : "border-gray-300 bg-white"
+                    }`}
+                  >
+                    {checked && <Check className="h-3 w-3" />}
+                  </span>
+                  <span>{opt.label}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 選択中タイプの文字数指定・Genspark設定（ボタン行の下／横並びを崩さない）。
+            ここはボタンの外側なので操作してもトグルは反応しない（誤操作防止）。 */}
+        {selectedOpts.map((opt) => {
+          const isGsSlide = opt.value === "genspark_slide";
+          return (
+            <div
+              key={opt.value}
+              className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2 space-y-2"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-[#185FA5]">
+                  {opt.label}
                 </span>
-                <span className="flex-1">{opt.label}</span>
-              </button>
-              {checked && (
                 <select
                   value={typeLengths[opt.value] || ""}
                   onChange={(e) => setTypeLength(opt.value, e.target.value)}
@@ -456,12 +579,11 @@ export function GeminiPanel({
                     </>
                   )}
                 </select>
-              )}
-            </div>
+              </div>
 
-            {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを直下に展開 */}
-            {isGsSlide && checked && (
-              <div className="mt-2 ml-6 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
+              {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを展開 */}
+              {isGsSlide && (
+              <div className="mt-1 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
                 <p className="text-xs font-semibold text-[#185FA5]">
                   🎯 Gensparkプレゼン設定
                 </p>
@@ -548,8 +670,9 @@ export function GeminiPanel({
           </div>
         );
       })}
-    </div>
-  );
+      </div>
+    );
+  };
 
   // PDFのページ数を取得
   const isPdf = fileMime === "application/pdf";
@@ -1474,7 +1597,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             <div className="px-3 py-2 bg-gray-50 text-sm font-medium text-gray-700">
               {ANALYSIS_GROUPS[0].label}
             </div>
-            {renderGroupOptions(ANALYSIS_GROUPS[0])}
+            {renderGroupOptions(ANALYSIS_GROUPS[0], true)}
           </div>
 
           {/* その他の分析タイプ（トグル → 小チップの折り返しグリッド） */}
