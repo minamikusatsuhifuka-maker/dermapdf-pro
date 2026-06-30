@@ -668,13 +668,13 @@ export async function bulkExportAsMarkdown(records: AnalysisRecord[]): Promise<v
   }
 }
 
-export async function bulkExportAsText(records: AnalysisRecord[]): Promise<void> {
+// 単一カードを .txt（プレーンテキスト）でダウンロード。
+// 整形・命名規則は一括テキスト出力（bulkExportAsText）と同一に揃える。
+export function exportSingleAnalysisAsText(record: AnalysisRecord): void {
+  const r = record;
   const dateFileStr = new Date().toISOString().split("T")[0];
-  for (let i = 0; i < records.length; i++) {
-    await new Promise<void>((resolve) => setTimeout(resolve, i === 0 ? 0 : 500));
-    const r = records[i];
-    const title = r.title || r.fileName;
-    const text = `${title}
+  const title = r.title || r.fileName;
+  const text = `${title}
 分析タイプ: ${r.analysisLabel}
 保存日時: ${new Date(r.createdAt).toLocaleString("ja-JP")}
 ${r.folder ? `フォルダ: ${r.folder}` : ""}
@@ -682,15 +682,21 @@ ${"─".repeat(40)}
 
 ${r.content}
 `;
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const safeName = title.replace(/[^\w\u3040-\u9fff]/g, "_").slice(0, 30);
-    const safeLabel = r.analysisLabel.replace(/[^\w\u3040-\u9fff]/g, "_");
-    a.download = `dermapdf_${safeName}_${safeLabel}_${dateFileStr}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const safeName = title.replace(/[^\w぀-鿿]/g, "_").slice(0, 30);
+  const safeLabel = r.analysisLabel.replace(/[^\w぀-鿿]/g, "_");
+  a.download = `dermapdf_${safeName}_${safeLabel}_${dateFileStr}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function bulkExportAsText(records: AnalysisRecord[]): Promise<void> {
+  for (let i = 0; i < records.length; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, i === 0 ? 0 : 500));
+    exportSingleAnalysisAsText(records[i]);
   }
 }
 

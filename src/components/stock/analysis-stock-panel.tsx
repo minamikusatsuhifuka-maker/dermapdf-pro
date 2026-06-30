@@ -16,6 +16,7 @@ import {
   exportAnalysesAsDocx,
   exportAnalysesAsPdf,
   exportSingleAnalysisAsMarkdown,
+  exportSingleAnalysisAsText,
   exportSingleAnalysisAsPdf,
   bulkExportAsMarkdown,
   bulkExportAsText,
@@ -2053,6 +2054,13 @@ export function AnalysisStockPanel() {
                       校正前をコピー
                     </button>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsText(r); }}
+                    className="rounded p-1 text-gray-400 hover:text-[#185FA5] transition-colors"
+                    title="テキスト(.txt)ファイルでダウンロード"
+                  >
+                    <span className="text-xs font-bold">テキスト</span>
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsMarkdown(r); }}
                     className="rounded p-1 text-gray-400 hover:text-[#378ADD] transition-colors"
