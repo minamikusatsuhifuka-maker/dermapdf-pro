@@ -28,6 +28,7 @@ import {
 } from "@/components/settings/settings-modal";
 import { toastOk, toastInfo, toastError } from "@/components/ui/toast-provider";
 import { mergeImagesToPdf, compressImagesToParts } from "@/lib/image-to-pdf";
+import { mergePdfs } from "@/lib/pdf-splitter";
 
 type ActivePanel =
   | "gemini"
@@ -123,11 +124,9 @@ export default function Home() {
   const handleFiles = useCallback(async (files: File[]) => {
     // 新規ファイル読み込み時は画像直接分析モードを解除（通常のファイル/PDF経路に戻す）
     setImageParts([]);
-    const pdf = files.find((f) => f.type === "application/pdf");
-    if (pdf) {
-      setPdfUrl(URL.createObjectURL(pdf));
-    }
+    const pdfs = files.filter((f) => f.type === "application/pdf");
 
+    // 画像（PDF以外）はファイル一覧として表示
     const imgs = files
       .filter((f) => f.type !== "application/pdf")
       .map((f, i) => ({
@@ -137,7 +136,37 @@ export default function Home() {
       }));
     if (imgs.length > 0) setImages(imgs);
 
-    // 最初のファイルをAI分析用にBase64変換
+    // 複数PDF: 順序保持で1本に統合し、既存の単一PDF経路（ページ表示・抽出・
+    // トリミング・解析パイプライン）へそのまま流す。全PDF・全ページが反映される。
+    if (pdfs.length >= 2) {
+      toastInfo(`${pdfs.length} 件のPDFを統合しています...`);
+      try {
+        const buffers = await Promise.all(pdfs.map((f) => f.arrayBuffer()));
+        const merged = await mergePdfs(buffers);
+        setPdfUrl(URL.createObjectURL(merged.blob));
+        setFileBase64(merged.base64);
+        setFileMime("application/pdf");
+        setFileName(`統合PDF_${pdfs.length}件_${merged.pageCount}ページ.pdf`);
+        toastOk(
+          `${pdfs.length} 件のPDF（計${merged.pageCount}ページ）を読み込みました`
+        );
+      } catch (e) {
+        toastError(
+          `PDFの統合に失敗しました: ${
+            e instanceof Error ? e.message : "不明なエラー"
+          }`
+        );
+      }
+      return;
+    }
+
+    // 単一PDF or 画像のみ（従来どおり）
+    const pdf = pdfs[0];
+    if (pdf) {
+      setPdfUrl(URL.createObjectURL(pdf));
+    }
+
+    // 最初のファイルをAI分析用にBase64変換（PDFがあれば先頭がPDF）
     const target = files[0];
     if (target) {
       const buffer = await target.arrayBuffer();

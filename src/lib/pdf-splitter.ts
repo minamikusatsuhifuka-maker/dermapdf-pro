@@ -33,6 +33,44 @@ export async function getPdfPageCount(base64: string): Promise<number> {
   }
 }
 
+export interface MergePdfsResult {
+  blob: Blob;
+  base64: string; // AI分析用（data部のみ。data:プレフィックスは含まない）
+  pageCount: number; // 統合後の総ページ数
+}
+
+// 複数のPDFを「選択（読み込み）順を保持」して1本に統合する。
+// 各PDFの全ページをそのまま結合し、統合後のPDF（blob/base64/総ページ数）を返す。
+// これにより既存の単一PDF経路（ページ表示・抽出・トリミング・解析）をそのまま再利用できる。
+export async function mergePdfs(
+  sources: ArrayBuffer[]
+): Promise<MergePdfsResult> {
+  const merged = await PDFDocument.create();
+  for (const src of sources) {
+    const doc = await PDFDocument.load(src, { ignoreEncryption: true });
+    const pages = await merged.copyPages(doc, doc.getPageIndices());
+    pages.forEach((p) => merged.addPage(p));
+  }
+
+  if (merged.getPageCount() === 0) {
+    throw new Error("統合できるPDFページがありません");
+  }
+
+  const bytes = await merged.save();
+  // Uint8Array<ArrayBufferLike> をそのまま Blob に渡すと型が合わないため、
+  // 該当区間の ArrayBuffer を切り出して渡す。
+  const ab = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer;
+  const blob = new Blob([ab], { type: "application/pdf" });
+  return {
+    blob,
+    base64: uint8ArrayToBase64(bytes),
+    pageCount: merged.getPageCount(),
+  };
+}
+
 export async function splitPdfPages(
   base64: string,
   startPage: number,

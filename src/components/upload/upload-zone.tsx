@@ -51,10 +51,11 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
       );
       if (files.length === 0) return;
 
-      // PDFは1件のみ
+      // PDFも複数受け付ける。PDFを先頭・画像を後段に並べ替え（順序保持）。
+      // PDFを先頭に置くことで、単一ファイル前提の fileBase64 セットが従来どおり先頭PDFを指す。
       const pdfs = files.filter((f) => f.type === "application/pdf");
       const images = files.filter((f) => f.type !== "application/pdf");
-      const accepted = pdfs.length > 0 ? [pdfs[0], ...images] : images;
+      const accepted = [...pdfs, ...images];
 
       setSelectedFiles(accepted);
       onFilesSelected(accepted);
@@ -150,7 +151,7 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
               ファイルをドラッグ＆ドロップ、またはクリックして選択
             </p>
             <p className="mt-1 text-xs text-gray-400">
-              PDF / PNG / JPEG / HEIC 対応（画像は複数、PDFは1件まで）
+              PDF / PNG / JPEG / HEIC 対応（画像もPDFも複数可）
             </p>
             <input
               ref={inputRef}
