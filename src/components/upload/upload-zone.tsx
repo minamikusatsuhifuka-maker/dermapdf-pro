@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Upload, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
+import { Upload, FileText, Image as ImageIcon, X, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import {
@@ -21,9 +21,11 @@ const ACCEPTED_TYPES = [
 interface UploadZoneProps {
   onFilesSelected: (files: File[]) => void;
   onTextInput?: (text: string, fileName: string) => void;
+  // 読み込んだファイル（PDF・画像）を一括削除して状態をリセットする。
+  onClearFiles?: () => void;
 }
 
-export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
+export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [todayStr, setTodayStr] = useState("");
@@ -78,6 +80,14 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
     const next = selectedFiles.filter((_, i) => i !== index);
     setSelectedFiles(next);
     onFilesSelected(next);
+  };
+
+  // 読み込んだファイルを一括削除（全PDF・全画像をまとめてクリア）。
+  // ファイル自体の削除であり、再統合は一切走らせず状態をリセットするだけ。
+  const clearAllFiles = () => {
+    setSelectedFiles([]);
+    if (onClearFiles) onClearFiles();
+    else onFilesSelected([]);
   };
 
   const handleTextChange = (text: string) => {
@@ -165,6 +175,22 @@ export function UploadZone({ onFilesSelected, onTextInput }: UploadZoneProps) {
 
           {selectedFiles.length > 0 && (
             <div className="space-y-2">
+              {/* ファイル一覧ヘッダ＋一括削除（ページ選択の「全解除」とは別物：ファイル自体を削除） */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-medium text-gray-500">
+                  読み込み済みファイル（{selectedFiles.length}件）
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearAllFiles();
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-500 transition-colors hover:bg-red-100"
+                  title="読み込んだファイルをすべて削除（再統合は走りません）"
+                >
+                  <Trash2 className="h-3 w-3" /> すべて削除
+                </button>
+              </div>
               {selectedFiles.map((file, i) => (
                 <div
                   key={`${file.name}-${i}`}

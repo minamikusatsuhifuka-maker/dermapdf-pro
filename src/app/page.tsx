@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { UploadZone } from "@/components/upload/upload-zone";
 import { useAppStore } from "@/store/app-store";
@@ -30,6 +30,17 @@ import { toastOk, toastInfo, toastError } from "@/components/ui/toast-provider";
 import { mergeImagesToPdf, compressImagesToParts } from "@/lib/image-to-pdf";
 import { mergePdfs } from "@/lib/pdf-splitter";
 
+// ファイル（PDF）を AI 分析用の純粋なBase64（data:プレフィックスなし）へ変換。
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  return btoa(
+    new Uint8Array(buffer).reduce(
+      (data, byte) => data + String.fromCharCode(byte),
+      ""
+    )
+  );
+}
+
 type ActivePanel =
   | "gemini"
   | "genspark"
@@ -52,10 +63,23 @@ const PANEL_BUTTONS: {
 ];
 
 export default function Home() {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  // 表示用PDF（ファイルごとのセクション）。各エントリは安定したidとobject URLを持ち、
+  // 1件削除しても他ファイルのサムネイルを再描画しない（重い再統合・再描画を避ける）。
+  const [pdfDocs, setPdfDocs] = useState<
+    { id: string; name: string; url: string }[]
+  >([]);
   const [images, setImages] = useState<
     { id: string; name: string; url: string }[]
   >([]);
+
+  // 遅延統合用: File参照ごとの { id, url } キャッシュ（削除時にURLを使い回し再描画を防ぐ）。
+  const pdfUrlMapRef = useRef<Map<File, { id: string; url: string }>>(new Map());
+  // 現在読み込み中のPDF File配列（解析直前に最新セットで統合するため保持）。
+  const pdfSourceFilesRef = useRef<File[]>([]);
+  // fileBase64 が最新の統合PDFを反映していない（要再統合）かどうか。
+  const pdfMergeDirtyRef = useRef(false);
+  // 表示用PDFエントリの安定したid採番。
+  const pdfIdCounterRef = useRef(0);
   const [progress, setProgress] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>("gemini");
   const [analysisResult, setAnalysisResult] = useState("");
@@ -125,63 +149,102 @@ export default function Home() {
     // 新規ファイル読み込み時は画像直接分析モードを解除（通常のファイル/PDF経路に戻す）
     setImageParts([]);
     const pdfs = files.filter((f) => f.type === "application/pdf");
+    const imgFiles = files.filter((f) => f.type !== "application/pdf");
 
-    // 画像（PDF以外）はファイル一覧として表示
-    const imgs = files
-      .filter((f) => f.type !== "application/pdf")
-      .map((f, i) => ({
+    // 画像（PDF以外）はファイル一覧として表示（無ければクリア）
+    setImages(
+      imgFiles.map((f, i) => ({
         id: `img-${i}-${Date.now()}`,
         name: f.name,
         url: URL.createObjectURL(f),
-      }));
-    if (imgs.length > 0) setImages(imgs);
+      }))
+    );
 
-    // 複数PDF: 順序保持で1本に統合し、既存の単一PDF経路（ページ表示・抽出・
-    // トリミング・解析パイプライン）へそのまま流す。全PDF・全ページが反映される。
-    if (pdfs.length >= 2) {
-      toastInfo(`${pdfs.length} 件のPDFを統合しています...`);
-      try {
-        const buffers = await Promise.all(pdfs.map((f) => f.arrayBuffer()));
-        const merged = await mergePdfs(buffers);
-        setPdfUrl(URL.createObjectURL(merged.blob));
-        setFileBase64(merged.base64);
-        setFileMime("application/pdf");
-        setFileName(`統合PDF_${pdfs.length}件_${merged.pageCount}ページ.pdf`);
-        toastOk(
-          `${pdfs.length} 件のPDF（計${merged.pageCount}ページ）を読み込みました`
-        );
-      } catch (e) {
-        toastError(
-          `PDFの統合に失敗しました: ${
-            e instanceof Error ? e.message : "不明なエラー"
-          }`
-        );
+    // --- PDF表示: File参照ごとに object URL を再利用（統合はここでは行わない）。---
+    // これにより1件削除しても残りファイルのサムネイルは再描画されず軽い。
+    const map = pdfUrlMapRef.current;
+    // 今回のセットに無くなった File のURLを破棄（削除されたPDFを表示から外す）
+    for (const [file, entry] of Array.from(map.entries())) {
+      if (!pdfs.includes(file)) {
+        URL.revokeObjectURL(entry.url);
+        map.delete(file);
       }
+    }
+    const nextDocs = pdfs.map((f) => {
+      let entry = map.get(f);
+      if (!entry) {
+        entry = { id: `pdf-${pdfIdCounterRef.current++}`, url: URL.createObjectURL(f) };
+        map.set(f, entry);
+      }
+      return { id: entry.id, name: f.name, url: entry.url };
+    });
+    setPdfDocs(nextDocs);
+    pdfSourceFilesRef.current = pdfs;
+
+    // --- 解析用 fileBase64 の決定（統合は遅延：複数PDFはここで統合しない）---
+    if (pdfs.length >= 2) {
+      // 複数PDF: 統合は解析（実行）直前に一度だけ行う。ここでは暫定で先頭PDFをセットし、
+      // 「要再統合」フラグを立てるだけ（削除のたびに統合を走らせない）。
+      pdfMergeDirtyRef.current = true;
+      setFileBase64(await fileToBase64(pdfs[0]));
+      setFileMime("application/pdf");
+      setFileName(`PDF ${pdfs.length}件（解析時に統合）`);
+      toastOk(`${pdfs.length} 件のPDFを読み込みました（解析時に統合します）`);
       return;
     }
 
-    // 単一PDF or 画像のみ（従来どおり）
-    const pdf = pdfs[0];
-    if (pdf) {
-      setPdfUrl(URL.createObjectURL(pdf));
-    }
+    pdfMergeDirtyRef.current = false;
 
-    // 最初のファイルをAI分析用にBase64変換（PDFがあれば先頭がPDF）
+    // 単一PDF or 画像のみ（従来どおり：最初のファイルをBase64化）
     const target = files[0];
     if (target) {
-      const buffer = await target.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce(
-          (data, byte) => data + String.fromCharCode(byte),
-          ""
-        )
-      );
-      setFileBase64(base64);
+      setFileBase64(await fileToBase64(target));
       setFileMime(target.type);
       setFileName(target.name);
     }
 
     toastOk(`${files.length} 件のファイルを読み込みました`);
+  }, []);
+
+  // 解析（実行）／抽出／トリミングの直前に呼ばれ、最新のファイル構成で
+  // 統合PDF等を解決して返す（遅延統合）。複数PDFはここで初めて一度だけ統合する。
+  const ensurePdfMerged = useCallback(async (): Promise<
+    { base64: string; mime: string; name: string } | null
+  > => {
+    const pdfs = pdfSourceFilesRef.current;
+    if (pdfMergeDirtyRef.current && pdfs.length >= 2) {
+      toastInfo(`${pdfs.length} 件のPDFを統合しています...`);
+      const buffers = await Promise.all(pdfs.map((f) => f.arrayBuffer()));
+      const merged = await mergePdfs(buffers);
+      const name = `統合PDF_${pdfs.length}件_${merged.pageCount}ページ.pdf`;
+      setFileBase64(merged.base64);
+      setFileMime("application/pdf");
+      setFileName(name);
+      pdfMergeDirtyRef.current = false;
+      return { base64: merged.base64, mime: "application/pdf", name };
+    }
+    if (fileBase64 && fileMime) {
+      return { base64: fileBase64, mime: fileMime, name: fileName ?? "file" };
+    }
+    return null;
+  }, [fileBase64, fileMime, fileName]);
+
+  // ファイル（PDF・画像）を一括削除して状態をリセットする（再統合は一切走らせない）。
+  const handleClearFiles = useCallback(() => {
+    const map = pdfUrlMapRef.current;
+    for (const [, entry] of map) URL.revokeObjectURL(entry.url);
+    map.clear();
+    pdfSourceFilesRef.current = [];
+    pdfMergeDirtyRef.current = false;
+    setPdfDocs([]);
+    setImages((prev) => {
+      prev.forEach((img) => URL.revokeObjectURL(img.url));
+      return [];
+    });
+    setImageParts([]);
+    setFileBase64(undefined);
+    setFileMime(undefined);
+    setFileName(undefined);
   }, []);
 
   const handleTextInput = useCallback((text: string, textFileName: string) => {
@@ -218,8 +281,17 @@ export default function Home() {
             setProgress(Math.round((done / total) * 100)),
         });
 
-        // 生成PDFを表示＆AI分析用データとしてセット
-        setPdfUrl(URL.createObjectURL(result.blob));
+        // 生成PDFを表示＆AI分析用データとしてセット（アップロードPDFとは別経路。
+        // 既に1本に統合済みなので遅延統合の対象外＝dirtyにしない）
+        pdfSourceFilesRef.current = [];
+        pdfMergeDirtyRef.current = false;
+        setPdfDocs([
+          {
+            id: `pdf-gen-${pdfIdCounterRef.current++}`,
+            name: `統合_${result.pageCount}枚.pdf`,
+            url: URL.createObjectURL(result.blob),
+          },
+        ]);
         setFileBase64(result.base64);
         setFileMime("application/pdf");
         setFileName(`統合_${result.pageCount}枚.pdf`);
@@ -274,7 +346,9 @@ export default function Home() {
 
         // 画像直接分析モードへ。PDF経路の入力はクリアして排他にする。
         setImageParts(parts);
-        setPdfUrl(null);
+        pdfSourceFilesRef.current = [];
+        pdfMergeDirtyRef.current = false;
+        setPdfDocs([]);
         setFileBase64(undefined);
         setFileMime(undefined);
         setFileName(`画像${parts.length}枚`);
@@ -311,7 +385,11 @@ export default function Home() {
 
         {/* アップロード */}
         <section>
-          <UploadZone onFilesSelected={handleFiles} onTextInput={handleTextInput} />
+          <UploadZone
+            onFilesSelected={handleFiles}
+            onTextInput={handleTextInput}
+            onClearFiles={handleClearFiles}
+          />
         </section>
 
         {/* ナビゲーションチップ */}
@@ -387,24 +465,46 @@ export default function Home() {
           </section>
         )}
 
-        {/* PDFページ一覧 + PDFアクション（テキストモードでは非表示） */}
-        {inputMode === "file" && pdfUrl && (
-          <>
-            <section className="rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
-              <h2 className="mb-4 text-lg font-bold text-gray-700">
-                PDFページ
-              </h2>
-              <PageGrid
-                pdfUrl={pdfUrl}
-                onExtract={(pages) =>
-                  toastInfo(`ページ ${pages.join(", ")} を抽出します`)
-                }
-                onCrop={(pages) =>
-                  toastInfo(`ページ ${pages.join(", ")} をトリミングします`)
-                }
-              />
-            </section>
-          </>
+        {/* PDFページ一覧（テキストモードでは非表示）。複数PDFはファイルごとにセクション表示。
+            削除しても再統合は走らず、解析/抽出/トリミングの直前に最新セットで一度だけ統合する。 */}
+        {inputMode === "file" && pdfDocs.length > 0 && (
+          <section className="rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
+            <h2 className="mb-4 text-lg font-bold text-gray-700">
+              PDFページ
+              {pdfDocs.length > 1 && (
+                <span className="ml-2 text-sm font-normal text-gray-400">
+                  （{pdfDocs.length} ファイル）
+                </span>
+              )}
+            </h2>
+            <div className="space-y-6">
+              {pdfDocs.map((doc) => (
+                <div key={doc.id}>
+                  {pdfDocs.length > 1 && (
+                    <p className="mb-2 truncate text-sm font-semibold text-[#185FA5]">
+                      📄 {doc.name}
+                    </p>
+                  )}
+                  <PageGrid
+                    pdfUrl={doc.url}
+                    onExtract={(pages) => {
+                      // 抽出は最新の統合PDFを必要とするため、直前に遅延統合を確定。
+                      ensurePdfMerged();
+                      toastInfo(
+                        `「${doc.name}」のページ ${pages.join(", ")} を抽出します`
+                      );
+                    }}
+                    onCrop={(pages) => {
+                      ensurePdfMerged();
+                      toastInfo(
+                        `「${doc.name}」のページ ${pages.join(", ")} をトリミングします`
+                      );
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* 画像一覧（テキストモードでは非表示） */}
@@ -460,6 +560,7 @@ export default function Home() {
               onResult={(r) => setAnalysisResult(r)}
               clinicSettings={settings}
               imageParts={imageParts}
+              onEnsureFileData={ensurePdfMerged}
             />
           )}
 

@@ -323,6 +323,10 @@ interface GeminiPanelProps {
   // PDFに統合せず画像群を直接AIへ渡す経路（「画像のままAI分析」）。
   // セットされている場合、ファイル/PDFより優先してこの画像群を分析する。
   imageParts?: { base64: string; mime: string }[];
+  // 解析（実行）直前に呼び出し、最新のファイル構成で統合PDF等を解決して返す。
+  // 複数PDFの遅延統合に使用：削除のたびに統合せず、解析時に一度だけ統合する。
+  // 返り値があればその base64/mime を props より優先して解析に使う。
+  onEnsureFileData?: () => Promise<{ base64: string; mime: string; name: string } | null>;
 }
 
 // TARGET_OPTIONS, LEVEL_OPTIONS, PURPOSE_OPTIONS, TONE_OPTIONS, getTechniqueFlags
@@ -337,6 +341,7 @@ export function GeminiPanel({
   onResult,
   clinicSettings,
   imageParts,
+  onEnsureFileData,
 }: GeminiPanelProps) {
   // 理念コンテキストを構築
   const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
@@ -689,7 +694,9 @@ export function GeminiPanel({
   const analyzeOne = async (
     type: AnalysisType,
     progressPrefix: string,
-    lengthOverride?: string
+    lengthOverride?: string,
+    // 遅延統合: 解析直前に親が解決した最新の統合PDF等。あれば props/state より優先。
+    fileOverride?: { base64: string; mime: string; pageCount: number }
   ): Promise<string> => {
     // 個別指定 > グローバル指定 の優先順
     const globalLength =
@@ -847,11 +854,16 @@ export function GeminiPanel({
     }
 
     // 以下ファイルモード
+    // override があればそれ（最新の統合PDF）を、無ければ従来どおり props/state を使う。
+    const effFileBase64 = fileOverride?.base64 ?? fileBase64;
+    const effFileMime = fileOverride?.mime ?? fileMime;
+    const effIsPdf = effFileMime === "application/pdf";
+    const effPageCount = fileOverride ? fileOverride.pageCount : pageCount;
     const isTranscription = type === "transcription";
-    const effectivePageCount = isPdf && pageCount !== null ? pageCount : 0;
-    const useBatch = isTranscription && isPdf && effectivePageCount > CHUNK_SIZE;
+    const effectivePageCount = effIsPdf && effPageCount !== null ? effPageCount : 0;
+    const useBatch = isTranscription && effIsPdf && effectivePageCount > CHUNK_SIZE;
 
-    if (isTranscription && isPdf && effectivePageCount <= 0) {
+    if (isTranscription && effIsPdf && effectivePageCount <= 0) {
       // ページ数取得失敗 → 通常処理にフォールバック
       console.warn("ページ数取得失敗、通常処理で実行します");
       setTranscriptionProgress(`${progressPrefix} 分析中...`);
@@ -861,8 +873,8 @@ export function GeminiPanel({
         lengthInstruction +
         philosophyContext;
       const data = await analyzeWithGemini(
-        fileBase64!,
-        fileMime!,
+        effFileBase64!,
+        effFileMime!,
         fullPrompt,
         "transcription"
       );
@@ -883,7 +895,7 @@ export function GeminiPanel({
           `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク / P.${startPage + 1}〜${endPage + 1})`
         );
 
-        const chunkBase64 = await splitPdfPages(fileBase64!, startPage, endPage);
+        const chunkBase64 = await splitPdfPages(effFileBase64!, startPage, endPage);
         const chunkPrompt =
           `P.${startPage + 1}〜P.${endPage + 1} の全テキストを書き起こしてください。\n` +
           `【出力ルール】\n` +
@@ -937,8 +949,8 @@ export function GeminiPanel({
       lengthInstruction +
       philosophyContext;
     const data = await analyzeWithGemini(
-      fileBase64!,
-      fileMime!,
+      effFileBase64!,
+      effFileMime!,
       fullPrompt,
       type,
       outputTokenOverride
@@ -953,6 +965,12 @@ export function GeminiPanel({
       return;
     }
 
+    // ファイルモードのとき、解析直前に最新の構成で統合PDF等を解決（遅延統合）。
+    // 複数PDFはここで初めて一度だけ統合される（削除のたびには統合しない）。
+    let fileOverride:
+      | { base64: string; mime: string; pageCount: number }
+      | undefined;
+
     // テキストモード: テキストが必要
     if (isTextMode) {
       if (!inputText || inputText.trim().length === 0) {
@@ -962,8 +980,32 @@ export function GeminiPanel({
     } else if (imageParts && imageParts.length > 0) {
       // 画像のままAI分析: 画像群があればOK（ファイル/PDF不要）
     } else {
-      // ファイルモード: ファイルが必要
-      if (!fileBase64 || !fileMime || !fileName) {
+      // ファイルモード: 解析直前に親へ最新ファイルデータを要求（遅延統合）
+      let resolved:
+        | { base64: string; mime: string; name: string }
+        | null = null;
+      if (onEnsureFileData) {
+        try {
+          resolved = await onEnsureFileData();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "ファイルの統合に失敗しました";
+          toastError(`ファイルの統合に失敗しました: ${msg}`);
+          return;
+        }
+      }
+      if (resolved) {
+        // 統合PDF（または最新ファイル）でページ数を確定し、解析に使う。
+        const resolvedPageCount =
+          resolved.mime === "application/pdf"
+            ? await getPdfPageCount(resolved.base64)
+            : 0;
+        fileOverride = {
+          base64: resolved.base64,
+          mime: resolved.mime,
+          pageCount: resolvedPageCount,
+        };
+      } else if (!fileBase64 || !fileMime || !fileName) {
+        // 解決できず props も無ければファイル未選択
         toastError("ファイルが選択されていません");
         return;
       }
@@ -990,7 +1032,7 @@ export function GeminiPanel({
         try {
           // 個別文字数指定（無ければ analyzeOne 内でグローバル設定にフォールバック）
           const lengthForType = typeLengths[type] || "";
-          const analysis = await analyzeOne(type, prefix, lengthForType);
+          const analysis = await analyzeOne(type, prefix, lengthForType, fileOverride);
           lastResult = analysis;
           lastType = type;
           successCount += 1;
