@@ -1609,6 +1609,35 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
     URL.revokeObjectURL(url);
   };
 
+  // 個別結果の Word(.docx) 保存（タイトルは Gemini で自動生成）。
+  // Markdownの見出し・太字・箇条書き・表をWordの実体スタイルへマッピングした編集可能な文書。
+  const downloadWord = async (type: AnalysisType, text: string) => {
+    const now = new Date();
+    const dateStr = now.toLocaleString("ja-JP");
+    const dateFileStr = now.toISOString().split("T")[0];
+    const label = getLabel(type);
+    const autoTitle = await generateTitleWithTimeout(
+      text,
+      label,
+      `dermapdf_${type}`
+    );
+    const metaLines = [
+      `ファイル名: ${fileName ?? "unknown"}`,
+      `分析タイプ: ${label}`,
+      `分析日時: ${dateStr}`,
+      ...(clinicSettings?.clinicName ? [`クリニック: ${clinicSettings.clinicName}`] : []),
+    ];
+    const { exportMarkdownAsDocx } = await import("@/lib/markdown-docx");
+    const safeTitle = autoTitle.replace(/[^\w぀-鿿]/g, "_");
+    const safeLabel = label.replace(/[^\w぀-鿿]/g, "_");
+    await exportMarkdownAsDocx({
+      title: autoTitle,
+      metaLines,
+      markdown: text,
+      fileName: `${safeTitle}_${safeLabel}_${dateFileStr}.docx`,
+    });
+  };
+
   // プレゼン技法の自動適用判定
   const { appliesEmotion, appliesCatch, appliesBeforeAfter } = getTechniqueFlags(gsTarget, gsPurpose);
   const hasTechniques = appliesEmotion || appliesCatch || appliesBeforeAfter;
@@ -2018,6 +2047,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               onCopy={() => copyText(text)}
               onDownloadTxt={() => downloadTxt(type, text)}
               onDownloadMd={() => downloadMd(type, text)}
+              onDownloadWord={() => downloadWord(type, text)}
             />
           ))}
         </div>
@@ -2239,6 +2269,7 @@ function ResultPanel({
   onCopy,
   onDownloadTxt,
   onDownloadMd,
+  onDownloadWord,
 }: {
   type: AnalysisType;
   label: string;
@@ -2253,6 +2284,7 @@ function ResultPanel({
   onCopy: () => void;
   onDownloadTxt: () => void | Promise<void>;
   onDownloadMd: () => void | Promise<void>;
+  onDownloadWord: () => void | Promise<void>;
 }) {
   const [editedText, setEditedText] = useState(text);
   const [isEditing, setIsEditing] = useState(false);
@@ -2261,7 +2293,7 @@ function ResultPanel({
   // 校正モーダルの表示
   const [showProofread, setShowProofread] = useState(false);
   // タイトル生成を伴う非同期処理の進行中状態
-  const [pending, setPending] = useState<"save" | "txt" | "md" | null>(null);
+  const [pending, setPending] = useState<"save" | "txt" | "md" | "word" | null>(null);
   // 本文エリアの高さ（プリセット値・初期値=M=350）
   const [panelHeight, setPanelHeight] = useState<number>(350);
 
@@ -2274,7 +2306,7 @@ function ResultPanel({
 
   // タイトル生成を伴う処理を呼び出す共通ラッパー
   const runWithPending = async (
-    kind: "save" | "txt" | "md",
+    kind: "save" | "txt" | "md" | "word",
     fn: () => void | Promise<void>
   ) => {
     if (pending !== null) return;
@@ -2375,6 +2407,22 @@ function ResultPanel({
           ) : (
             <>
               <Download className="h-3 w-3" /> MD
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => runWithPending("word", onDownloadWord)}
+          disabled={isBusy}
+          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 inline-flex items-center gap-1 disabled:opacity-50"
+          title="Word(.docx)で保存（見出し・箇条書き・表を保持した編集可能な文書）"
+        >
+          {pending === "word" ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> タイトル生成中...
+            </>
+          ) : (
+            <>
+              <Download className="h-3 w-3" /> Word
             </>
           )}
         </button>

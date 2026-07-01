@@ -416,6 +416,29 @@ export async function exportSingleAnalysisAsPdf(record: AnalysisRecord): Promise
   });
 }
 
+// 単一カードを .docx でダウンロード。Markdownの見出し・太字・箇条書き・表を
+// Wordの実体スタイルへマッピングした、編集可能なテキスト＋スタイルの文書を生成する。
+export async function exportSingleAnalysisAsWord(record: AnalysisRecord): Promise<void> {
+  const { exportMarkdownAsDocx } = await import("@/lib/markdown-docx");
+  const title = record.title || record.fileName;
+  const dateStr = new Date(record.createdAt).toLocaleString("ja-JP");
+  const metaLines = [
+    `分析タイプ: ${record.analysisLabel}`,
+    `保存日時: ${dateStr}`,
+    ...(record.folder ? [`フォルダ: ${record.folder}`] : []),
+    ...(record.tags?.length ? [`タグ: ${record.tags.join(", ")}`] : []),
+  ];
+  const safeName = title.replace(/[^\w぀-鿿]/g, "_").slice(0, 30);
+  const safeLabel = record.analysisLabel.replace(/[^\w぀-鿿]/g, "_");
+  const fileName = `dermapdf_${safeName}_${safeLabel}_${new Date().toISOString().split("T")[0]}.docx`;
+  await exportMarkdownAsDocx({
+    title,
+    metaLines,
+    markdown: record.content,
+    fileName,
+  });
+}
+
 export function exportAnalysesAsText(): void {
   const data = loadAllAnalyses();
   const text = data

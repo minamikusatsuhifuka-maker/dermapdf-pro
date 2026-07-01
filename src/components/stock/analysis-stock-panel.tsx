@@ -18,6 +18,7 @@ import {
   exportSingleAnalysisAsMarkdown,
   exportSingleAnalysisAsText,
   exportSingleAnalysisAsPdf,
+  exportSingleAnalysisAsWord,
   bulkExportAsMarkdown,
   bulkExportAsText,
   bulkExportAsPdf,
@@ -2074,6 +2075,13 @@ export function AnalysisStockPanel() {
                     title="PDFファイルでダウンロード"
                   >
                     <span className="text-xs font-bold">PDF</span>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); exportSingleAnalysisAsWord(r); }}
+                    className="rounded p-1 text-gray-400 hover:text-[#2B579A] transition-colors"
+                    title="Word(.docx)ファイルでダウンロード（見出し・箇条書き・表を保持）"
+                  >
+                    <span className="text-xs font-bold">Word</span>
                   </button>
                   <button
                     onClick={(e) => {
