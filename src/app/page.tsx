@@ -80,6 +80,10 @@ export default function Home() {
   const pdfMergeDirtyRef = useRef(false);
   // 表示用PDFエントリの安定したid採番。
   const pdfIdCounterRef = useRef(0);
+  // 画像も File参照ごとに { id, url } を再利用（追記時に既存要素を再生成せず、選択状態等を保持する）。
+  const imgUrlMapRef = useRef<Map<File, { id: string; url: string }>>(new Map());
+  // 表示用画像エントリの安定したid採番。
+  const imgIdCounterRef = useRef(0);
   const [progress, setProgress] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>("gemini");
   const [analysisResult, setAnalysisResult] = useState("");
@@ -151,13 +155,29 @@ export default function Home() {
     const pdfs = files.filter((f) => f.type === "application/pdf");
     const imgFiles = files.filter((f) => f.type !== "application/pdf");
 
-    // 画像（PDF以外）はファイル一覧として表示（無ければクリア）
+    // 追加分（前回までに読み込んでいない File）の件数。読み込みトーストは追加分についてのみ表示。
+    const addedCount =
+      pdfs.filter((f) => !pdfUrlMapRef.current.has(f)).length +
+      imgFiles.filter((f) => !imgUrlMapRef.current.has(f)).length;
+
+    // --- 画像表示: File参照ごとに { id, url } を再利用（既存要素は再生成せず選択状態を保持）。---
+    const imgMap = imgUrlMapRef.current;
+    // 今回のセットに無くなった File のURLを破棄（削除された画像を表示から外す）
+    for (const [file, entry] of Array.from(imgMap.entries())) {
+      if (!imgFiles.includes(file)) {
+        URL.revokeObjectURL(entry.url);
+        imgMap.delete(file);
+      }
+    }
     setImages(
-      imgFiles.map((f, i) => ({
-        id: `img-${i}-${Date.now()}`,
-        name: f.name,
-        url: URL.createObjectURL(f),
-      }))
+      imgFiles.map((f) => {
+        let entry = imgMap.get(f);
+        if (!entry) {
+          entry = { id: `img-${imgIdCounterRef.current++}`, url: URL.createObjectURL(f) };
+          imgMap.set(f, entry);
+        }
+        return { id: entry.id, name: f.name, url: entry.url };
+      })
     );
 
     // --- PDF表示: File参照ごとに object URL を再利用（統合はここでは行わない）。---
@@ -189,7 +209,11 @@ export default function Home() {
       setFileBase64(await fileToBase64(pdfs[0]));
       setFileMime("application/pdf");
       setFileName(`PDF ${pdfs.length}件（解析時に統合）`);
-      toastOk(`${pdfs.length} 件のPDFを読み込みました（解析時に統合します）`);
+      if (addedCount > 0) {
+        toastOk(
+          `${addedCount} 件を追加読み込みしました（PDF計 ${pdfs.length} 件・解析時に統合します）`
+        );
+      }
       return;
     }
 
@@ -203,7 +227,13 @@ export default function Home() {
       setFileName(target.name);
     }
 
-    toastOk(`${files.length} 件のファイルを読み込みました`);
+    if (addedCount > 0) {
+      toastOk(
+        addedCount === files.length
+          ? `${files.length} 件のファイルを読み込みました`
+          : `${addedCount} 件を追加読み込みしました（計 ${files.length} 件）`
+      );
+    }
   }, []);
 
   // 解析（実行）／抽出／トリミングの直前に呼ばれ、最新のファイル構成で
@@ -234,13 +264,13 @@ export default function Home() {
     const map = pdfUrlMapRef.current;
     for (const [, entry] of map) URL.revokeObjectURL(entry.url);
     map.clear();
+    const imgMap = imgUrlMapRef.current;
+    for (const [, entry] of imgMap) URL.revokeObjectURL(entry.url);
+    imgMap.clear();
     pdfSourceFilesRef.current = [];
     pdfMergeDirtyRef.current = false;
     setPdfDocs([]);
-    setImages((prev) => {
-      prev.forEach((img) => URL.revokeObjectURL(img.url));
-      return [];
-    });
+    setImages([]);
     setImageParts([]);
     setFileBase64(undefined);
     setFileMime(undefined);

@@ -10,6 +10,7 @@ import {
 } from "@/components/proofread/proofread-modal";
 import { ProofreadComparison } from "@/components/proofread/proofread-comparison";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { toastInfo } from "@/components/ui/toast-provider";
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -53,16 +54,36 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
       );
       if (files.length === 0) return;
 
-      // PDFも複数受け付ける。PDFを先頭・画像を後段に並べ替え（順序保持）。
+      // 追加アップロードは既存への追記。同一ファイル（名前＋サイズ＋更新日時）は重複としてスキップ。
+      const fileKey = (f: File) => `${f.name}__${f.size}__${f.lastModified}`;
+      const knownKeys = new Set(selectedFiles.map(fileKey));
+      const fresh: File[] = [];
+      let skipped = 0;
+      for (const f of files) {
+        const key = fileKey(f);
+        if (knownKeys.has(key)) {
+          skipped++;
+          continue;
+        }
+        knownKeys.add(key);
+        fresh.push(f);
+      }
+      if (skipped > 0) {
+        toastInfo(`${skipped} 件は読み込み済みのためスキップしました`);
+      }
+      if (fresh.length === 0) return;
+
+      // PDFも複数受け付ける。PDFを先頭・画像を後段に並べ替え（各グループ内の既存順序は保持）。
       // PDFを先頭に置くことで、単一ファイル前提の fileBase64 セットが従来どおり先頭PDFを指す。
-      const pdfs = files.filter((f) => f.type === "application/pdf");
-      const images = files.filter((f) => f.type !== "application/pdf");
+      const combined = [...selectedFiles, ...fresh];
+      const pdfs = combined.filter((f) => f.type === "application/pdf");
+      const images = combined.filter((f) => f.type !== "application/pdf");
       const accepted = [...pdfs, ...images];
 
       setSelectedFiles(accepted);
       onFilesSelected(accepted);
     },
-    [onFilesSelected]
+    [onFilesSelected, selectedFiles]
   );
 
   const handleDrop = useCallback(
@@ -169,7 +190,11 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
               accept=".pdf,.png,.jpg,.jpeg,.heic"
               multiple
               className="hidden"
-              onChange={(e) => e.target.files && handleFiles(e.target.files)}
+              onChange={(e) => {
+                if (e.target.files) handleFiles(e.target.files);
+                // 同じファイルを再選択しても change が発火するようリセット（重複はスキップ判定に委ねる）
+                e.target.value = "";
+              }}
             />
           </div>
 
