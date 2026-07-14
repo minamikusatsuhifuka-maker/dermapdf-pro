@@ -1895,17 +1895,18 @@ export function AnalysisStockPanel() {
                 }`}
               >
                 <div
-                  className="flex items-start gap-2 px-4 py-3 cursor-pointer select-none hover:bg-blue-50/30 transition-colors"
+                  className="px-4 py-3 cursor-pointer select-none hover:bg-blue-50/30 transition-colors space-y-1.5"
                   onClick={() => editingId !== r.id && setExpandedId(isExpanded ? null : r.id)}
                 >
+                  {/* 1行目: チェック／種別バッジ／タイトル（行の主役・広い幅）／✏️／日付／文字数／タグ */}
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                   <input
                     type="checkbox"
                     checked={selectedIds.has(r.id)}
                     onChange={() => toggleSelect(r.id)}
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
+                    className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
                   />
-                  <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
                   <span className="rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
                     {r.analysisLabel}
                   </span>
@@ -1983,6 +1984,9 @@ export function AnalysisStockPanel() {
                   >
                     <Tag className="h-3.5 w-3.5 text-gray-400" />
                   </button>
+                  </div>
+                  {/* 2行目: 操作ボタン列（並び順は従来どおり・狭い画面ではこの行内で折り返し） */}
+                  <div className="flex flex-wrap items-center gap-2 pl-6">
                   <button
                     onClick={(e) => { e.stopPropagation(); setActiveGensparkId(isGensparkActive ? null : r.id); }}
                     className="rounded bg-[#1D9E75] hover:bg-[#0F6E56] px-2 py-1 text-[10px] font-semibold text-white transition-opacity"
