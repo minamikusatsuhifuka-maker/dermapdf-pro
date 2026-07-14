@@ -1716,10 +1716,11 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
-      {/* 見出し行：右横にワンクリック全文書き起こし（開いてすぐ押せる最短導線）。
-          狭い画面では flex-wrap でボタンが見出しの下に回る。 */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-700">
+      {/* 見出し行：中央にワンクリック全文書き起こし（開いてすぐ押せる最短導線）。
+          見出しは左のまま、左右に同じ伸縮スペーサを置いてボタンだけを中央に寄せる。
+          狭い画面では flex-wrap でボタンが見出しの下に回る（中央寄せのまま）。 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="flex flex-1 basis-0 items-center gap-2 whitespace-nowrap text-lg font-bold text-gray-700">
           <BrainCircuit className="h-5 w-5 text-[#378ADD]" />
           Gemini AI分析
         </h2>
@@ -1734,7 +1735,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               : !fileBase64 && !(imageParts && imageParts.length > 0))
           }
           title="現在の設定のまま全文書き起こしをワンクリックで実行"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+          className="mx-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
         >
           {quickTranscribing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1743,6 +1744,8 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           )}
           {quickTranscribing ? "書き起こし中..." : "全文書き起こしを実行"}
         </button>
+        {/* 右側スペーサ（見出しと同じ伸縮量）。ボタンを行の水平中央に保つ。 */}
+        <div className="flex-1 basis-0" aria-hidden />
       </div>
 
       {/* テンプレートから呼び出し */}
