@@ -1716,10 +1716,34 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
-      <h2 className="flex items-center gap-2 text-lg font-bold text-gray-700">
-        <BrainCircuit className="h-5 w-5 text-[#378ADD]" />
-        Gemini AI分析
-      </h2>
+      {/* 見出し行：右横にワンクリック全文書き起こし（開いてすぐ押せる最短導線）。
+          狭い画面では flex-wrap でボタンが見出しの下に回る。 */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-700">
+          <BrainCircuit className="h-5 w-5 text-[#378ADD]" />
+          Gemini AI分析
+        </h2>
+        {/* ワンクリック全文書き起こし：選択操作なしで transcription を1件だけ即実行。
+            チェック状態（selectedTypes）は変更しない独立ショートカット。 */}
+        <button
+          onClick={handleQuickTranscription}
+          disabled={
+            loading ||
+            (isTextMode
+              ? !inputText?.trim()
+              : !fileBase64 && !(imageParts && imageParts.length > 0))
+          }
+          title="現在の設定のまま全文書き起こしをワンクリックで実行"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+        >
+          {quickTranscribing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <span>⚡</span>
+          )}
+          {quickTranscribing ? "書き起こし中..." : "全文書き起こしを実行"}
+        </button>
+      </div>
 
       {/* テンプレートから呼び出し */}
       {templates.length > 0 && (
@@ -1986,7 +2010,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         </div>
       )}
 
-      {/* 実行ボタン + ワンクリック全文書き起こし + テンプレート保存 */}
+      {/* 実行ボタン + テンプレート保存 */}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => handleAnalyze()}
@@ -2005,26 +2029,6 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           <span>🚀</span>
         )}
         {loading ? "分析中..." : "実行"}
-        </button>
-        {/* ワンクリック全文書き起こし：選択操作なしで transcription を1件だけ即実行。
-            チェック状態（selectedTypes）は変更しない独立ショートカット。 */}
-        <button
-          onClick={handleQuickTranscription}
-          disabled={
-            loading ||
-            (isTextMode
-              ? !inputText?.trim()
-              : !fileBase64 && !(imageParts && imageParts.length > 0))
-          }
-          title="現在の設定のまま全文書き起こしをワンクリックで実行"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
-        >
-          {quickTranscribing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <span>⚡</span>
-          )}
-          {quickTranscribing ? "書き起こし中..." : "全文書き起こしを実行"}
         </button>
         <button
           onClick={() => setShowSaveTemplate(true)}
