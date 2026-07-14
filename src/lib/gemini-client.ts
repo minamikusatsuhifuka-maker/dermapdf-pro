@@ -46,6 +46,18 @@ function extFor(mime: string): string {
   return "jpg";
 }
 
+/** Vercel Blob へアップロードして URL を返す（サーバが解析後に即削除する）。 */
+async function uploadToBlob(base64: string, mime: string): Promise<string> {
+  const { upload } = await import("@vercel/blob/client");
+  const file = base64ToBlob(base64, mime);
+  const result = await upload(`dermapdf/upload.${extFor(mime)}`, file, {
+    access: "public",
+    handleUploadUrl: "/api/blob/upload",
+    contentType: mime,
+  });
+  return result.url;
+}
+
 /**
  * 3MB超のデータを Vercel Blob へアップロードして URL を返す。
  * 3MB以下なら null を返し、呼び出し側は inlineBase64 でJSON直送する。
@@ -55,14 +67,7 @@ async function uploadIfLarge(
   mime: string
 ): Promise<string | null> {
   if (base64Bytes(base64) <= INLINE_LIMIT_BYTES) return null;
-  const { upload } = await import("@vercel/blob/client");
-  const file = base64ToBlob(base64, mime);
-  const result = await upload(`dermapdf/upload.${extFor(mime)}`, file, {
-    access: "public",
-    handleUploadUrl: "/api/blob/upload",
-    contentType: mime,
-  });
-  return result.url;
+  return uploadToBlob(base64, mime);
 }
 
 /** 解析ルートを叩いて結果を受け取る共通処理。 */
@@ -126,9 +131,16 @@ export async function analyzeImagesWithGemini(
     return { success: false, analysis: "", error: "分析対象の画像がありません" };
   }
   try {
+    // 1枚ずつは小さくても、複数枚をJSONに詰めると合計でボディ制限を超える。
+    // 合計が閾値を超える場合は全枚を Blob へ上げ、blobUrl だけを送る。
+    const total = images.reduce((s, img) => s + base64Bytes(img.base64), 0);
+    const forceBlob = total > INLINE_LIMIT_BYTES;
+
     const items = await Promise.all(
       images.map(async (img) => {
-        const blobUrl = await uploadIfLarge(img.base64, img.mime);
+        const blobUrl = forceBlob
+          ? await uploadToBlob(img.base64, img.mime)
+          : await uploadIfLarge(img.base64, img.mime);
         return blobUrl
           ? { blobUrl, mimeType: img.mime }
           : { inlineBase64: img.base64, mimeType: img.mime };
