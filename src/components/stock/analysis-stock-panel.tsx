@@ -1936,7 +1936,7 @@ export function AnalysisStockPanel() {
                       autoFocus
                       placeholder={r.fileName}
                       onClick={(e) => e.stopPropagation()}
-                      className="flex-1 text-sm font-semibold border-b border-[#378ADD] outline-none bg-transparent w-full max-w-xs"
+                      className="flex-1 min-w-[12rem] text-sm font-semibold border-b border-[#378ADD] outline-none bg-transparent w-full max-w-xs"
                       onBlur={(e) => {
                         updateAnalysisTitle(r.id, e.target.value);
                         setEditingId(null);
@@ -1952,12 +1952,18 @@ export function AnalysisStockPanel() {
                       }}
                     />
                   ) : (
-                    <span className="flex-1 truncate text-sm font-medium text-gray-700">
-                      {r.favorite && <span className="text-sm mr-0.5" style={{ color: "#f59e0b" }}>★</span>}
-                      {getDisplayTitle(r)}
+                    /* タイトルは min-w で優先的に幅を確保（flex-1+truncate だけだと
+                       ボタン列に圧縮され1〜2文字に潰れる）。長い場合は…省略＋ホバーで全文。
+                       ✏️は truncate の外に置き、長いタイトルでも常に見える。 */
+                    <span
+                      className="flex flex-1 min-w-[12rem] items-center gap-1 text-sm font-medium text-gray-700"
+                      title={getDisplayTitle(r)}
+                    >
+                      {r.favorite && <span className="shrink-0 text-sm" style={{ color: "#f59e0b" }}>★</span>}
+                      <span className="truncate">{getDisplayTitle(r)}</span>
                       <button
                         onClick={(e) => { e.stopPropagation(); setEditingId(r.id); }}
-                        className="ml-1 text-gray-400 hover:text-[#378ADD] transition-colors"
+                        className="shrink-0 text-gray-400 hover:text-[#378ADD] transition-colors"
                         title="タイトルを編集（クリックで変更）"
                       >
                         ✏️
