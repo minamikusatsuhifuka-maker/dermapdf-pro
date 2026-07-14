@@ -266,11 +266,14 @@ export async function analyzeImagesWithGemini(
 
 /** テキストのみでGemini APIを呼び出す（ファイル不要）
  *  text を省略すると prompt のみで呼び出す（従来互換）
+ *  thinkingMinimal: タイトル生成など推論不要の短出力用に thinking を最小化する
+ *  （省略時は従来どおり既定thinking＝他の呼び出し元の挙動は不変）
  */
 export async function analyzeTextWithGemini(
   prompt: string,
   text?: string,
-  maxTokensOverride?: number
+  maxTokensOverride?: number,
+  thinkingMinimal?: boolean
 ): Promise<GeminiResult> {
   const basePrompt = text
     ? `以下のテキストを分析してください。\n\n【テキスト内容】\n${text}\n\n【分析指示】\n${prompt}`
@@ -294,6 +297,9 @@ export async function analyzeTextWithGemini(
           generationConfig: {
             temperature: 0.3,
             maxOutputTokens: maxTokensOverride ?? 16384,
+            ...(thinkingMinimal
+              ? { thinkingConfig: { thinkingLevel: "minimal" } }
+              : {}),
           },
         }),
       });

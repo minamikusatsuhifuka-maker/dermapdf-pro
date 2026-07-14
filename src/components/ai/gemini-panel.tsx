@@ -1063,6 +1063,11 @@ export function GeminiPanel({
 
           fullText += `\n\n${chunkResult.analysis}`;
 
+          // チャンク完了ごとに累積文字数を進捗に反映
+          setTranscriptionProgress(
+            `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク完了・累計${fullText.trim().length.toLocaleString()}文字)`
+          );
+
           // チャンク間ウェイト（API rate limit対策）
           if (i < totalChunks - 1) {
             await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -1169,6 +1174,11 @@ export function GeminiPanel({
         }
 
         fullText += `\n\n${chunkResult.analysis}`;
+
+        // チャンク完了ごとに累積文字数を進捗に反映
+        setTranscriptionProgress(
+          `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク完了・累計${fullText.trim().length.toLocaleString()}文字)`
+        );
 
         // チャンク間ウェイト（API rate limit対策）
         if (i < totalChunks - 1) {
@@ -1339,24 +1349,25 @@ export function GeminiPanel({
     fallback: string
   ): Promise<string> => {
     try {
-      const head = analysisText.slice(0, 300);
-      const prompt = `以下の分析結果を表す、短くわかりやすいタイトルを1つだけ生成してください。
+      const head = analysisText.slice(0, 1500);
+      const prompt = `以下の分析結果を表す、短くわかりやすい日本語タイトルを1つだけ生成してください。
 
 【条件】
-- 20〜40文字程度
+- 15〜25文字程度
 - 日本語
 - 内容の核心を一言で表す
 - 「〜の分析」「〜まとめ」などの形式でOK
-- タイトルだけを出力し、説明や前置きは不要
+- タイトルだけを出力し、説明・前置き・記号・引用符は不要
 
 【分析タイプ】${analysisLabel}
 
-【分析結果（先頭300文字）】
+【分析結果（先頭1500文字）】
 ${head}`;
       // 分析結果は prompt 内に既に埋め込み済み。
       // text 引数を渡すと analyzeTextWithGemini が「分析してください」テンプレで二重に包んでしまうため省略する。
       console.log("[generateTitle] 開始:", analysisLabel, head.slice(0, 50));
-      const data = await analyzeTextWithGemini(prompt);
+      // タイトル生成は推論不要の短出力なので thinking minimal で高速化
+      const data = await analyzeTextWithGemini(prompt, undefined, undefined, true);
       console.log(
         "[generateTitle] 結果:",
         data.success,
