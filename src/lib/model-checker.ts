@@ -13,9 +13,12 @@ export interface ModelCheckResult {
   lastChecked: string;
 }
 
+// apiKey は互換のため残すが未使用（APIキーはサーバのみが持つ）。
+// モデル一覧の取得はサーバルート /api/gemini/models 経由で行う。
 export async function checkForNewerGeminiModel(
-  apiKey: string
+  apiKey?: string
 ): Promise<ModelCheckResult> {
+  void apiKey;
   const stored = localStorage.getItem(STORAGE_KEY);
   const lastCheck = stored ? JSON.parse(stored) : null;
   const now = Date.now();
@@ -29,13 +32,9 @@ export async function checkForNewerGeminiModel(
   }
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-    );
+    const res = await fetch("/api/gemini/models");
     const data = await res.json();
-    const modelNames: string[] = (
-      data.models || []
-    ).map((m: { name: string }) => m.name.replace("models/", ""));
+    const modelNames: string[] = data.models || [];
 
     const newerModels = KNOWN_BETTER_MODELS.filter((m) =>
       modelNames.includes(m)

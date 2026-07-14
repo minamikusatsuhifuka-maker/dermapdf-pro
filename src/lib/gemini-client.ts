@@ -1,12 +1,20 @@
 /**
- * ブラウザから直接 Gemini API を呼ぶクライアント
- * Vercel の 4.5MB リクエストボディ制限を回避するため、
- * サーバーを経由せずクライアントから直接呼び出す
+ * Gemini 呼び出しのクライアント側ラッパ。
+ *
+ * セキュリティ: APIキーはブラウザへ一切渡さない。全ての Gemini 呼び出しは
+ * サーバルート（/api/gemini/*）経由で行い、キーはサーバの GEMINI_API_KEY のみが持つ。
+ *
+ * 送信方式（Vercel の 4.5MB リクエストボディ制限対策・ハイブリッド）:
+ *  - テキスト: /api/gemini/analyze-text に直送
+ *  - ファイル/画像: 生サイズ ≤3MB は inlineBase64 でJSON直送、
+ *    3MB 超は Vercel Blob へクライアント直アップロードし blobUrl だけを送る
+ *    （サーバは解析後に Blob を即削除する）。
+ *
+ * 応答の「thinking除く全textパート連結」はサーバ側（gemini-server.ts）へ移設・集約済み。
+ * ここでは { success, analysis, error } を受け取るだけで、連結の重複実装は持たない。
  */
 
 export const CURRENT_MODEL = "gemini-3.5-flash";
-const GEMINI_MODEL = CURRENT_MODEL;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 interface GeminiResult {
   success: boolean;
@@ -14,46 +22,69 @@ interface GeminiResult {
   error?: string;
 }
 
-const systemInstruction = '【重要な出力ルール】\n前置き・挨拶・「承知いたしました」などの導入文は一切出力しないでください。\n分析結果の本文のみを、見出し・箇条書き・Markdown形式で直接出力してください。\n\n';
+// inlineBase64 でJSON直送する生サイズの上限（base64で約1.33倍に膨らむため 3MB→約4MB）。
+const INLINE_LIMIT_BYTES = 3 * 1024 * 1024;
 
-/** 冒頭の定型文パターンを除去するクリーンアップ関数 */
-function cleanAnalysisResult(text: string): string {
-  const patterns = [
-    /^(はい、?|承知いたしました。?|かしこまりました。?)[^\n]*\n+/,
-    /^(以下のように|以下に|下記に)[^\n]*\n+/,
-    /^ご依頼[^\n]*\n+/,
-    /^ご指定[^\n]*\n+/,
-    /^---+\n+/,
-    /^```[^\n]*\n+/,
-  ];
-
-  let cleaned = text;
-  for (const pattern of patterns) {
-    cleaned = cleaned.replace(pattern, '');
-  }
-  return cleaned.trim();
+/** base64（data:プレフィックスなし）の生バイト数を概算する。 */
+function base64Bytes(base64: string): number {
+  return Math.floor((base64.length * 3) / 4);
 }
 
-let cachedKey: string | null = null;
+/** base64 を Blob 化する（Vercel Blob へのアップロード用）。 */
+function base64ToBlob(base64: string, mime: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
 
-async function getGeminiKey(): Promise<string> {
-  if (cachedKey) return cachedKey;
+/** アップロード先の拡張子（Blobの許可content-typeに合わせる）。 */
+function extFor(mime: string): string {
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  return "jpg";
+}
 
-  const res = await fetch("/api/get-gemini-key");
-  let data: { key?: string };
+/**
+ * 3MB超のデータを Vercel Blob へアップロードして URL を返す。
+ * 3MB以下なら null を返し、呼び出し側は inlineBase64 でJSON直送する。
+ */
+async function uploadIfLarge(
+  base64: string,
+  mime: string
+): Promise<string | null> {
+  if (base64Bytes(base64) <= INLINE_LIMIT_BYTES) return null;
+  const { upload } = await import("@vercel/blob/client");
+  const file = base64ToBlob(base64, mime);
+  const result = await upload(`dermapdf/upload.${extFor(mime)}`, file, {
+    access: "public",
+    handleUploadUrl: "/api/blob/upload",
+    contentType: mime,
+  });
+  return result.url;
+}
+
+/** 解析ルートを叩いて結果を受け取る共通処理。 */
+async function postJson(
+  path: string,
+  body: Record<string, unknown>
+): Promise<GeminiResult> {
   try {
-    const text = await res.text();
-    data = JSON.parse(text);
-  } catch {
-    throw new Error("Gemini APIキーの取得に失敗しました");
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as GeminiResult;
+    return data;
+  } catch (e) {
+    return {
+      success: false,
+      analysis: "",
+      error: e instanceof Error ? e.message : "AI分析に失敗しました",
+    };
   }
-
-  if (!data.key) {
-    throw new Error("Gemini APIキーが設定されていません");
-  }
-
-  cachedKey = data.key;
-  return cachedKey;
 }
 
 export async function analyzeWithGemini(
@@ -63,95 +94,15 @@ export async function analyzeWithGemini(
   analysisType?: string,
   maxTokensOverride?: number
 ): Promise<GeminiResult> {
-  const isTranscription = analysisType === "transcription";
-  const maxOutputTokens = maxTokensOverride ?? (isTranscription ? 65536 : 8192);
-  const temperature = isTranscription ? 0.1 : 0.3;
-
-  const callGemini = async (): Promise<GeminiResult> => {
-    const apiKey = await getGeminiKey();
-
-    const controller = new AbortController();
-    const timeoutMs = isTranscription ? 280000 : 120000;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    let res: Response;
-    try {
-      res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64,
-                  },
-                },
-                { text: systemInstruction + prompt },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature,
-            maxOutputTokens,
-            // A-6: 全文書き起こしは推論不要。Gemini 3.x の既定thinkingは純粋な遅延に
-            // なるため最小化して生成を高速化する（他45タイプは既定thinkingのまま維持）。
-            ...(isTranscription
-              ? { thinkingConfig: { thinkingLevel: "minimal" } }
-              : {}),
-          },
-        }),
-      });
-      clearTimeout(timeoutId);
-    } catch (err) {
-      clearTimeout(timeoutId);
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new Error("タイムアウトしました。PDFのページ数を減らすか、再度お試しください。");
-      }
-      throw err;
-    }
-
-    let responseData: {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
-      }>;
-      error?: { message?: string };
-    };
-
-    try {
-      const text = await res.text();
-      responseData = JSON.parse(text);
-    } catch {
-      return { success: false, analysis: "", error: "Gemini APIのレスポンス解析に失敗しました" };
-    }
-
-    if (responseData.error) {
-      return {
-        success: false,
-        analysis: "",
-        error: responseData.error.message || "Gemini APIエラー",
-      };
-    }
-
-    // 応答が複数パートに分割されても先頭1パートだけ拾わないよう、thinkingパートを除く
-    // 全textパートを連結する（画像版と同一ロジック・単一パートでは結果不変＝回帰なし）。
-    const analysis = (responseData.candidates?.[0]?.content?.parts ?? [])
-      .filter((p) => !p.thought && typeof p.text === "string")
-      .map((p) => p.text)
-      .join("");
-
-    return { success: true, analysis: cleanAnalysisResult(analysis) };
-  };
-
   try {
-    const result = await callGemini();
-    if (result.success) return result;
-
-    // 失敗時に1回リトライ
-    return await callGemini();
+    const blobUrl = await uploadIfLarge(base64, mimeType);
+    return await postJson("/api/gemini/analyze-file", {
+      ...(blobUrl ? { blobUrl } : { inlineBase64: base64 }),
+      mimeType,
+      prompt,
+      analysisType,
+      maxOutputTokens: maxTokensOverride,
+    });
   } catch (e) {
     return {
       success: false,
@@ -162,8 +113,8 @@ export async function analyzeWithGemini(
 }
 
 /**
- * 複数画像をPDFに統合せず、inline_data の画像パートとして直接 Gemini に渡して分析する。
- * analyzeWithGemini の複数画像版（プロンプト・トークン枠・thinking設定の方針は共通）。
+ * 複数画像をPDFに統合せず、画像パートとして直接 Gemini に渡して分析する。
+ * 画像の圧縮はクライアント側（compressImagesToParts）のまま。
  */
 export async function analyzeImagesWithGemini(
   images: { base64: string; mime: string }[],
@@ -171,90 +122,24 @@ export async function analyzeImagesWithGemini(
   analysisType?: string,
   maxTokensOverride?: number
 ): Promise<GeminiResult> {
-  const isTranscription = analysisType === "transcription";
-  const maxOutputTokens = maxTokensOverride ?? (isTranscription ? 65536 : 8192);
-  const temperature = isTranscription ? 0.1 : 0.3;
-
   if (images.length === 0) {
     return { success: false, analysis: "", error: "分析対象の画像がありません" };
   }
-
-  const callGemini = async (): Promise<GeminiResult> => {
-    const apiKey = await getGeminiKey();
-
-    const controller = new AbortController();
-    const timeoutMs = isTranscription ? 280000 : 120000;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    const parts = [
-      ...images.map((img) => ({
-        inline_data: { mime_type: img.mime, data: img.base64 },
-      })),
-      { text: systemInstruction + prompt },
-    ];
-
-    let res: Response;
-    try {
-      res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: {
-            temperature,
-            maxOutputTokens,
-            ...(isTranscription
-              ? { thinkingConfig: { thinkingLevel: "minimal" } }
-              : {}),
-          },
-        }),
-      });
-      clearTimeout(timeoutId);
-    } catch (err) {
-      clearTimeout(timeoutId);
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new Error("タイムアウトしました。枚数を減らすか、再度お試しください。");
-      }
-      throw err;
-    }
-
-    let responseData: {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
-      }>;
-      error?: { message?: string };
-    };
-
-    try {
-      const text = await res.text();
-      responseData = JSON.parse(text);
-    } catch {
-      return { success: false, analysis: "", error: "Gemini APIのレスポンス解析に失敗しました" };
-    }
-
-    if (responseData.error) {
-      return {
-        success: false,
-        analysis: "",
-        error: responseData.error.message || "Gemini APIエラー",
-      };
-    }
-
-    // 複数画像を1チャンクで渡すと、Geminiは画像ごとに content.parts[] を分割して返す。
-    // parts[0] だけだと先頭1枚分しか拾えないため、thinkingパートを除く全textパートを連結する。
-    const analysis = (responseData.candidates?.[0]?.content?.parts ?? [])
-      .filter((p) => !p.thought && typeof p.text === "string")
-      .map((p) => p.text)
-      .join("");
-
-    return { success: true, analysis: cleanAnalysisResult(analysis) };
-  };
-
   try {
-    const result = await callGemini();
-    if (result.success) return result;
-    return await callGemini();
+    const items = await Promise.all(
+      images.map(async (img) => {
+        const blobUrl = await uploadIfLarge(img.base64, img.mime);
+        return blobUrl
+          ? { blobUrl, mimeType: img.mime }
+          : { inlineBase64: img.base64, mimeType: img.mime };
+      })
+    );
+    return await postJson("/api/gemini/analyze-images", {
+      items,
+      prompt,
+      analysisType,
+      maxOutputTokens: maxTokensOverride,
+    });
   } catch (e) {
     return {
       success: false,
@@ -264,7 +149,7 @@ export async function analyzeImagesWithGemini(
   }
 }
 
-/** テキストのみでGemini APIを呼び出す（ファイル不要）
+/** テキストのみでGeminiを呼び出す（ファイル不要）
  *  text を省略すると prompt のみで呼び出す（従来互換）
  *  thinkingMinimal: タイトル生成など推論不要の短出力用に thinking を最小化する
  *  （省略時は従来どおり既定thinking＝他の呼び出し元の挙動は不変）
@@ -275,79 +160,10 @@ export async function analyzeTextWithGemini(
   maxTokensOverride?: number,
   thinkingMinimal?: boolean
 ): Promise<GeminiResult> {
-  const basePrompt = text
-    ? `以下のテキストを分析してください。\n\n【テキスト内容】\n${text}\n\n【分析指示】\n${prompt}`
-    : prompt;
-  const fullPrompt = systemInstruction + basePrompt;
-
-  const callGemini = async (): Promise<GeminiResult> => {
-    const apiKey = await getGeminiKey();
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-    let res: Response;
-    try {
-      res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: maxTokensOverride ?? 16384,
-            ...(thinkingMinimal
-              ? { thinkingConfig: { thinkingLevel: "minimal" } }
-              : {}),
-          },
-        }),
-      });
-      clearTimeout(timeoutId);
-    } catch (err) {
-      clearTimeout(timeoutId);
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new Error("タイムアウトしました。再度お試しください。");
-      }
-      throw err;
-    }
-
-    let responseData: {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
-      }>;
-      error?: { message?: string };
-    };
-
-    try {
-      const text = await res.text();
-      responseData = JSON.parse(text);
-    } catch {
-      return { success: false, analysis: "", error: "Gemini APIのレスポンス解析に失敗しました" };
-    }
-
-    if (responseData.error) {
-      return { success: false, analysis: "", error: responseData.error.message || "Gemini APIエラー" };
-    }
-
-    // 応答が複数パートに分割されても先頭1パートだけ拾わないよう、thinkingパートを除く
-    // 全textパートを連結する（画像版と同一ロジック・単一パートでは結果不変＝回帰なし）。
-    const analysis = (responseData.candidates?.[0]?.content?.parts ?? [])
-      .filter((p) => !p.thought && typeof p.text === "string")
-      .map((p) => p.text)
-      .join("");
-    return { success: true, analysis: cleanAnalysisResult(analysis) };
-  };
-
-  try {
-    const result = await callGemini();
-    if (result.success) return result;
-    return await callGemini();
-  } catch (e) {
-    return {
-      success: false,
-      analysis: "",
-      error: e instanceof Error ? e.message : "レポート生成に失敗しました",
-    };
-  }
+  return postJson("/api/gemini/analyze-text", {
+    prompt,
+    text,
+    maxOutputTokens: maxTokensOverride,
+    thinkingMinimal,
+  });
 }

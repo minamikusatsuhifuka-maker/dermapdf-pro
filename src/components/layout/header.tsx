@@ -54,10 +54,8 @@ export function Header({ apiStatus }: HeaderProps) {
 
   const runCheck = useCallback(async () => {
     try {
-      const res = await fetch("/api/get-gemini-key");
-      const data = await res.json();
-      if (!data.key) return;
-      const result = await checkForNewerGeminiModel(data.key);
+      // APIキーはサーバのみが持つ。モデル一覧はサーバルート経由で取得する。
+      const result = await checkForNewerGeminiModel();
       setModelCheck(result);
     } catch { /* ignore */ }
   }, []);
