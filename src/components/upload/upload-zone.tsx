@@ -294,8 +294,11 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
             </span>
           </div>
 
-          {showProofread && (
+          {/* 比較表示中はアンマウントせず hidden で保持する（検出一覧・適用状態・workText を
+              そのまま残し、「🔎 校正レビューを開く」で再検出なしに再表示できるようにする）。 */}
+          {(showProofread || comparison) && (
             <ProofreadModal
+              hidden={!showProofread}
               sourceText={inputText}
               sourceTitle={`テキスト入力_${todayStr}`}
               onClose={() => setShowProofread(false)}
@@ -327,6 +330,7 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
           fixes={comparison.fixes}
           title={`テキスト入力_${todayStr}`}
           onClose={() => setComparison(null)}
+          onReopen={() => setShowProofread(true)}
         />
       )}
     </div>

@@ -62,6 +62,7 @@ export function ProofreadModal({
   onSaveCard,
   onClose,
   onComparison,
+  hidden = false,
 }: {
   sourceText: string;
   sourceTitle: string;
@@ -71,6 +72,9 @@ export function ProofreadModal({
   // 指定時：適用後の「校正前/校正後」をメイン画面に大きく表示する導線を出す
   // fixes は適用済み修正の一覧で、比較ペインの該当箇所ハイライトに使う
   onComparison?: (before: string, after: string, fixes: AppliedFix[]) => void;
+  // true の間は非表示にするだけでアンマウントしない（検出一覧・適用状態・workText を保持し、
+  // 「メイン画面で大きく比較」後に再表示しても再検出が走らないようにする）。
+  hidden?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -195,6 +199,7 @@ ${numbered}`;
   return (
     <div
       className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40 p-4"
+      style={{ display: hidden ? "none" : undefined }}
       onClick={onClose}
     >
       <div

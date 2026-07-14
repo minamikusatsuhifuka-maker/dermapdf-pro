@@ -99,6 +99,7 @@ export function ProofreadComparison({
   title,
   fixes = [],
   onClose,
+  onReopen,
 }: {
   before: string;
   after: string;
@@ -106,6 +107,8 @@ export function ProofreadComparison({
   // 適用済み修正の一覧。該当箇所を校正前=赤／校正後=緑でハイライトする。
   fixes?: AppliedFix[];
   onClose: () => void;
+  // 指定時：保持済みの校正データのまま校正モーダルを再表示する導線を出す（再検出しない）。
+  onReopen?: () => void;
 }) {
   // 素テキストをそのままコピー（色・HTMLは含めず、貼り付け先では全て黒になる）
   const handleCopy = async (text: string) => {
@@ -134,15 +137,27 @@ export function ProofreadComparison({
 
   return (
     <section className="space-y-3 rounded-2xl border border-[#B5D4F4] bg-white/60 p-5 shadow-lg backdrop-blur-xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-base font-bold text-gray-700">🔎 校正 前後比較</h3>
-        <button
-          onClick={onClose}
-          className="rounded p-1 text-gray-400 hover:bg-gray-100"
-          title="比較を閉じる"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 検出一覧・個別✓/一括・要手動確認へ戻る導線（保持済みデータのまま再表示・再検出なし） */}
+          {onReopen && (
+            <button
+              onClick={onReopen}
+              className="rounded-lg bg-[#378ADD] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185FA5]"
+              title="校正の検出一覧に戻る（再検出せず、そのままの状態で開きます）"
+            >
+              🔎 校正レビューを開く
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-gray-400 hover:bg-gray-100"
+            title="比較を閉じる"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
