@@ -109,6 +109,15 @@ function htmlToText(content: string): string {
   return content.trim();
 }
 
+// 「要約・概要」ボタン用プロンプト（詳細にまとめる＝網羅的とは棲み分け、はっきり短く）。
+// 構成：①1〜2文の概要 → ②要点を箇条書き数点 → ③結論/示唆。
+const OVERVIEW_SUMMARY_PROMPT =
+  "以下の本文を、日本語で簡潔に要約してください。\n\n" +
+  "①冒頭に全体像を1〜2文の概要として書く\n" +
+  "②続けて要点を箇条書きで3〜6点にまとめる\n" +
+  "③最後に結論または示唆を1〜2文で書く\n\n" +
+  "冗長な繰り返しを避け、詳細な逐条説明はしないこと。全体としてはっきり短くまとめ、Markdown形式で出力してください。";
+
 // フォルダパスに対して一貫した色を返す（パスが見つからない場合はグレー）
 function getFolderColor(path: string, allPaths: string[]): string {
   const idx = allPaths.indexOf(path);
@@ -965,6 +974,45 @@ export function AnalysisStockPanel() {
       toastError(err instanceof Error ? err.message : "まとめに失敗しました");
     } finally {
       setSummarizingId(null);
+    }
+  };
+
+  // カード本文から「要約・概要」を生成（詳細にまとめると同じ経路・プロンプトのみ差し替え）。
+  // 出力は概要→要点箇条書き→結論の短い構成。新規カード（種別「要約・概要」）として保存する。
+  const [overviewSummarizingId, setOverviewSummarizingId] = useState<string | null>(null);
+
+  const summarizeOverviewFromStock = async (record: AnalysisRecord, length: string) => {
+    if (overviewSummarizingId) return;
+    setOverviewSummarizingId(record.id);
+    try {
+      const sourceText = htmlToText(record.content);
+      if (!sourceText.trim()) throw new Error("要約する本文がありません");
+      const lengthInstr = length
+        ? `\n\n【出力文字数の目安】約${length}文字程度でまとめてください。`
+        : "";
+      const prompt = OVERVIEW_SUMMARY_PROMPT + lengthInstr;
+      const tokenOverride = length
+        ? Math.min(65536, Math.max(8192, Math.ceil(Number(length) * 2.2)))
+        : undefined;
+      const data = await analyzeTextWithGemini(prompt, sourceText, tokenOverride);
+      if (!data.success) throw new Error(data.error || "要約に失敗しました");
+      const title = "要約・概要";
+      // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
+      saveAnalysis({
+        fileName: record.fileName,
+        analysisType: "overview_summary",
+        analysisLabel: "要約・概要",
+        content: data.analysis,
+        tags: [],
+        folder: record.folder,
+        title,
+      });
+      reload();
+      toastOk(`「${title}」をストックに保存しました`);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "要約に失敗しました");
+    } finally {
+      setOverviewSummarizingId(null);
     }
   };
 
@@ -2033,6 +2081,23 @@ export function AnalysisStockPanel() {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      summarizeOverviewFromStock(r, summaryLengths[r.id] || "");
+                    }}
+                    disabled={overviewSummarizingId === r.id || !htmlToText(r.content).trim()}
+                    className="inline-flex items-center gap-1 rounded bg-teal-600 hover:bg-teal-700 px-2 py-1 text-[10px] font-semibold text-white transition-opacity disabled:opacity-50"
+                    title="この内容から要約・概要を生成して新カードとして保存"
+                  >
+                    {overviewSummarizingId === r.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" /> 要約中...
+                      </>
+                    ) : (
+                      "🗒 要約・概要"
+                    )}
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setProofreadRecord(r); }}
                     className="rounded bg-purple-500 hover:bg-purple-600 px-2 py-1 text-[10px] font-semibold text-white transition-opacity"
