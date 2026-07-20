@@ -969,7 +969,8 @@ export function AnalysisStockPanel() {
         : undefined;
       const data = await analyzeTextWithGemini(prompt, sourceText, tokenOverride);
       if (!data.success) throw new Error(data.error || "まとめに失敗しました");
-      const title = length ? `詳細にまとめる（${length}字）` : "詳細にまとめる";
+      // タイトルは元カードと同一にする（種別はバッジ「詳細にまとめる」で示す）
+      const title = getDisplayTitle(record);
       // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
       saveAnalysis({
         fileName: record.fileName,
