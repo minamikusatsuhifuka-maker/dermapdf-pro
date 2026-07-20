@@ -996,7 +996,8 @@ export function AnalysisStockPanel() {
         : undefined;
       const data = await analyzeTextWithGemini(prompt, sourceText, tokenOverride);
       if (!data.success) throw new Error(data.error || "要約に失敗しました");
-      const title = "要約・概要";
+      // タイトルは元カードと同一にする（種別はバッジ「要約・概要」で示す）
+      const title = getDisplayTitle(record);
       // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
       saveAnalysis({
         fileName: record.fileName,
