@@ -118,6 +118,18 @@ const OVERVIEW_SUMMARY_PROMPT =
   "③最後に結論または示唆を1〜2文で書く\n\n" +
   "冗長な繰り返しを避け、詳細な逐条説明はしないこと。全体としてはっきり短くまとめ、Markdown形式で出力してください。";
 
+const ACTION_ADVICE_PROMPT =
+  "以下は皮膚科・美容皮膚科クリニックの資料の内容（要約を含む）です。これをクリニックの現場で実行できる具体的な施策に落とし込み、アドバイスとTODOを作成してください。\n\n" +
+  "【重視する2観点】\n" +
+  "1. 診療の効率化 — 患者にとって効果的で、かつクリニック側の手間が少なく実践しやすい、双方がWin-Winになる施策を優先する。\n" +
+  "2. スタッフ間コミュニケーションの改善 — 関係を良好にし、協働・情報共有を促す施策。\n\n" +
+  "【出力構成（Markdown）】\n" +
+  "## 施策アドバイス\n" +
+  "上記2観点ごとに具体策を数点挙げる。各策に「なぜ効くか（患者・クリニック双方のメリット）」「実践のしやすさ（低コスト・低負担か）」を簡潔に添える。\n\n" +
+  "## TODOリスト\n" +
+  "明日から着手できる具体的タスクをチェックボックス形式（`- [ ]`）で列挙する。各タスクに（担当の目安：受付／看護／医師／全員 等・優先度：高/中/低・所要目安）を括弧書きで付し、着手しやすい順に並べる。\n\n" +
+  "過度な理想論を避け、現実的で小さく始められる案にすること。資料内容に根ざした具体案にし、一般論に流れないこと。";
+
 // フォルダパスに対して一貫した色を返す（パスが見つからない場合はグレー）
 function getFolderColor(path: string, allPaths: string[]): string {
   const idx = allPaths.indexOf(path);
@@ -980,6 +992,7 @@ export function AnalysisStockPanel() {
   // カード本文から「要約・概要」を生成（詳細にまとめると同じ経路・プロンプトのみ差し替え）。
   // 出力は概要→要点箇条書き→結論の短い構成。新規カード（種別「要約・概要」）として保存する。
   const [overviewSummarizingId, setOverviewSummarizingId] = useState<string | null>(null);
+  const [actionAdvisingId, setActionAdvisingId] = useState<string | null>(null);
 
   const summarizeOverviewFromStock = async (record: AnalysisRecord, length: string) => {
     if (overviewSummarizingId) return;
@@ -1014,6 +1027,37 @@ export function AnalysisStockPanel() {
       toastError(err instanceof Error ? err.message : "要約に失敗しました");
     } finally {
       setOverviewSummarizingId(null);
+    }
+  };
+
+  // 施策アドバイス＋TODO生成：要約・概要と同じパイプラインを流用し、プロンプトと種別だけ変える。
+  // Gemini呼び出しは既定thinking（推論が必要なため thinkingMinimal は渡さない）。
+  const adviseActionsFromStock = async (record: AnalysisRecord) => {
+    if (actionAdvisingId) return;
+    setActionAdvisingId(record.id);
+    try {
+      const sourceText = htmlToText(record.content);
+      if (!sourceText.trim()) throw new Error("アドバイスの元になる本文がありません");
+      const data = await analyzeTextWithGemini(ACTION_ADVICE_PROMPT, sourceText);
+      if (!data.success) throw new Error(data.error || "アドバイス生成に失敗しました");
+      // タイトルは元カードと同一にする（種別はバッジ「施策アドバイス」で示す）
+      const title = getDisplayTitle(record);
+      // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
+      saveAnalysis({
+        fileName: record.fileName,
+        analysisType: "action_advice",
+        analysisLabel: "施策アドバイス",
+        content: data.analysis,
+        tags: [],
+        folder: record.folder,
+        title,
+      });
+      reload();
+      toastOk(`「${title}」の施策アドバイスをストックに保存しました`);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "アドバイス生成に失敗しました");
+    } finally {
+      setActionAdvisingId(null);
     }
   };
 
@@ -2097,6 +2141,23 @@ export function AnalysisStockPanel() {
                       </>
                     ) : (
                       "🗒 要約・概要"
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      adviseActionsFromStock(r);
+                    }}
+                    disabled={actionAdvisingId === r.id || !htmlToText(r.content).trim()}
+                    className="inline-flex items-center gap-1 rounded bg-amber-600 hover:bg-amber-700 px-2 py-1 text-[10px] font-semibold text-white transition-opacity disabled:opacity-50"
+                    title="この内容から実行できる施策アドバイスとTODOを生成して新カードとして保存"
+                  >
+                    {actionAdvisingId === r.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" /> アドバイス生成中...
+                      </>
+                    ) : (
+                      "💡 施策アドバイス"
                     )}
                   </button>
                   <button
