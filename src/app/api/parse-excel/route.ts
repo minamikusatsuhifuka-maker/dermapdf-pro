@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SERVER_MODEL } from "@/lib/server/gemini-server";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ JSON: ${jsonSchema}`;
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${SERVER_MODEL}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

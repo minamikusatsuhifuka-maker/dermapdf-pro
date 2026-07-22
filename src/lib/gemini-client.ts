@@ -14,7 +14,9 @@
  * ここでは { success, analysis, error } を受け取るだけで、連結の重複実装は持たない。
  */
 
-export const CURRENT_MODEL = "gemini-3.5-flash";
+// モデル定数の唯一の定義箇所（サーバ側 SERVER_MODEL・parse-excel もここを参照）。
+// ロールバック: 問題があればこの値を "gemini-3.5-flash" に戻すだけで復旧できる。
+export const CURRENT_MODEL = "gemini-3.6-flash";
 
 interface GeminiResult {
   success: boolean;

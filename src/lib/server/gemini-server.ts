@@ -6,8 +6,10 @@
  * 3経路（text / file / images）で同一実装を使うため、ここに1箇所集約する。
  */
 
-// クライアント側 gemini-client.ts の CURRENT_MODEL と同値（モデル指定は変更しない）。
-export const SERVER_MODEL = "gemini-3.5-flash";
+import { CURRENT_MODEL } from "@/lib/gemini-client";
+
+// モデルは gemini-client.ts の CURRENT_MODEL に一本化（定義はそちらのみ変更する）。
+export const SERVER_MODEL = CURRENT_MODEL;
 
 const systemInstruction =
   "【重要な出力ルール】\n前置き・挨拶・「承知いたしました」などの導入文は一切出力しないでください。\n分析結果の本文のみを、見出し・箇条書き・Markdown形式で直接出力してください。\n\n";
