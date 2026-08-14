@@ -15,8 +15,11 @@
  */
 
 // モデル定数の唯一の定義箇所（サーバ側 SERVER_MODEL・parse-excel もここを参照）。
-// ロールバック: 問題があればこの値を "gemini-3.5-flash" に戻すだけで復旧できる。
-export const CURRENT_MODEL = "gemini-3.6-flash";
+// ロールバック: この値を "gemini-3.6-flash" に戻す。ただし 3.7 は thinkingLevel
+// "minimal" 非対応のため "low" に置換済み。3.6 に戻す際は thinkingLevel も
+// "minimal" に戻すと思考トークンが0になり、以前の低コスト挙動に完全復帰できる
+// （"low" のままでも 3.6 は正常動作するため、緊急時はこの1行だけ戻せばよい）。
+export const CURRENT_MODEL = "gemini-3.7-flash";
 
 interface GeminiResult {
   success: boolean;

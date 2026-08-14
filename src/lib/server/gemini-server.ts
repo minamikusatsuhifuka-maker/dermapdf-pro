@@ -88,8 +88,10 @@ export async function callGemini(opts: {
         generationConfig: {
           temperature: opts.temperature,
           maxOutputTokens: opts.maxOutputTokens,
+          // Gemini 3.7 は "minimal" を廃止（400 INVALID_ARGUMENT）。受理される
+          // 最小値の "low" を使う。3.6 でも "low" は正常動作するため互換性あり。
           ...(opts.thinkingMinimal
-            ? { thinkingConfig: { thinkingLevel: "minimal" } }
+            ? { thinkingConfig: { thinkingLevel: "low" } }
             : {}),
         },
       }),

@@ -73,11 +73,13 @@ JSON: ${jsonSchema}`;
           contents,
           // Gemini 3.x は thinking が既定ON。構造化JSON抽出では思考トークンが
           // 出力枠(1024)を食い潰しJSONが途中で切れる(finishReason=MAX_TOKENS)ため、
-          // 低レイテンシ・低コスト維持の thinkingLevel:"minimal" で思考を抑制する。
+          // thinkingLevel を最小に絞って思考を抑制する。
+          // 3.7 は "minimal" を廃止（400 INVALID_ARGUMENT）したため、受理される
+          // 最小値の "low" を指定する（3.6 でも正常動作する）。
           generationConfig: {
             temperature: 0,
             maxOutputTokens: 1024,
-            thinkingConfig: { thinkingLevel: "minimal" },
+            thinkingConfig: { thinkingLevel: "low" },
           },
         }),
       }
