@@ -12,7 +12,7 @@ import {
 } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
-import { splitPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
+import { splitPdfPages, extractPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
 import {
   TARGET_OPTIONS,
@@ -429,6 +429,12 @@ interface GeminiPanelProps {
   // PDFに統合せず画像群を直接AIへ渡す経路（「画像のままAI分析」）。
   // セットされている場合、ファイル/PDFより優先してこの画像群を分析する。
   imageParts?: { base64: string; mime: string }[];
+  // 「✅ 選択した資料を書き起こす」用の絞り込み対象。
+  // selectedPdfPages: 解析時に使う（統合後の）PDF上の1始まりページ番号（昇順）。
+  // selectedImageParts: imageParts のうち、いま選択中の画像だけを表示順で並べたもの。
+  // どちらも未指定・空なら「選択なし」＝新ボタンは disabled（⚡の全体書き起こしは従来どおり）。
+  selectedPdfPages?: number[];
+  selectedImageParts?: { base64: string; mime: string }[];
   // 解析（実行）直前に呼び出し、最新のファイル構成で統合PDF等を解決して返す。
   // 複数PDFの遅延統合に使用：削除のたびに統合せず、解析時に一度だけ統合する。
   // 返り値があればその base64/mime を props より優先して解析に使う。
@@ -447,6 +453,8 @@ export function GeminiPanel({
   onResult,
   clinicSettings,
   imageParts,
+  selectedPdfPages,
+  selectedImageParts,
   onEnsureFileData,
 }: GeminiPanelProps) {
   // 理念コンテキストを構築
@@ -922,7 +930,12 @@ export function GeminiPanel({
     progressPrefix: string,
     lengthOverride?: string,
     // 遅延統合: 解析直前に親が解決した最新の統合PDF等。あれば props/state より優先。
-    fileOverride?: { base64: string; mime: string; pageCount: number }
+    fileOverride?: { base64: string; mime: string; pageCount: number },
+    // 「選択した資料を書き起こす」用の対象絞り込み。未指定なら従来どおり全体が対象。
+    selection?: {
+      pdfPages?: number[];
+      imageParts?: { base64: string; mime: string }[];
+    }
   ): Promise<string> => {
     // 個別指定 > グローバル指定 の優先順
     const globalLength =
@@ -1014,16 +1027,21 @@ export function GeminiPanel({
     // プロンプト・分析タイプ・チャンク方針・進捗は既存PDF経路を踏襲し、入力だけ差し替える。
     if (imageParts && imageParts.length > 0) {
       const basePrompt = ANALYSIS_PROMPTS[type];
+      // 選択指定があれば選択画像のみ（表示順）。無ければ従来どおり全画像。
+      const effImageParts =
+        selection?.imageParts && selection.imageParts.length > 0
+          ? selection.imageParts
+          : imageParts;
 
       // 全文書き起こし: 既存PDF版と同様に CHUNK_SIZE 枚ずつ分割し順次送信して結合。
       if (type === "transcription") {
-        const total = imageParts.length;
+        const total = effImageParts.length;
         const totalChunks = Math.ceil(total / CHUNK_SIZE);
         let fullText = "";
         for (let i = 0; i < totalChunks; i++) {
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, total);
-          const chunk = imageParts.slice(start, end);
+          const chunk = effImageParts.slice(start, end);
 
           setTranscriptionProgress(
             `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク / ${start + 1}〜${end}枚目)`
@@ -1086,7 +1104,7 @@ export function GeminiPanel({
         lengthInstruction +
         philosophyContext;
       const data = await analyzeImagesWithGemini(
-        imageParts,
+        effImageParts,
         fullPrompt,
         type,
         outputTokenOverride
@@ -1104,6 +1122,72 @@ export function GeminiPanel({
     const isTranscription = type === "transcription";
     const effectivePageCount = effIsPdf && effPageCount !== null ? effPageCount : 0;
     const useBatch = isTranscription && effIsPdf && effectivePageCount > CHUNK_SIZE;
+
+    // 選択ページのみの書き起こし。ページ抽出以外（チャンク分割 CHUNK_SIZE・サーバ経由・
+    // リトライ・進捗表示・全パート連結）は既存の全ページ版とまったく同じ。
+    const selPages = selection?.pdfPages;
+    if (isTranscription && effIsPdf && selPages && selPages.length > 0) {
+      const totalChunks = Math.ceil(selPages.length / CHUNK_SIZE);
+      let fullText = "";
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPages = selPages.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const pageLabel = chunkPages.map((p) => `P.${p}`).join(", ");
+
+        setTranscriptionProgress(
+          `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク / ${pageLabel})`
+        );
+
+        const chunkBase64 = await extractPdfPages(
+          effFileBase64!,
+          chunkPages.map((p) => p - 1)
+        );
+        const chunkPrompt =
+          `${pageLabel} の全テキストを書き起こしてください。\n` +
+          `【出力ルール】\n` +
+          `・各ページの冒頭に「--- ${pageLabel.split(", ")[0]} ---」のようにページ番号を入れる（順に ${pageLabel}）\n` +
+          `・図・表・手書き文字も含め全て書き起こす\n` +
+          `・一切省略せず完全に出力する` +
+          lengthInstruction +
+          transcriptionOptionInstruction +
+          purposeInstruction;
+
+        // チャンク失敗（タイムアウト等）時は1回だけ自動リトライ（既存の全ページ版と同様）
+        let chunkResult = await analyzeWithGemini(
+          chunkBase64,
+          "application/pdf",
+          chunkPrompt,
+          "transcription"
+        );
+        if (!chunkResult.success) {
+          setTranscriptionProgress(
+            `${progressPrefix} 再試行中... (${i + 1}/${totalChunks}チャンク / ${pageLabel})`
+          );
+          chunkResult = await analyzeWithGemini(
+            chunkBase64,
+            "application/pdf",
+            chunkPrompt,
+            "transcription"
+          );
+        }
+
+        if (!chunkResult.success) {
+          throw new Error(`${pageLabel} の処理に失敗: ${chunkResult.error}`);
+        }
+
+        fullText += `\n\n${chunkResult.analysis}`;
+
+        setTranscriptionProgress(
+          `${progressPrefix} 書き起こし中... (${i + 1}/${totalChunks}チャンク完了・累計${fullText.trim().length.toLocaleString()}文字)`
+        );
+
+        // チャンク間ウェイト（API rate limit対策）
+        if (i < totalChunks - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+      return fullText.trim();
+    }
 
     if (isTranscription && effIsPdf && effectivePageCount <= 0) {
       // ページ数取得失敗 → 通常処理にフォールバック
@@ -1209,7 +1293,11 @@ export function GeminiPanel({
 
   // typesOverride: 実行する分析タイプの明示指定（ワンクリック全文書き起こし用）。
   // 省略時は従来どおり selectedTypes（チェック状態）を実行する。
-  const handleAnalyze = async (typesOverride?: AnalysisType[]) => {
+  // selectionOnly: 「選択した資料を書き起こす」用。選択中のページ/画像だけを対象にする。
+  const handleAnalyze = async (
+    typesOverride?: AnalysisType[],
+    options?: { selectionOnly?: boolean }
+  ) => {
     const types = typesOverride ?? Array.from(selectedTypes);
     if (types.length === 0) {
       toastError("分析タイプを1つ以上選択してください");
@@ -1262,6 +1350,15 @@ export function GeminiPanel({
       }
     }
 
+    // 選択実行のときだけ、対象を選択中のページ/画像に絞る（未指定＝従来どおり全体）。
+    // PDFと画像が両方ある場合の優先順位は⚡と同じ（画像群があればそちらを優先）。
+    const selection = options?.selectionOnly
+      ? {
+          pdfPages: selectedPdfPages,
+          imageParts: selectedImageParts,
+        }
+      : undefined;
+
     setLoading(true);
     setResult("");
     setResults(new Map());
@@ -1282,7 +1379,13 @@ export function GeminiPanel({
         try {
           // 個別文字数指定（無ければ analyzeOne 内でグローバル設定にフォールバック）
           const lengthForType = typeLengths[type] || "";
-          const analysis = await analyzeOne(type, prefix, lengthForType, fileOverride);
+          const analysis = await analyzeOne(
+            type,
+            prefix,
+            lengthForType,
+            fileOverride,
+            selection
+          );
           lastResult = analysis;
           lastType = type;
           successCount += 1;
@@ -1356,6 +1459,27 @@ export function GeminiPanel({
       await handleAnalyze(["transcription"]);
     } finally {
       setQuickTranscribing(false);
+    }
+  };
+
+  // 「✅ 選択した資料を書き起こす」ボタンの実行中フラグ（⚡とは別state）
+  const [selectedTranscribing, setSelectedTranscribing] = useState(false);
+
+  // 現在の選択件数（PDFページ／画像）。画像群がある場合は⚡と同じく画像を優先して数える。
+  const hasImageMode = !!imageParts && imageParts.length > 0;
+  const selectedImageCount = selectedImageParts?.length ?? 0;
+  const selectedPageCount = selectedPdfPages?.length ?? 0;
+  const selectedCount = hasImageMode ? selectedImageCount : selectedPageCount;
+
+  // 選択した資料だけを書き起こす：handleQuickTranscription と同じく transcription 固定・
+  // selectedTypes 不変の独立ショートカット。対象の組み立てだけ選択集合に差し替える。
+  const handleSelectedTranscription = async () => {
+    if (selectedCount === 0) return;
+    setSelectedTranscribing(true);
+    try {
+      await handleAnalyze(["transcription"], { selectionOnly: true });
+    } finally {
+      setSelectedTranscribing(false);
     }
   };
 
@@ -1724,26 +1848,55 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           <BrainCircuit className="h-5 w-5 text-[#378ADD]" />
           Gemini AI分析
         </h2>
-        {/* ワンクリック全文書き起こし：選択操作なしで transcription を1件だけ即実行。
-            チェック状態（selectedTypes）は変更しない独立ショートカット。 */}
-        <button
-          onClick={handleQuickTranscription}
-          disabled={
-            loading ||
-            (isTextMode
-              ? !inputText?.trim()
-              : !fileBase64 && !(imageParts && imageParts.length > 0))
-          }
-          title="現在の設定のまま全文書き起こしをワンクリックで実行"
-          className="mx-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
-        >
-          {quickTranscribing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <span>⚡</span>
-          )}
-          {quickTranscribing ? "書き起こし中..." : "全文書き起こしを実行"}
-        </button>
+        {/* 書き起こしショートカット2種。どちらもチェック状態（selectedTypes）は変更しない。
+            ⚡＝資料全体、✅＝いま選択中のページ/画像だけ。 */}
+        <div className="mx-auto flex flex-wrap items-center justify-center gap-2">
+          {/* ワンクリック全文書き起こし：選択操作なしで transcription を1件だけ即実行。 */}
+          <button
+            onClick={handleQuickTranscription}
+            disabled={
+              loading ||
+              (isTextMode
+                ? !inputText?.trim()
+                : !fileBase64 && !(imageParts && imageParts.length > 0))
+            }
+            title="ページ/画像の選択に関係なく、資料すべてを書き起こします"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+          >
+            {quickTranscribing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <span>⚡</span>
+            )}
+            {quickTranscribing ? "書き起こし中..." : "すべて書き起こしを実行"}
+          </button>
+          {/* 選択した資料だけを書き起こす：PDFは選択ページ、画像は選択画像のみが対象。 */}
+          <button
+            onClick={handleSelectedTranscription}
+            disabled={loading || isTextMode || selectedCount === 0}
+            title={
+              isTextMode
+                ? "テキスト入力モードでは使用できません"
+                : selectedCount === 0
+                  ? "ページ/画像を選択してください"
+                  : hasImageMode
+                    ? `選択中の ${selectedCount} 枚の画像だけを書き起こします`
+                    : `選択中の ${selectedCount} ページだけを書き起こします`
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+          >
+            {selectedTranscribing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <span>✅</span>
+            )}
+            {selectedTranscribing
+              ? "書き起こし中..."
+              : selectedCount > 0
+                ? `選択した資料を書き起こす（${selectedCount}${hasImageMode ? "枚" : "ページ"}）`
+                : "選択した資料を書き起こす"}
+          </button>
+        </div>
         {/* 右側スペーサ（見出しと同じ伸縮量）。ボタンを行の水平中央に保つ。 */}
         <div className="flex-1 basis-0" aria-hidden />
       </div>

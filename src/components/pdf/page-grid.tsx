@@ -8,6 +8,9 @@ interface PageGridProps {
   pdfUrl: string;
   onExtract?: (pages: number[]) => void;
   onCrop?: (pages: number[]) => void;
+  // 選択ページが変わるたびに親へ通知（選択ページのみの書き起こしで使用）。
+  // pages: このPDF内の1始まりページ番号（昇順）／totalPages: このPDFの総ページ数。
+  onSelectionChange?: (pages: number[], totalPages: number) => void;
 }
 
 interface PageThumb {
@@ -15,11 +18,21 @@ interface PageThumb {
   dataUrl: string;
 }
 
-export function PageGrid({ pdfUrl, onExtract, onCrop }: PageGridProps) {
+export function PageGrid({
+  pdfUrl,
+  onExtract,
+  onCrop,
+  onSelectionChange,
+}: PageGridProps) {
   const [pages, setPages] = useState<PageThumb[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  // 親から毎回新しい関数が渡されても通知ループにならないよう ref 経由で呼ぶ。
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  });
 
   // PDF.jsでページサムネイルを生成
   useEffect(() => {
@@ -77,6 +90,14 @@ export function PageGrid({ pdfUrl, onExtract, onCrop }: PageGridProps) {
   const deselectAll = () => setSelected(new Set());
 
   const selectedArray = Array.from(selected).sort((a, b) => a - b);
+
+  // 選択・総ページ数の変化を親へ通知（既存の抽出/トリミングと同じ選択集合をそのまま渡す）。
+  useEffect(() => {
+    onSelectionChangeRef.current?.(
+      Array.from(selected).sort((a, b) => a - b),
+      pages.length
+    );
+  }, [selected, pages.length]);
 
   if (loading) {
     return (

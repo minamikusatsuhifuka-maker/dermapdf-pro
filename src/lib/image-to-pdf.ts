@@ -84,9 +84,16 @@ export async function compressImagesToParts(
     quality?: number;
     onProgress?: (done: number, total: number) => void;
   } = {},
-): Promise<{ parts: CompressedImagePart[]; skipped: number }> {
+): Promise<{
+  parts: CompressedImagePart[];
+  skipped: number;
+  // parts[i] が urls の何番目に対応するか（失敗してスキップした分は含まれない）。
+  // 呼び出し側で「画像id ⇔ 送信パーツ」の対応を保つために使う（parts/skipped は不変）。
+  keptIndexes: number[];
+}> {
   const { maxEdge = 1800, quality = 0.8, onProgress } = options;
   const parts: CompressedImagePart[] = [];
+  const keptIndexes: number[] = [];
   let skipped = 0;
   const total = urls.length;
 
@@ -94,6 +101,7 @@ export async function compressImagesToParts(
     try {
       const bytes = await imageToJpegBytes(urls[i], maxEdge, quality);
       parts.push({ base64: uint8ToBase64(bytes), mime: "image/jpeg" });
+      keptIndexes.push(i);
     } catch {
       // 1枚失敗しても全体は止めない。
       skipped++;
@@ -101,7 +109,7 @@ export async function compressImagesToParts(
     onProgress?.(i + 1, total);
   }
 
-  return { parts, skipped };
+  return { parts, skipped, keptIndexes };
 }
 
 // 複数画像を1本のPDFへ統合する本体。タイムアウト付き。

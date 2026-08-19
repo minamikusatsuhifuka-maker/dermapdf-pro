@@ -16,6 +16,9 @@ interface ImageGridProps {
   onMergePdf?: (ids: string[]) => void;
   onMergePdfAndAnalyze?: (ids: string[]) => void;
   onAnalyzeImages?: (ids: string[]) => void;
+  // 選択画像が変わるたびに親へ通知（選択画像のみの書き起こしで使用）。
+  // ids は「画像のままAI分析」と同じ selectedArray（表示順・選択中のみ）。
+  onSelectionChange?: (ids: string[]) => void;
 }
 
 export function ImageGrid({
@@ -24,6 +27,7 @@ export function ImageGrid({
   onMergePdf,
   onMergePdfAndAnalyze,
   onAnalyzeImages,
+  onSelectionChange,
 }: ImageGridProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // DnD並べ替え後の表示順（画像id）。永続化なし（セッション内のみ）。
@@ -86,6 +90,16 @@ export function ImageGrid({
   const selectedArray = orderedImages
     .filter((img) => selected.has(img.id))
     .map((img) => img.id);
+
+  // 選択集合・表示順の変化を親へ通知（親から毎回新しい関数が来ても通知ループにしない）。
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  });
+  const selectedKey = selectedArray.join(",");
+  useEffect(() => {
+    onSelectionChangeRef.current?.(selectedKey ? selectedKey.split(",") : []);
+  }, [selectedKey]);
 
   return (
     <div className="space-y-4">

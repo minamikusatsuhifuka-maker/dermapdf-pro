@@ -93,3 +93,29 @@ export async function splitPdfPages(
   const newBytes = await newDoc.save();
   return uint8ArrayToBase64(newBytes);
 }
+
+// 飛び飛びの「選択ページ」だけを抜き出して1本のPDFにする（0始まりのページインデックス配列）。
+// splitPdfPages（連続範囲）はそのまま残し、選択ページ書き起こし用にこちらを追加で使う。
+export async function extractPdfPages(
+  base64: string,
+  pageIndices: number[]
+): Promise<string> {
+  const srcBytes = base64ToUint8Array(base64);
+  const srcDoc = await PDFDocument.load(srcBytes, { ignoreEncryption: true });
+  const totalPages = srcDoc.getPageCount();
+
+  // 範囲外・重複を除去し、昇順で扱う（元PDFのページ順を保つ）
+  const safeIndices = Array.from(new Set(pageIndices))
+    .filter((i) => Number.isInteger(i) && i >= 0 && i < totalPages)
+    .sort((a, b) => a - b);
+  if (safeIndices.length === 0) {
+    throw new Error("抽出できるページがありません");
+  }
+
+  const newDoc = await PDFDocument.create();
+  const copiedPages = await newDoc.copyPages(srcDoc, safeIndices);
+  copiedPages.forEach((p) => newDoc.addPage(p));
+
+  const newBytes = await newDoc.save();
+  return uint8ArrayToBase64(newBytes);
+}

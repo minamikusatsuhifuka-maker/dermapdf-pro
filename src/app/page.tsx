@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { UploadZone } from "@/components/upload/upload-zone";
 import { useAppStore } from "@/store/app-store";
@@ -97,6 +97,70 @@ export default function Home() {
   const [imageParts, setImageParts] = useState<
     { base64: string; mime: string }[]
   >([]);
+  // imageParts[i] に対応する画像id（「選択した資料を書き起こす」で選択画像だけに絞るために保持）
+  const [imagePartIds, setImagePartIds] = useState<string[]>([]);
+
+  // PDFページ一覧（ファイルごと）の選択状態。key=表示用PDFのid。
+  // pages はそのPDF内の1始まりページ番号、total はそのPDFの総ページ数。
+  const [pdfPageSelection, setPdfPageSelection] = useState<
+    Record<string, { pages: number[]; total: number }>
+  >({});
+  // 画像グリッドの選択状態（表示順・選択中のみの画像id）
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+
+  // PageGrid からの選択通知。内容が変わらないときは state を更新しない（再描画ループ防止）。
+  const handlePageSelectionChange = useCallback(
+    (docId: string, pages: number[], total: number) => {
+      setPdfPageSelection((prev) => {
+        const cur = prev[docId];
+        if (
+          cur &&
+          cur.total === total &&
+          cur.pages.length === pages.length &&
+          cur.pages.every((p, i) => p === pages[i])
+        ) {
+          return prev;
+        }
+        return { ...prev, [docId]: { pages, total } };
+      });
+    },
+    []
+  );
+
+  // ImageGrid からの選択通知（表示順の画像id配列）。
+  const handleImageSelectionChange = useCallback((ids: string[]) => {
+    setSelectedImageIds((prev) =>
+      prev.length === ids.length && prev.every((id, i) => id === ids[i])
+        ? prev
+        : ids
+    );
+  }, []);
+
+  // 選択ページを「解析時に統合されるPDF」上の1始まりページ番号へ変換する。
+  // 統合は表示順（pdfDocs の並び＝読み込み順）で連結されるため、先行ファイルのページ数を足す。
+  const selectedPdfPages = useMemo(() => {
+    const out: number[] = [];
+    let offset = 0;
+    for (const doc of pdfDocs) {
+      const sel = pdfPageSelection[doc.id];
+      if (sel) for (const p of sel.pages) out.push(offset + p);
+      offset += sel?.total ?? 0;
+    }
+    return out;
+  }, [pdfDocs, pdfPageSelection]);
+
+  // 「画像のままAI分析」で送信済みの画像群のうち、いま選択中のものだけを表示順で返す。
+  const selectedImageParts = useMemo(() => {
+    if (imageParts.length === 0) return [];
+    // id対応が取れない場合（想定外）は絞り込まず全件を返す
+    if (imagePartIds.length !== imageParts.length) return imageParts;
+    const out: { base64: string; mime: string }[] = [];
+    for (const id of selectedImageIds) {
+      const idx = imagePartIds.indexOf(id);
+      if (idx >= 0) out.push(imageParts[idx]);
+    }
+    return out;
+  }, [imageParts, imagePartIds, selectedImageIds]);
 
   const [stockCount, setStockCount] = useState(0);
   const [templateCount, setTemplateCount] = useState(0);
@@ -152,6 +216,7 @@ export default function Home() {
   const handleFiles = useCallback(async (files: File[]) => {
     // 新規ファイル読み込み時は画像直接分析モードを解除（通常のファイル/PDF経路に戻す）
     setImageParts([]);
+    setImagePartIds([]);
     const pdfs = files.filter((f) => f.type === "application/pdf");
     const imgFiles = files.filter((f) => f.type !== "application/pdf");
 
@@ -272,6 +337,9 @@ export default function Home() {
     setPdfDocs([]);
     setImages([]);
     setImageParts([]);
+    setImagePartIds([]);
+    setPdfPageSelection({});
+    setSelectedImageIds([]);
     setFileBase64(undefined);
     setFileMime(undefined);
     setFileName(undefined);
@@ -303,6 +371,7 @@ export default function Home() {
 
       // PDF統合経路を使うので、画像直接分析の入力はクリアして排他にする。
       setImageParts([]);
+      setImagePartIds([]);
       setProgress(0);
       toastInfo(`${urls.length} 枚をPDFに統合します`);
       try {
@@ -352,10 +421,11 @@ export default function Home() {
   // 選択画像をPDFに統合せず、圧縮した画像群として直接AI分析へ渡す。
   const handleAnalyzeImages = useCallback(
     async (ids: string[]) => {
-      // 選択順を保持して対象画像のURLを取得
-      const urls = ids
-        .map((id) => images.find((img) => img.id === id)?.url)
-        .filter((u): u is string => !!u);
+      // 選択順を保持して対象画像の { id, url } を取得
+      const targets = ids
+        .map((id) => ({ id, url: images.find((img) => img.id === id)?.url }))
+        .filter((t): t is { id: string; url: string } => !!t.url);
+      const urls = targets.map((t) => t.url);
       if (urls.length === 0) {
         toastError("分析対象の画像が見つかりません");
         return;
@@ -364,10 +434,13 @@ export default function Home() {
       setProgress(0);
       toastInfo(`${urls.length} 枚を画像のままAI分析します`);
       try {
-        const { parts, skipped } = await compressImagesToParts(urls, {
-          onProgress: (done, total) =>
-            setProgress(Math.round((done / total) * 100)),
-        });
+        const { parts, skipped, keptIndexes } = await compressImagesToParts(
+          urls,
+          {
+            onProgress: (done, total) =>
+              setProgress(Math.round((done / total) * 100)),
+          }
+        );
 
         if (parts.length === 0) {
           toastError("すべての画像の読み込みに失敗しました");
@@ -376,6 +449,8 @@ export default function Home() {
 
         // 画像直接分析モードへ。PDF経路の入力はクリアして排他にする。
         setImageParts(parts);
+        // parts と画像idの対応を保持（選択画像だけの書き起こしで使用）
+        setImagePartIds(keptIndexes.map((i) => targets[i].id));
         pdfSourceFilesRef.current = [];
         pdfMergeDirtyRef.current = false;
         setPdfDocs([]);
@@ -517,6 +592,9 @@ export default function Home() {
                   )}
                   <PageGrid
                     pdfUrl={doc.url}
+                    onSelectionChange={(pages, total) =>
+                      handlePageSelectionChange(doc.id, pages, total)
+                    }
                     onExtract={(pages) => {
                       // 抽出は最新の統合PDFを必要とするため、直前に遅延統合を確定。
                       ensurePdfMerged();
@@ -551,6 +629,7 @@ export default function Home() {
               onMergePdf={(ids) => handleMergePdf(ids, false)}
               onMergePdfAndAnalyze={(ids) => handleMergePdf(ids, true)}
               onAnalyzeImages={(ids) => handleAnalyzeImages(ids)}
+              onSelectionChange={handleImageSelectionChange}
             />
           </section>
         )}
@@ -590,6 +669,8 @@ export default function Home() {
               onResult={(r) => setAnalysisResult(r)}
               clinicSettings={settings}
               imageParts={imageParts}
+              selectedPdfPages={selectedPdfPages}
+              selectedImageParts={selectedImageParts}
               onEnsureFileData={ensurePdfMerged}
             />
           )}
