@@ -2004,6 +2004,13 @@ export function AnalysisStockPanel() {
                   <span className="rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
                     {r.analysisLabel}
                   </span>
+                  {/* 文字数: 種別バッジ直後・タイトルの左に強調表示（日付とは分離）。
+                      0/未取得は従来どおり非表示。算出は visibleTextLength を据え置き。 */}
+                  {visibleTextLength(r.content) > 0 && (
+                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                      {visibleTextLength(r.content).toLocaleString()} 文字
+                    </span>
+                  )}
                   {r.folder && (
                     <span
                       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
@@ -2067,9 +2074,6 @@ export function AnalysisStockPanel() {
                   )}
                   <span className="text-xs text-gray-400">
                     {new Date(r.createdAt).toLocaleString("ja-JP")}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {visibleTextLength(r.content).toLocaleString()} 文字
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingTagId(editingTagId === r.id ? null : r.id); }}
