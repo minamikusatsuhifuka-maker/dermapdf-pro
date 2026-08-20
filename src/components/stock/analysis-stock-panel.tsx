@@ -44,6 +44,8 @@ import {
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { copyRichText } from "@/lib/clipboard-rich";
+import MarkdownView from "@/components/ui/markdown-view";
+import { markdownToPlainText } from "@/lib/markdown-plain";
 import { ANALYSIS_PROMPTS } from "@/components/ai/gemini-panel";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import {
@@ -93,6 +95,13 @@ function visibleTextLength(content: string): number {
 
 // ストック本文（HTML/markdown/プレーン）を可視テキストへ変換（要約入力用・改行は保持）。
 // 読み取り専用：保存処理には影響しない。
+// content が（contentEditableのinnerHTML由来の）HTMLか、AI保存直後の生Markdownかを判定。
+// 判定基準は htmlToText と同じHTMLタグ検出に揃える（HTMLなら従来表示・生Markdownならレンダリング）。
+function isHtmlContent(content: string): boolean {
+  if (!content) return false;
+  return /<[a-z!/][\s\S]*?>/i.test(content);
+}
+
 function htmlToText(content: string): string {
   if (!content) return "";
   if (/<[a-z!/][\s\S]*?>/i.test(content)) {
@@ -659,6 +668,9 @@ export function AnalysisStockPanel() {
   const [activeGensparkId, setActiveGensparkId] = useState<string | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // 本文の閲覧⇄編集の切替（null=閲覧／id=そのカードを編集中＝生テキストcontentEditable）。
+  // 保存経路（contentEditable/innerHTML）は編集モードのときだけ描画し、従来の挙動を一切変えない。
+  const [bodyEditingId, setBodyEditingId] = useState<string | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
@@ -948,6 +960,21 @@ export function AnalysisStockPanel() {
     }, 500),
     []
   );
+
+  // 本文の編集を終了して閲覧表示に戻す。終了時に DOM の最新 innerHTML を
+  // 既存の保存経路（updateAnalysisContent＋同一の空ガード）で確定保存してから reload。
+  // debounce 待ちの取りこぼしを防ぎ、閲覧表示に最新内容を反映する。
+  // ※ 保存関数・ガードは既存のものをそのまま使用（保存ロジック・保存仕様は変更しない）。
+  const finishBodyEdit = (id: string) => {
+    const el = contentRefs.current[id];
+    if (el) {
+      const html = el.innerHTML;
+      const visible = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+      if (visible) updateAnalysisContent(id, html);
+    }
+    setBodyEditingId(null);
+    reload();
+  };
 
   // ストックの全文書き起こしカードから「詳細にまとめる」をテキストモードで実行（チェイン要約）。
   // 既存の detail_summary プロンプト＋ analyzeTextWithGemini を再利用し、新カードとして保存する。
@@ -1998,7 +2025,12 @@ export function AnalysisStockPanel() {
               >
                 <div
                   className="px-4 py-3 cursor-pointer select-none hover:bg-blue-50/30 transition-colors space-y-1.5"
-                  onClick={() => editingId !== r.id && setExpandedId(isExpanded ? null : r.id)}
+                  onClick={() => {
+                    if (editingId === r.id) return;
+                    // 折りたたむ際に本文編集中なら確定終了（保存＋閲覧表示へ）
+                    if (isExpanded && bodyEditingId === r.id) finishBodyEdit(r.id);
+                    setExpandedId(isExpanded ? null : r.id);
+                  }}
                 >
                   {/* 1行目: チェック／種別バッジ／タイトル（行の主役・広い幅）／✏️／日付／文字数／タグ */}
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -2308,7 +2340,11 @@ export function AnalysisStockPanel() {
                     </>
                   )}
                   <button
-                    onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : r.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isExpanded && bodyEditingId === r.id) finishBodyEdit(r.id);
+                      setExpandedId(isExpanded ? null : r.id);
+                    }}
                     className="rounded p-1 hover:bg-gray-100"
                     title={isExpanded ? "折りたたむ" : "展開して内容を表示"}
                   >
@@ -2334,7 +2370,8 @@ export function AnalysisStockPanel() {
 
                 {!isExpanded && !isGensparkActive && editingTagId !== r.id && (
                   <p className="truncate px-4 pb-3 text-xs text-gray-500">
-                    {r.content.slice(0, 100)}...
+                    {/* 1行抜粋は記号を除去したプレーン整形（HTML保存はテキスト化→Markdown記号も除去） */}
+                    {markdownToPlainText(htmlToText(r.content)).slice(0, 100)}...
                   </p>
                 )}
 
@@ -2364,41 +2401,99 @@ export function AnalysisStockPanel() {
                           </button>
                         );
                       })}
+                      {/* 閲覧⇄編集トグル: 閲覧時はレンダリング表示、編集時は生テキストで編集 */}
+                      {bodyEditingId === r.id ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); finishBodyEdit(r.id); }}
+                          className="ml-auto rounded border border-[#1D9E75] bg-[#1D9E75] px-2 py-0.5 text-white"
+                          title="編集を終了して閲覧表示に戻す"
+                        >
+                          ✓ 編集を終了
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setBodyEditingId(r.id); }}
+                          className="ml-auto rounded border border-gray-200 px-2 py-0.5 hover:border-[#B5D4F4]"
+                          title="本文を編集（生テキストで編集できます）"
+                        >
+                          ✏️ 編集
+                        </button>
+                      )}
                     </div>
 
                     <div>
-                      <div
-                        ref={(el) => {
-                          contentRefs.current[r.id] = el;
-                          // 展開（折りたたみ後の再マウント含む）時、空のときだけ本文を流し込む。
-                          // 既に内容のある再レンダー時は上書きせず、編集中の入力を保持する。
-                          // ※以前は contentRefs に古いノードが残り再展開時に本文が再描画されず
-                          //   空表示になっていた（開き直すと本文が消えるバグの原因）。
-                          if (el && el.innerHTML === "") {
-                            el.innerHTML = r.content || "";
-                          }
-                        }}
-                        data-stock-content="true"
-                        data-record-id={r.id}
-                        contentEditable
-                        suppressContentEditableWarning
-                        onMouseUp={(e) => handleContentMouseUp(e, r.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        onInput={(e) => {
-                          debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
-                        }}
-                        className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700 outline-none cursor-text focus:border-[#B5D4F4] focus:ring-1 focus:ring-[#B5D4F4]"
-                        style={{
-                          height: `${contentHeights[r.id] || globalHeight}px`,
-                          minHeight: "80px",
-                          maxHeight: "2000px",
-                          fontSize: `${fontSize}px`,
-                          lineHeight: "1.7",
-                          wordBreak: "break-word",
-                          userSelect: "text",
-                          WebkitUserSelect: "text",
-                        }}
-                      />
+                      {bodyEditingId === r.id ? (
+                        /* 編集モード: 生テキストの contentEditable（保存経路は従来どおり・一切変更なし） */
+                        <div
+                          ref={(el) => {
+                            contentRefs.current[r.id] = el;
+                            // 展開（折りたたみ後の再マウント含む）時、空のときだけ本文を流し込む。
+                            // 既に内容のある再レンダー時は上書きせず、編集中の入力を保持する。
+                            // ※以前は contentRefs に古いノードが残り再展開時に本文が再描画されず
+                            //   空表示になっていた（開き直すと本文が消えるバグの原因）。
+                            if (el && el.innerHTML === "") {
+                              el.innerHTML = r.content || "";
+                            }
+                          }}
+                          data-stock-content="true"
+                          data-record-id={r.id}
+                          contentEditable
+                          suppressContentEditableWarning
+                          onMouseUp={(e) => handleContentMouseUp(e, r.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onInput={(e) => {
+                            debouncedSave(r.id, (e.target as HTMLDivElement).innerHTML);
+                          }}
+                          className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700 outline-none cursor-text focus:border-[#B5D4F4] focus:ring-1 focus:ring-[#B5D4F4]"
+                          style={{
+                            height: `${contentHeights[r.id] || globalHeight}px`,
+                            minHeight: "80px",
+                            maxHeight: "2000px",
+                            fontSize: `${fontSize}px`,
+                            lineHeight: "1.7",
+                            wordBreak: "break-word",
+                            userSelect: "text",
+                            WebkitUserSelect: "text",
+                          }}
+                        />
+                      ) : isHtmlContent(r.content) ? (
+                        /* 閲覧モード(HTML): 編集済みで content が既にHTMLの場合は従来どおり innerHTML を
+                           そのまま描画（b2beae7以前の見た目・整形済みなので崩れない）。読み取り専用。 */
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          dangerouslySetInnerHTML={{ __html: r.content || "" }}
+                          className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700"
+                          style={{
+                            height: `${contentHeights[r.id] || globalHeight}px`,
+                            minHeight: "80px",
+                            maxHeight: "2000px",
+                            fontSize: `${fontSize}px`,
+                            lineHeight: "1.7",
+                            wordBreak: "break-word",
+                            userSelect: "text",
+                            WebkitUserSelect: "text",
+                          }}
+                        />
+                      ) : (
+                        /* 閲覧モード(生Markdown): AI保存直後の書き起こし等は markdown-view と同じ
+                           レンダリング（見出し・段落・箇条書き）で表示。読み取り専用。 */
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="overflow-y-auto rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700"
+                          style={{
+                            height: `${contentHeights[r.id] || globalHeight}px`,
+                            minHeight: "80px",
+                            maxHeight: "2000px",
+                            fontSize: `${fontSize}px`,
+                            lineHeight: "1.7",
+                            wordBreak: "break-word",
+                            userSelect: "text",
+                            WebkitUserSelect: "text",
+                          }}
+                        >
+                          <MarkdownView>{r.content || ""}</MarkdownView>
+                        </div>
+                      )}
                       {r.updatedAt && (
                         <div className="mt-1 flex items-center justify-end gap-2">
                           <span className="text-[10px] text-gray-400">
