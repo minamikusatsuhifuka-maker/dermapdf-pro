@@ -15,10 +15,10 @@
  */
 
 // モデル定数の唯一の定義箇所（サーバ側 SERVER_MODEL・parse-excel もここを参照）。
-// ロールバック: この値を "gemini-3.6-flash" に戻す。ただし 3.7 は thinkingLevel
-// "minimal" 非対応のため "low" に置換済み。3.6 に戻す際は thinkingLevel も
-// "minimal" に戻すと思考トークンが0になり、以前の低コスト挙動に完全復帰できる
-// （"low" のままでも 3.6 は正常動作するため、緊急時はこの1行だけ戻せばよい）。
+// ロールバック: 問題が出たら **この1行の値を "gemini-3.6-flash" に戻すだけ**でよい。
+// 3.7 は thinkingLevel "minimal" 非対応（400 INVALID_ARGUMENT）だが、送信値は
+// gemini-server.ts の minimalThinkingLevel() がモデル判定で自動変換する
+// （3.6以前="minimal" / 3.7以降="low"）ため、戻せば従来の低コスト挙動に完全復帰する。
 export const CURRENT_MODEL = "gemini-3.7-flash";
 
 interface GeminiResult {

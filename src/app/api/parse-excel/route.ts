@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SERVER_MODEL } from "@/lib/server/gemini-server";
+import { SERVER_MODEL, minimalThinkingLevel } from "@/lib/server/gemini-server";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -73,13 +73,12 @@ JSON: ${jsonSchema}`;
           contents,
           // Gemini 3.x は thinking が既定ON。構造化JSON抽出では思考トークンが
           // 出力枠(1024)を食い潰しJSONが途中で切れる(finishReason=MAX_TOKENS)ため、
-          // thinkingLevel を最小に絞って思考を抑制する。
-          // 3.7 は "minimal" を廃止（400 INVALID_ARGUMENT）したため、受理される
-          // 最小値の "low" を指定する（3.6 でも正常動作する）。
+          // thinkingLevel を最小に絞って思考を抑制する。値の決定は
+          // gemini-server.ts の minimalThinkingLevel()（3.6以前=minimal / 3.7以降=low）に集約。
           generationConfig: {
             temperature: 0,
             maxOutputTokens: 1024,
-            thinkingConfig: { thinkingLevel: "low" },
+            thinkingConfig: { thinkingLevel: minimalThinkingLevel(SERVER_MODEL) },
           },
         }),
       }

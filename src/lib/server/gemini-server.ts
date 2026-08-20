@@ -11,6 +11,21 @@ import { CURRENT_MODEL } from "@/lib/gemini-client";
 // モデルは gemini-client.ts の CURRENT_MODEL に一本化（定義はそちらのみ変更する）。
 export const SERVER_MODEL = CURRENT_MODEL;
 
+// thinkingLevel:"minimal" を受け付けるモデル（3.6 以前）。
+// Gemini 3.7 以降は "minimal" が廃止され、明示指定すると 400 INVALID_ARGUMENT になる。
+const MINIMAL_THINKING_MODELS = ["gemini-3.5-flash", "gemini-3.6-flash"];
+
+/**
+ * mechanicalタスク（OCR/書き起こし/AIタイトル生成/Excel解析）用の thinking レベルを
+ * モデルに応じて決める唯一の変換点。
+ *  - 3.6 以前: 従来どおり "minimal"（ロールバック時も低コスト挙動のまま）
+ *  - 3.7 以降・未知のモデル: 受理される最小値 "low"
+ * クライアント側の `thinkingMinimal` オプションのシグネチャは変えず、ここだけで吸収する。
+ */
+export function minimalThinkingLevel(model: string = SERVER_MODEL): string {
+  return MINIMAL_THINKING_MODELS.includes(model) ? "minimal" : "low";
+}
+
 const systemInstruction =
   "【重要な出力ルール】\n前置き・挨拶・「承知いたしました」などの導入文は一切出力しないでください。\n分析結果の本文のみを、見出し・箇条書き・Markdown形式で直接出力してください。\n\n";
 
@@ -88,10 +103,10 @@ export async function callGemini(opts: {
         generationConfig: {
           temperature: opts.temperature,
           maxOutputTokens: opts.maxOutputTokens,
-          // Gemini 3.7 は "minimal" を廃止（400 INVALID_ARGUMENT）。受理される
-          // 最小値の "low" を使う。3.6 でも "low" は正常動作するため互換性あり。
+          // thinking レベルはモデル判定で変換（3.6以前="minimal" / 3.7以降="low"）。
+          // 変換は minimalThinkingLevel() の1箇所のみ＝3.6 へ戻しても壊れない。
           ...(opts.thinkingMinimal
-            ? { thinkingConfig: { thinkingLevel: "low" } }
+            ? { thinkingConfig: { thinkingLevel: minimalThinkingLevel(model) } }
             : {}),
         },
       }),
