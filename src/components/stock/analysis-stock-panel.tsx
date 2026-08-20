@@ -43,6 +43,7 @@ import {
 } from "@/lib/analysis-storage";
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
+import { copyRichText } from "@/lib/clipboard-rich";
 import { ANALYSIS_PROMPTS } from "@/components/ai/gemini-panel";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import {
@@ -1228,7 +1229,14 @@ export function AnalysisStockPanel() {
     }
   };
 
+  // 内容コピー: 書式付きHTML＋プレーンの両形式（結果カードと共通の copyRichText）
   const handleCopy = async (content: string) => {
+    await copyRichText(content);
+    toastOk("クリップボードにコピーしました");
+  };
+
+  // 校正前（原文）は「色なしのプレーンテキスト」が仕様のため、従来どおりプレーンで書き込む
+  const handleCopyPlain = async (content: string) => {
     await navigator.clipboard.writeText(content);
     toastOk("クリップボードにコピーしました");
   };
@@ -2190,7 +2198,7 @@ export function AnalysisStockPanel() {
                   </button>
                   {r.proofreadBefore && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleCopy(r.proofreadBefore!); }}
+                      onClick={(e) => { e.stopPropagation(); handleCopyPlain(r.proofreadBefore!); }}
                       className="rounded px-1.5 py-1 text-[10px] font-semibold text-red-500 hover:bg-red-50"
                       title="校正前（原文）をコピー（色なしのプレーンテキスト）"
                     >

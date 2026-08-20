@@ -11,6 +11,7 @@ import {
   analyzeImagesWithGemini,
 } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { copyRichText } from "@/lib/clipboard-rich";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
 import { splitPdfPages, extractPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
@@ -1553,9 +1554,9 @@ ${head}`;
     return `${getLabel(type)}_${base}`;
   };
 
-  // 個別結果のクリップボードコピー
+  // 個別結果のクリップボードコピー（書式付きHTML＋プレーンの両形式）
   const copyText = async (text: string) => {
-    await navigator.clipboard.writeText(text);
+    await copyRichText(text);
     toastOk("クリップボードにコピーしました");
   };
 
