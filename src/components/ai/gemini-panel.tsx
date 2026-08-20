@@ -1626,8 +1626,11 @@ ${head}`;
 
   // 全文書き起こしの結果テキストから「詳細にまとめる」をテキストモードで実行（チェイン）。
   // 既存の detail_summary プロンプト＋テキストモード経路を再利用し、新カードとして追加表示する。
-  const summarizeFromText = async (sourceText: string, length: string) => {
-    if (summarizing) return;
+  const summarizeFromText = async (
+    sourceText: string,
+    length: string
+  ): Promise<boolean> => {
+    if (summarizing) return false;
     setSummarizing(true);
     try {
       const lengthInstr = length
@@ -1648,8 +1651,10 @@ ${head}`;
       setLastResultType("detail_summary");
       onResult?.(data.analysis);
       toastOk("詳細まとめを作成しました");
+      return true;
     } catch (err) {
       toastError(err instanceof Error ? err.message : "まとめに失敗しました");
+      return false;
     } finally {
       setSummarizing(false);
     }
@@ -2485,7 +2490,7 @@ function ResultPanel({
   simplifying: boolean;
   showSummarize?: boolean;
   summarizing?: boolean;
-  onSummarize?: (length: string) => void;
+  onSummarize?: (length: string) => void | Promise<boolean>;
   onUpdate: (text: string) => void;
   onSimplify: () => void;
   onSave: () => void | Promise<void>;
@@ -2504,10 +2509,16 @@ function ResultPanel({
   const [pending, setPending] = useState<"save" | "txt" | "md" | "word" | null>(null);
   // 本文エリアの高さ（プリセット値・初期値=M=350）
   const [panelHeight, setPanelHeight] = useState<number>(350);
+  // 保存済み表示の状態（このカード単位・ボタン種別ごとに保持）。
+  // メモリ内stateのみ（新storageキーは作らない）。保存を伴うボタンが
+  // 今後増えても action 文字列を足すだけで使い回せる汎用の形。
+  const [savedActions, setSavedActions] = useState<Set<string>>(new Set());
 
-  // text が外から変わった（平易化など）ときに同期
+  // text が外から変わった（平易化・編集確定など）ときに同期。
+  // 内容が変わったら保存済み表示は通常表示に戻す（内容とストックの不一致を防ぐ）。
   useEffect(() => {
     setEditedText(text);
+    setSavedActions(new Set());
   }, [text]);
 
   const currentLength = isEditing ? editedText.length : text.length;
@@ -2521,11 +2532,25 @@ function ResultPanel({
     setPending(kind);
     try {
       await fn();
+      // 保存成功後のみ「保存済み」を立てる（失敗時＝throw時は立てない）
+      if (kind === "save") {
+        setSavedActions((prev) => new Set(prev).add("save"));
+      }
     } finally {
       setPending(null);
     }
   };
   const isBusy = pending !== null;
+
+  // 詳細にまとめる（AI生成＋新カード保存）。成功時のみ「保存済み」を立てる。
+  // disabled にはせず、文字数を変えた再実行を許容する（クリックで再生成）。
+  const handleSummarize = async () => {
+    if (summarizing) return;
+    const ok = await onSummarize?.(summaryLength);
+    if (ok) {
+      setSavedActions((prev) => new Set(prev).add("summarize"));
+    }
+  };
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white/80 p-4 flex flex-col gap-3">
@@ -2636,13 +2661,20 @@ function ResultPanel({
         </button>
         <button
           onClick={() => runWithPending("save", onSave)}
-          disabled={isBusy}
-          className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white inline-flex items-center gap-1 disabled:opacity-50"
+          disabled={isBusy || savedActions.has("save")}
+          title={savedActions.has("save") ? "このカードはストックに保存済みです" : undefined}
+          className={`text-xs px-3 py-1.5 rounded-lg text-white inline-flex items-center gap-1 ${
+            savedActions.has("save")
+              ? "bg-[#1D9E75] cursor-default disabled:opacity-100"
+              : "bg-[#378ADD] hover:bg-[#185FA5] disabled:opacity-50"
+          }`}
         >
           {pending === "save" ? (
             <>
               <Loader2 className="h-3 w-3 animate-spin" /> タイトル生成中...
             </>
+          ) : savedActions.has("save") ? (
+            <>✓ 保存済み</>
           ) : (
             <>
               <BookmarkPlus className="h-3 w-3" /> ストック
@@ -2678,14 +2710,25 @@ function ResultPanel({
               <option value="12000">12000字</option>
             </select>
             <button
-              onClick={() => onSummarize?.(summaryLength)}
+              onClick={handleSummarize}
               disabled={summarizing}
-              className="text-xs px-3 py-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] text-white disabled:opacity-50 inline-flex items-center gap-1"
+              title={
+                savedActions.has("summarize")
+                  ? "文字数を変えて再実行できます"
+                  : undefined
+              }
+              className={`text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50 inline-flex items-center gap-1 ${
+                savedActions.has("summarize")
+                  ? "bg-[#1D9E75] hover:bg-[#167a5c]"
+                  : "bg-[#378ADD] hover:bg-[#185FA5]"
+              }`}
             >
               {summarizing ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin" /> まとめ中...
                 </>
+              ) : savedActions.has("summarize") ? (
+                <>✓ 保存済み</>
               ) : (
                 <>📝 詳細にまとめる</>
               )}
