@@ -93,7 +93,9 @@ export type AnalysisType =
   | "key_messages"
   // 追加: プレゼン
   | "slide_outline"
-  | "handout_a4";
+  | "handout_a4"
+  // 追加: プレゼン原稿（🎤 ボタン専用。分析タイプ一覧には出さない）
+  | "presentation_script";
 
 interface AnalysisOption {
   value: AnalysisType;
@@ -386,6 +388,77 @@ export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
     "次の文書を、プレゼンのスライド構成案に変換してください。各スライドを「## スライドN：タイトル」とし、その下に「要点」（箇条書き3つ程度）と「話者ノート」（口頭で話す補足を2〜3文）を記載してください。導入・本論・まとめの流れを意識し、元の文書にない情報は足さないでください。",
   handout_a4:
     "次の文書を、配布用のA4 1枚に収まるハンドアウトとして要約してください。タイトル、最重要ポイント3つ、補足の要点、（あれば）注意事項の順で、箇条書き中心に簡潔にまとめてください。元の文書にない情報は足さないでください。",
+  // 🎤 プレゼン原稿は専用ハンドラが PRESENTATION_SCRIPT_PROMPT を組み立てて使う。
+  // Record<AnalysisType, string> を満たすためのプレースホルダ（通常経路からは呼ばれない）。
+  presentation_script:
+    "次の資料をもとに、発表者がそのまま読み上げられるプレゼン原稿を作成してください。資料に書かれている内容だけを根拠にし、書かれていない数値・事実を創作しないでください。",
+};
+
+// 🎤 プレゼン原稿：1ページあたりの発表時間
+const scriptLengths = [
+  { label: "約30秒", value: "30s", hint: "1ページあたり150字前後" },
+  { label: "約1分", value: "1m", hint: "1ページあたり300字前後" },
+  { label: "約2分", value: "2m", hint: "1ページあたり600字前後" },
+  { label: "約3分", value: "3m", hint: "1ページあたり900字前後" },
+];
+
+// 🎤 プレゼン原稿：想定聴衆（口調・語彙・訴求軸が変わる）
+const scriptAudiences = [
+  {
+    value: "staff",
+    label: "院内スタッフ",
+    desc: "朝礼・勉強会。実務目線で、聞いた人の明日の行動が変わる言い方にする。専門用語は使ってよい。",
+  },
+  {
+    value: "patient",
+    label: "患者・一般",
+    desc: "説明会。専門用語を避け、不安を煽らず安心感を優先。平易な言い換えを添える。",
+  },
+  {
+    value: "academic",
+    label: "学会・同業者",
+    desc: "根拠・方法・結果を簡潔に。前置きを削り、示唆と限界に触れる。",
+  },
+  {
+    value: "partner",
+    label: "取引先・業者",
+    desc: "BtoB。数値・導入効果・意思決定者の関心（コスト/工数/リスク）に寄せる。",
+  },
+  {
+    value: "consumer",
+    label: "一般消費者",
+    desc: "BtoCマーケティング。製品の良さと必要性が伝わり、聞いた人がそのまま他人に話せる言い方にする。",
+  },
+];
+
+// 🎤 プレゼン原稿のプロンプト雛形。{pageList} {audienceLabel} {audienceDesc}
+// {lengthLabel} {lengthHint} をチャンクごとに差し替えて使う。
+const PRESENTATION_SCRIPT_PROMPT = `あなたは資料をもとにプレゼン発表原稿を作る専門家です。
+添付は資料の {pageList} です。対象ページすべてについて、発表者がそのまま読み上げられる原稿を作成してください。
+
+【聴衆】{audienceLabel}
+{audienceDesc}
+
+【1ページあたりの長さ】{lengthLabel}（{lengthHint}。目安であり多少の増減は可）
+
+【出力形式】対象ページを1ページも飛ばさず、必ず次の形式で出力する：
+## P{ページ番号}
+（発表原稿の本文。話し言葉・敬体。読み上げ前提で改行は最小限にする）
+> 🗣 話し方のポイント：（1行。強調する箇所・間の取り方・図の指し示し方など）
+
+【原稿の作り方】
+- そのページに書かれている内容だけを根拠にする。書かれていない数値・事実・固有名詞を創作しない。
+- 図表・グラフ・写真があるページでは「こちらの図をご覧ください」のように視線を誘導し、その図が示す要点を言葉で説明する。
+- 冒頭で前ページからのつながりを1文で受け、末尾に次ページへの橋渡しを1文入れる（最初と最後のページは適宜省く）。
+- 箇条書きを棒読みしない。要点を意味のまとまりで語り直す。
+- 製品・サービス・取り組みを扱うページでは「なぜ必要か（相手が抱える課題）→ どう解決するか → 相手にとっての得」の順で語り、聞いた人がそのまま他人に説明できる短い一言を1つ含める。
+- 医療に関する内容では、効果を断定する表現・最上級表現・ビフォーアフターの断定を避け、必要に応じて個人差がある旨を添える。
+- 「以下が原稿です」等の前置き・解説・まとめは書かない。指定の形式のみを出力する。`;
+
+// 分析タイプ一覧（ANALYSIS_GROUPS）に載せないタイプの表示ラベル。
+// 保存カードのバッジ・結果パネル見出しはここを参照する。
+const EXTRA_TYPE_LABELS: Record<string, string> = {
+  presentation_script: "プレゼン原稿",
 };
 
 // 読み手レベル（フェーズ2）。「指定なし」以外が選ばれているときのみ、対象タイプの
@@ -570,7 +643,9 @@ export function GeminiPanel({
 
   const getLabel = (type: AnalysisType): string =>
     ANALYSIS_GROUPS.flatMap((g) => g.options).find((o) => o.value === type)
-      ?.label ?? type;
+      ?.label ??
+    EXTRA_TYPE_LABELS[type] ??
+    type;
 
   // グループ内の分析タイプ一覧（チェックボックス・個別文字数・Genspark設定）を描画。
   // 基本分析・専門グループ（チップ展開時）の両方で再利用する。
@@ -1484,6 +1559,203 @@ export function GeminiPanel({
     }
   };
 
+  // ── 🎤 プレゼン原稿 ────────────────────────────────────────────────
+  // 「選択した資料を書き起こす」経路を雛形にした独立ショートカット。
+  // チャンク分割（CHUNK_SIZE）・サーバ経由・リトライ・進捗表示は書き起こしと同一で、
+  // 差分はプロンプト（PRESENTATION_SCRIPT_PROMPT）と出力の組み立てのみ。
+  const [scriptLength, setScriptLength] = useState("1m");
+  const [scriptAudience, setScriptAudience] = useState("staff");
+  const [scriptGenerating, setScriptGenerating] = useState(false);
+
+  // ボタンラベルに出す対象件数。選択があれば選択分、無ければ全件。
+  const scriptIsAll = selectedCount === 0;
+  const scriptTargetCount = hasImageMode
+    ? scriptIsAll
+      ? (imageParts?.length ?? 0)
+      : selectedImageCount
+    : scriptIsAll
+      ? (pageCount ?? 0)
+      : selectedPageCount;
+  const scriptUnit = hasImageMode ? "枚" : "ページ";
+
+  const handlePresentationScript = async () => {
+    if (loading || scriptGenerating) return;
+
+    const lengthOpt =
+      scriptLengths.find((o) => o.value === scriptLength) ?? scriptLengths[1];
+    const audienceOpt =
+      scriptAudiences.find((o) => o.value === scriptAudience) ??
+      scriptAudiences[0];
+
+    // pageList だけをチャンクごとに差し替えるプロンプト組み立て
+    const buildPrompt = (pageList: string) =>
+      PRESENTATION_SCRIPT_PROMPT.replace("{pageList}", pageList)
+        .replace("{audienceLabel}", audienceOpt.label)
+        .replace("{audienceDesc}", audienceOpt.desc)
+        .replace("{lengthLabel}", lengthOpt.label)
+        .replace("{lengthHint}", lengthOpt.hint);
+
+    // 対象の確定（画像群があれば⚡/✅と同じく画像を優先）
+    const chunks: {
+      pageList: string;
+      run: (prompt: string) => Promise<{ success: boolean; analysis: string; error?: string }>;
+    }[] = [];
+    let docTitle = fileName ?? "資料";
+
+    if (hasImageMode) {
+      const all = imageParts ?? [];
+      const targets =
+        selectedImageCount > 0 && selectedImageParts
+          ? selectedImageParts
+          : all;
+      if (targets.length === 0) {
+        toastError("対象の画像がありません");
+        return;
+      }
+      // 画像は並び順を P1, P2, … として扱う（選択時は元の並び順の番号を使う）
+      const numbered = targets
+        .map((part) => ({ part, no: all.indexOf(part) + 1 }))
+        .map((x, i) => ({ part: x.part, no: x.no > 0 ? x.no : i + 1 }))
+        .sort((a, b) => a.no - b.no);
+      for (let i = 0; i < numbered.length; i += CHUNK_SIZE) {
+        const group = numbered.slice(i, i + CHUNK_SIZE);
+        const pageList = group.map((g) => `P${g.no}`).join("、");
+        const parts = group.map((g) => g.part);
+        chunks.push({
+          pageList,
+          run: (prompt) =>
+            analyzeImagesWithGemini(parts, prompt, "presentation_script", 16384),
+        });
+      }
+    } else {
+      // ファイルモード：解析直前に最新の統合PDFを解決（遅延統合。⚡と同じ経路）
+      let resolved: { base64: string; mime: string; name: string } | null = null;
+      if (onEnsureFileData) {
+        try {
+          resolved = await onEnsureFileData();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "ファイルの統合に失敗しました";
+          toastError(`ファイルの統合に失敗しました: ${msg}`);
+          return;
+        }
+      }
+      const effBase64 = resolved?.base64 ?? fileBase64;
+      const effMime = resolved?.mime ?? fileMime;
+      if (resolved?.name) docTitle = resolved.name;
+      if (!effBase64 || !effMime) {
+        toastError("ファイルが選択されていません");
+        return;
+      }
+      if (effMime !== "application/pdf") {
+        toastError("プレゼン原稿はPDFまたは画像に対応しています");
+        return;
+      }
+      let totalPages = 0;
+      try {
+        totalPages = await getPdfPageCount(effBase64);
+      } catch {
+        totalPages = 0;
+      }
+      const targetPages =
+        selectedPageCount > 0 && selectedPdfPages
+          ? [...selectedPdfPages].sort((a, b) => a - b)
+          : Array.from({ length: totalPages }, (_, i) => i + 1);
+      if (targetPages.length === 0) {
+        toastError("対象ページを特定できませんでした");
+        return;
+      }
+      for (let i = 0; i < targetPages.length; i += CHUNK_SIZE) {
+        const group = targetPages.slice(i, i + CHUNK_SIZE);
+        const pageList = group.map((p) => `P${p}`).join("、");
+        chunks.push({
+          pageList,
+          run: async (prompt) => {
+            const chunkBase64 = await extractPdfPages(
+              effBase64,
+              group.map((p) => p - 1)
+            );
+            return analyzeWithGemini(
+              chunkBase64,
+              "application/pdf",
+              prompt,
+              "presentation_script",
+              16384
+            );
+          },
+        });
+      }
+    }
+
+    setScriptGenerating(true);
+    setLoading(true);
+    setResult("");
+    setResults(new Map());
+    setTranscriptionProgress("");
+
+    try {
+      const totalChunks = chunks.length;
+      let fullText = "";
+
+      for (let i = 0; i < totalChunks; i++) {
+        const { pageList, run } = chunks[i];
+        setTranscriptionProgress(
+          `プレゼン原稿を生成中... (${i + 1}/${totalChunks}チャンク / ${pageList})`
+        );
+
+        const prompt = buildPrompt(pageList);
+        // チャンク失敗（タイムアウト等）時は1回だけ自動リトライ（書き起こしと同様）
+        let chunkResult = await run(prompt);
+        if (!chunkResult.success) {
+          setTranscriptionProgress(
+            `プレゼン原稿を再試行中... (${i + 1}/${totalChunks}チャンク / ${pageList})`
+          );
+          chunkResult = await run(prompt);
+        }
+        if (!chunkResult.success) {
+          throw new Error(`${pageList} の処理に失敗: ${chunkResult.error}`);
+        }
+
+        // 各チャンクの結果を改行2つで連結
+        fullText += (fullText ? "\n\n" : "") + chunkResult.analysis.trim();
+
+        setTranscriptionProgress(
+          `プレゼン原稿を生成中... (${i + 1}/${totalChunks}チャンク完了・累計${fullText.length.toLocaleString()}文字)`
+        );
+
+        // チャンク間ウェイト（API rate limit対策）
+        if (i < totalChunks - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+
+      if (!fullText) throw new Error("原稿を生成できませんでした");
+
+      setResults(new Map([["presentation_script" as AnalysisType, fullText]]));
+      setResult(fullText);
+      setLastResultType("presentation_script");
+      onResult?.(fullText);
+
+      // 全チャンク連結後に1枚のカードとして保存（タイトルは元資料のまま）
+      saveAnalysis({
+        fileName: docTitle,
+        analysisType: "presentation_script",
+        analysisLabel: EXTRA_TYPE_LABELS.presentation_script,
+        content: fullText,
+        tags: [],
+        folder: "",
+      });
+      toastOk("プレゼン原稿を作成し、ストックに保存しました");
+    } catch (err) {
+      toastError(
+        err instanceof Error ? err.message : "プレゼン原稿の生成に失敗しました"
+      );
+    } finally {
+      setLoading(false);
+      setScriptGenerating(false);
+      setTranscriptionProgress("");
+    }
+  };
+
   // 分析結果から短いタイトルを Gemini で自動生成
   const generateTitle = async (
     analysisText: string,
@@ -1902,6 +2174,64 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 ? `選択した資料を書き起こす（${selectedCount}${hasImageMode ? "枚" : "ページ"}）`
                 : "選択した資料を書き起こす"}
           </button>
+          {/* 🎤 プレゼン原稿：ページごとの発表原稿を1枚のカードにまとめて保存する。
+              左に「1ページあたりの長さ」「想定聴衆」のドロップダウンを横並びで置く。 */}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={scriptLength}
+              onChange={(e) => setScriptLength(e.target.value)}
+              disabled={loading || scriptGenerating}
+              title="1ページあたりの発表時間"
+              className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs focus:border-[#B5D4F4] focus:outline-none disabled:opacity-40"
+            >
+              {scriptLengths.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}／ページ
+                </option>
+              ))}
+            </select>
+            <select
+              value={scriptAudience}
+              onChange={(e) => setScriptAudience(e.target.value)}
+              disabled={loading || scriptGenerating}
+              title="想定聴衆（口調・訴求軸が変わります）"
+              className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs focus:border-[#B5D4F4] focus:outline-none disabled:opacity-40"
+            >
+              {scriptAudiences.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handlePresentationScript}
+              disabled={
+                loading ||
+                scriptGenerating ||
+                isTextMode ||
+                (!fileBase64 && !hasImageMode)
+              }
+              title={
+                isTextMode
+                  ? "テキスト入力モードでは使用できません"
+                  : selectedCount > 0
+                    ? `選択中の ${selectedCount}${scriptUnit} の発表原稿を作成します`
+                    : "資料の全ページ分の発表原稿を作成します"
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+            >
+              {scriptGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <span>🎤</span>
+              )}
+              {scriptGenerating
+                ? "プレゼン原稿を生成中..."
+                : scriptTargetCount > 0
+                  ? `プレゼン原稿（${scriptIsAll ? "全" : ""}${scriptTargetCount}${scriptUnit}）`
+                  : "プレゼン原稿"}
+            </button>
+          </div>
         </div>
         {/* 右側スペーサ（見出しと同じ伸縮量）。ボタンを行の水平中央に保つ。 */}
         <div className="flex-1 basis-0" aria-hidden />
