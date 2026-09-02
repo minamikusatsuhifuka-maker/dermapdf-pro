@@ -813,6 +813,8 @@ export function AnalysisStockPanel() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   // 検索をタイトルのみに限定するトグル（既定OFF・localStorageに保存）
   const [titleOnlySearch, setTitleOnlySearch] = useState(false);
+  // 本文の全画面表示（閲覧専用モーダル）。編集はカード側の✏️のみで行う
+  const [fullscreenId, setFullscreenId] = useState<string | null>(null);
   // 未分類カードの一括AI分類（進捗表示・中断対応）
   const [bulkClassifying, setBulkClassifying] = useState(false);
   const [bulkClassifyProgress, setBulkClassifyProgress] = useState({ done: 0, total: 0, failed: 0 });
@@ -916,6 +918,22 @@ export function AnalysisStockPanel() {
     if (!titleOnlyInitRef.current) { titleOnlyInitRef.current = true; return; }
     localStorage.setItem(STOCK_TITLE_ONLY_KEY, titleOnlySearch ? "1" : "0");
   }, [titleOnlySearch]);
+
+  // 全画面表示中のみ: Escで閉じる + 背景スクロールを止める。
+  // 閉じたらリスナー解除・overflow復元（他モーダルの状態には触らない）。
+  useEffect(() => {
+    if (!fullscreenId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreenId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fullscreenId]);
 
   const setCardHeight = (id: string, h: number) => {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
@@ -2890,6 +2908,23 @@ export function AnalysisStockPanel() {
                           ✏️ 編集
                         </button>
                       )}
+                      {/* 全画面表示（閲覧専用）。編集中は競合防止のため無効化 */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setFullscreenId(r.id); }}
+                        disabled={bodyEditingId === r.id}
+                        className={`rounded border px-2 py-0.5 transition-colors ${
+                          bodyEditingId === r.id
+                            ? "cursor-not-allowed border-gray-100 text-gray-300"
+                            : "border-gray-200 hover:border-[#B5D4F4]"
+                        }`}
+                        title={
+                          bodyEditingId === r.id
+                            ? "編集中は全画面表示できません（先に「✓ 編集を終了」を押してください）"
+                            : "本文を全画面で表示（Escで閉じる）"
+                        }
+                      >
+                        ⛶ 全画面
+                      </button>
                     </div>
 
                     <div>
@@ -3167,6 +3202,88 @@ export function AnalysisStockPanel() {
           }}
         />
       )}
+
+      {/* 本文の全画面表示モーダル（閲覧専用。編集はカード側の✏️のみ・contentEditableは置かない） */}
+      {fullscreenId && (() => {
+        const fr = records.find((r) => r.id === fullscreenId);
+        if (!fr) return null;
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 p-3 backdrop-blur-sm sm:p-6"
+            onClick={() => setFullscreenId(null)}
+          >
+            <div
+              className="flex h-full w-full flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* ヘッダ: 種別/文字数/AIカテゴリバッジ + タイトル + 日付 + 閉じる */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-3">
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium border ${typeBadgeClass(fr.analysisType)}`}>
+                  {fr.analysisLabel}
+                </span>
+                {visibleTextLength(fr.content) > 0 && (
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold border ${charCountBadgeClass(visibleTextLength(fr.content))}`}>
+                    {visibleTextLength(fr.content).toLocaleString()} 文字
+                  </span>
+                )}
+                {(fr.aiCategory || "").trim() && (
+                  <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 border border-indigo-200">
+                    🏷 {fr.aiCategory}
+                  </span>
+                )}
+                <span
+                  className="min-w-0 flex-1 truncate text-sm font-bold text-gray-800"
+                  title={getDisplayTitle(fr)}
+                >
+                  {getDisplayTitle(fr)}
+                </span>
+                <span className="shrink-0 text-xs text-gray-400">
+                  {new Date(fr.createdAt).toLocaleString("ja-JP")}
+                </span>
+                <button
+                  onClick={() => setFullscreenId(null)}
+                  className="shrink-0 rounded p-1.5 hover:bg-gray-100"
+                  title="閉じる（Esc）"
+                >
+                  <X className="h-4 w-4 text-gray-500" />
+                </button>
+              </div>
+              {/* 本文: 既存のHTML/Markdown出し分けをそのまま流用（読み取り専用）。
+                  読みやすい行長のため中央寄せ max-w-4xl */}
+              <div className="flex-1 overflow-y-auto px-4 py-6">
+                <div className="mx-auto max-w-4xl">
+                  {isHtmlContent(fr.content) ? (
+                    <div
+                      dangerouslySetInnerHTML={{ __html: fr.content || "" }}
+                      className="whitespace-pre-wrap text-gray-700"
+                      style={{
+                        fontSize: `${fontSize}px`,
+                        lineHeight: "1.8",
+                        wordBreak: "break-word",
+                        userSelect: "text",
+                        WebkitUserSelect: "text",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="text-gray-700"
+                      style={{
+                        fontSize: `${fontSize}px`,
+                        lineHeight: "1.8",
+                        wordBreak: "break-word",
+                        userSelect: "text",
+                        WebkitUserSelect: "text",
+                      }}
+                    >
+                      <MarkdownView>{fr.content || ""}</MarkdownView>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* パスワード確認モーダル */}
       {showPasswordModal && (
