@@ -87,14 +87,16 @@ const STOCK_GRID_CLASSES: Record<number, string> = {
 // （青=詳細にまとめる／ティール=要約・概要／アンバー=施策／紫=校正）。
 // 未知の種別は現行の青系にフォールバックし、表示が壊れないようにする。
 // 種別を追加したらここに1行足すだけでよい。
-const TYPE_BADGE_FALLBACK_CLASS = "bg-[#E6F1FB] text-[#185FA5] border-[#B5D4F4]";
+// 文字色は全バッジ共通で黒（gray-900）に統一し、淡い背景でも確実に読めるようにする。
+// 背景は一段しっかりした濃さ・枠線は背景よりさらに一段濃い同系色で輪郭を出す。
+const TYPE_BADGE_FALLBACK_CLASS = "bg-sky-100 text-gray-900 border-sky-300";
 const TYPE_BADGE_CLASSES: Record<string, string> = {
-  transcription: "bg-slate-100 text-slate-600 border-slate-300",
-  detail_summary: "bg-blue-50 text-blue-700 border-blue-200",
-  overview_summary: "bg-teal-50 text-teal-700 border-teal-200",
-  action_advice: "bg-amber-50 text-amber-700 border-amber-200",
-  proofread: "bg-purple-50 text-purple-700 border-purple-200",
-  presentation_script: "bg-rose-50 text-rose-700 border-rose-200",
+  transcription: "bg-slate-200 text-gray-900 border-slate-400",
+  detail_summary: "bg-blue-100 text-gray-900 border-blue-300",
+  overview_summary: "bg-teal-100 text-gray-900 border-teal-300",
+  action_advice: "bg-amber-100 text-gray-900 border-amber-300",
+  proofread: "bg-purple-100 text-gray-900 border-purple-300",
+  presentation_script: "bg-rose-100 text-gray-900 border-rose-300",
 };
 function typeBadgeClass(analysisType: string): string {
   // 校正系（proofread〜）はまとめて紫
@@ -106,10 +108,10 @@ function typeBadgeClass(analysisType: string): string {
 // （種別バッジは色相で区別・文字数は濃度で区別、と役割を分ける）。
 // 境界は 3000 / 6000 / 10000。
 function charCountBadgeClass(len: number): string {
-  if (len >= 10000) return "bg-emerald-300 text-emerald-950 border-emerald-400";
-  if (len >= 6000) return "bg-emerald-200 text-emerald-900 border-emerald-300";
-  if (len >= 3000) return "bg-emerald-100 text-emerald-800 border-emerald-200";
-  return "bg-emerald-50 text-emerald-600 border-emerald-100";
+  if (len >= 10000) return "bg-emerald-400 text-gray-900 border-emerald-600";
+  if (len >= 6000) return "bg-emerald-300 text-gray-900 border-emerald-500";
+  if (len >= 3000) return "bg-emerald-200 text-gray-900 border-emerald-400";
+  return "bg-emerald-100 text-gray-900 border-emerald-300";
 }
 
 // フォルダごとのカラーパレット（左端カラーバー・カラーバッジ用）
