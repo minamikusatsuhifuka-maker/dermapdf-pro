@@ -2110,36 +2110,74 @@ export function AnalysisStockPanel() {
                       : "border-gray-100 bg-white/60"
                   }`}
                 >
-                  <div
-                    className="flex min-w-0 cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors hover:bg-blue-50/30"
-                    onClick={() => setExpandedId(r.id)}
-                    title="クリックで詳細表示に展開"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(r.id)}
-                      onChange={() => toggleSelect(r.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
-                    />
-                    <span className="shrink-0 rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
-                      {r.analysisLabel}
-                    </span>
-                    {visibleTextLength(r.content) > 0 && (
-                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
-                        {visibleTextLength(r.content).toLocaleString()} 文字
-                      </span>
-                    )}
-                    <span
-                      className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700"
-                      title={getDisplayTitle(r)}
+                  {stockColumns === 1 ? (
+                    /* 1列: 従来どおり1行（日時フル表示） */
+                    <div
+                      className="flex min-w-0 cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors hover:bg-blue-50/30"
+                      onClick={() => setExpandedId(r.id)}
+                      title="クリックで詳細表示に展開"
                     >
-                      {getDisplayTitle(r)}
-                    </span>
-                    <span className="shrink-0 text-xs text-gray-400">
-                      {new Date(r.createdAt).toLocaleString("ja-JP")}
-                    </span>
-                  </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={() => toggleSelect(r.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
+                      />
+                      <span className="shrink-0 rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
+                        {r.analysisLabel}
+                      </span>
+                      {visibleTextLength(r.content) > 0 && (
+                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                          {visibleTextLength(r.content).toLocaleString()} 文字
+                        </span>
+                      )}
+                      <span
+                        className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700"
+                        title={getDisplayTitle(r)}
+                      >
+                        {getDisplayTitle(r)}
+                      </span>
+                      <span className="shrink-0 text-xs text-gray-400">
+                        {new Date(r.createdAt).toLocaleString("ja-JP")}
+                      </span>
+                    </div>
+                  ) : (
+                    /* 2列以上: 幅が狭くタイトルが潰れるため2行構成。
+                       1行目=チェック/バッジ/文字数/日付（時刻省略）、2行目=タイトル全幅 */
+                    <div
+                      className="flex min-w-0 cursor-pointer select-none flex-col gap-1 px-3 py-2 transition-colors hover:bg-blue-50/30"
+                      onClick={() => setExpandedId(r.id)}
+                      title="クリックで詳細表示に展開"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelect(r.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
+                        />
+                        <span className="shrink-0 rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
+                          {r.analysisLabel}
+                        </span>
+                        {visibleTextLength(r.content) > 0 && (
+                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                            {visibleTextLength(r.content).toLocaleString()} 文字
+                          </span>
+                        )}
+                        <span className="ml-auto shrink-0 text-xs text-gray-400">
+                          {new Date(r.createdAt).toLocaleDateString("ja-JP")}
+                        </span>
+                      </div>
+                      <span
+                        className="min-w-0 truncate text-sm font-medium text-gray-700"
+                        title={getDisplayTitle(r)}
+                      >
+                        {getDisplayTitle(r)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             }
