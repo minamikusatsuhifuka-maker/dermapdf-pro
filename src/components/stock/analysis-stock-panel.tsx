@@ -65,6 +65,17 @@ const LOCK_FOLDER = "🔒 ロック済み";
 const FAVORITE_FOLDER = "⭐ お気に入り";
 const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
 const FOLDER_ORDER_KEY = "dermapdf_folder_order";
+const STOCK_VIEW_MODE_KEY = "dermapdf_stock_view_mode";
+const STOCK_COLUMNS_KEY = "dermapdf_stock_columns";
+
+// 列数切替のグリッドクラス（選択列数を上限に、狭い画面では自動で列を落とす）。
+// Tailwindのクラス検出のためリテラル文字列で列挙する。
+const STOCK_GRID_CLASSES: Record<number, string> = {
+  1: "grid grid-cols-1 gap-2",
+  2: "grid grid-cols-1 sm:grid-cols-2 gap-2",
+  3: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2",
+  4: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2",
+};
 
 // フォルダごとのカラーパレット（左端カラーバー・カラーバッジ用）
 const FOLDER_PALETTE = [
@@ -734,6 +745,8 @@ export function AnalysisStockPanel() {
   const [folderFontSize, setFolderFontSize] = useState(12);
   const [globalHeight, setGlobalHeight] = useState(240);
   const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
+  const [stockViewMode, setStockViewMode] = useState<"detail" | "compact">("detail");
+  const [stockColumns, setStockColumns] = useState<number>(1);
 
   const loadCustomFolders = useCallback((): string[] => {
     try {
@@ -802,6 +815,26 @@ export function AnalysisStockPanel() {
     if (!folderFontInitRef.current) { folderFontInitRef.current = true; return; }
     localStorage.setItem("dermapdf_folder_fontsize", String(folderFontSize));
   }, [folderFontSize]);
+
+  // 表示モード・列数をlocalStorageから復元（無ければ 詳細/1列）
+  useEffect(() => {
+    const savedMode = localStorage.getItem(STOCK_VIEW_MODE_KEY);
+    if (savedMode === "compact" || savedMode === "detail") setStockViewMode(savedMode);
+    const savedCols = Number(localStorage.getItem(STOCK_COLUMNS_KEY));
+    if ([1, 2, 3, 4].includes(savedCols)) setStockColumns(savedCols);
+  }, []);
+
+  const viewModeInitRef = useRef(false);
+  useEffect(() => {
+    if (!viewModeInitRef.current) { viewModeInitRef.current = true; return; }
+    localStorage.setItem(STOCK_VIEW_MODE_KEY, stockViewMode);
+  }, [stockViewMode]);
+
+  const stockColumnsInitRef = useRef(false);
+  useEffect(() => {
+    if (!stockColumnsInitRef.current) { stockColumnsInitRef.current = true; return; }
+    localStorage.setItem(STOCK_COLUMNS_KEY, String(stockColumns));
+  }, [stockColumns]);
 
   const setCardHeight = (id: string, h: number) => {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
@@ -1789,9 +1822,9 @@ export function AnalysisStockPanel() {
         );
       })()}
 
-      {/* 選択操作バー */}
+      {/* 選択操作バー + 表示モード/列数切替 */}
       {filtered.length > 0 && (
-        <div className="flex items-center gap-2 py-1">
+        <div className="flex flex-wrap items-center gap-2 py-1">
           <input
             type="checkbox"
             checked={selectedIds.size === filtered.length && filtered.length > 0}
@@ -1809,6 +1842,49 @@ export function AnalysisStockPanel() {
               選択解除
             </button>
           )}
+          <span className="flex-1" />
+          {/* 表示モード切替（詳細/コンパクト） */}
+          <div className="flex items-center overflow-hidden rounded-lg border border-gray-200">
+            <button
+              onClick={() => setStockViewMode("detail")}
+              className={`px-2 py-1 text-xs transition-colors ${
+                stockViewMode === "detail"
+                  ? "bg-[#378ADD] font-semibold text-white"
+                  : "bg-white text-gray-500 hover:bg-gray-50"
+              }`}
+              title="詳細表示（ボタン行・本文プレビューあり）"
+            >
+              📄 詳細
+            </button>
+            <button
+              onClick={() => setStockViewMode("compact")}
+              className={`px-2 py-1 text-xs transition-colors ${
+                stockViewMode === "compact"
+                  ? "bg-[#378ADD] font-semibold text-white"
+                  : "bg-white text-gray-500 hover:bg-gray-50"
+              }`}
+              title="コンパクト表示（1行・クリックで詳細に展開）"
+            >
+              ≡ コンパクト
+            </button>
+          </div>
+          {/* 列数切替（1〜4列） */}
+          <div className="flex items-center overflow-hidden rounded-lg border border-gray-200">
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => setStockColumns(n)}
+                className={`px-2 py-1 text-xs transition-colors ${
+                  stockColumns === n
+                    ? "bg-[#378ADD] font-semibold text-white"
+                    : "bg-white text-gray-500 hover:bg-gray-50"
+                }`}
+                title={`${n}列で表示（画面幅が狭いときは自動で列数を落とします）`}
+              >
+                {n}列
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -2004,7 +2080,7 @@ export function AnalysisStockPanel() {
         (() => {
           const folderPaths = getFlatFolderList(folderTree).map((f) => f.path);
           return (
-        <div className="space-y-2">
+        <div className={STOCK_GRID_CLASSES[stockColumns] || STOCK_GRID_CLASSES[1]}>
           {filtered.map((r) => {
             const isExpanded = expandedId === r.id;
             const isGensparkActive = activeGensparkId === r.id;
@@ -2014,6 +2090,59 @@ export function AnalysisStockPanel() {
             const folderDisplayName = r.folder
               ? getFolderName(r.folder)
               : "";
+            // コンパクト表示: 種別バッジ/文字数/タイトル/日付のみの1行。
+            // 行クリックで詳細カードにその場で展開する。
+            // 編集系・Genspark等の操作中は従来カードのまま表示して挙動を変えない。
+            if (
+              stockViewMode === "compact" &&
+              !isExpanded &&
+              !isGensparkActive &&
+              editingId !== r.id &&
+              editingTagId !== r.id &&
+              staffLinkId !== r.id
+            ) {
+              return (
+                <div
+                  key={r.id}
+                  className={`overflow-hidden rounded-xl border ${
+                    selectedIds.has(r.id)
+                      ? "border-[#B5D4F4] bg-[#E6F1FB]"
+                      : "border-gray-100 bg-white/60"
+                  }`}
+                >
+                  <div
+                    className="flex min-w-0 cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors hover:bg-blue-50/30"
+                    onClick={() => setExpandedId(r.id)}
+                    title="クリックで詳細表示に展開"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
+                    />
+                    <span className="shrink-0 rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
+                      {r.analysisLabel}
+                    </span>
+                    {visibleTextLength(r.content) > 0 && (
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                        {visibleTextLength(r.content).toLocaleString()} 文字
+                      </span>
+                    )}
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700"
+                      title={getDisplayTitle(r)}
+                    >
+                      {getDisplayTitle(r)}
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-400">
+                      {new Date(r.createdAt).toLocaleString("ja-JP")}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div
                 key={r.id}
