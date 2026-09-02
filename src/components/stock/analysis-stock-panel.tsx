@@ -73,6 +73,7 @@ const CUSTOM_FOLDERS_KEY = "dermapdf_custom_folders";
 const FOLDER_ORDER_KEY = "dermapdf_folder_order";
 const STOCK_VIEW_MODE_KEY = "dermapdf_stock_view_mode";
 const STOCK_COLUMNS_KEY = "dermapdf_stock_columns";
+const STOCK_TITLE_ONLY_KEY = "dermapdf_stock_title_only";
 
 // 列数切替のグリッドクラス（選択列数を上限に、狭い画面では自動で列を落とす）。
 // Tailwindのクラス検出のためリテラル文字列で列挙する。
@@ -808,6 +809,10 @@ export function AnalysisStockPanel() {
   const [stockColumns, setStockColumns] = useState<number>(1);
   // AIカテゴリ絞り込み（null=すべて / "__none__"=未分類 / その他=カテゴリ名）
   const [aiCategoryFilter, setAiCategoryFilter] = useState<string | null>(null);
+  // 種別（analysisType）絞り込み（null=すべて）。AIカテゴリ・検索とAND併用可
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  // 検索をタイトルのみに限定するトグル（既定OFF・localStorageに保存）
+  const [titleOnlySearch, setTitleOnlySearch] = useState(false);
   // 未分類カードの一括AI分類（進捗表示・中断対応）
   const [bulkClassifying, setBulkClassifying] = useState(false);
   const [bulkClassifyProgress, setBulkClassifyProgress] = useState({ done: 0, total: 0, failed: 0 });
@@ -900,6 +905,17 @@ export function AnalysisStockPanel() {
     if (!stockColumnsInitRef.current) { stockColumnsInitRef.current = true; return; }
     localStorage.setItem(STOCK_COLUMNS_KEY, String(stockColumns));
   }, [stockColumns]);
+
+  // 「タイトルのみ」トグルをlocalStorageから復元・保存
+  useEffect(() => {
+    if (localStorage.getItem(STOCK_TITLE_ONLY_KEY) === "1") setTitleOnlySearch(true);
+  }, []);
+
+  const titleOnlyInitRef = useRef(false);
+  useEffect(() => {
+    if (!titleOnlyInitRef.current) { titleOnlyInitRef.current = true; return; }
+    localStorage.setItem(STOCK_TITLE_ONLY_KEY, titleOnlySearch ? "1" : "0");
+  }, [titleOnlySearch]);
 
   const setCardHeight = (id: string, h: number) => {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
@@ -1270,17 +1286,27 @@ export function AnalysisStockPanel() {
       ? records.filter((r) => r.folder === activeFolder || (r.folder || "").startsWith(activeFolder + "/"))
       : records;
 
-  // AIカテゴリでの絞り込み（フォルダ絞り込みの後段に挟む。既存のフォルダ絞り込みは不変）
+  // 種別（analysisType）での絞り込み（AIカテゴリ・検索とAND条件で併用）
+  const typeFiltered =
+    typeFilter === null
+      ? folderFiltered
+      : folderFiltered.filter((r) => r.analysisType === typeFilter);
+
+  // AIカテゴリでの絞り込み（フォルダ・種別絞り込みの後段に挟む。既存のフォルダ絞り込みは不変）
   const categoryFiltered =
     aiCategoryFilter === null
-      ? folderFiltered
+      ? typeFiltered
       : aiCategoryFilter === "__none__"
-        ? folderFiltered.filter((r) => !(r.aiCategory || "").trim())
-        : folderFiltered.filter((r) => (r.aiCategory || "").trim() === aiCategoryFilter);
+        ? typeFiltered.filter((r) => !(r.aiCategory || "").trim())
+        : typeFiltered.filter((r) => (r.aiCategory || "").trim() === aiCategoryFilter);
 
   const filtered = search
     ? categoryFiltered.filter((r) => {
         const q = search.toLowerCase();
+        // 「タイトルのみ」ON時はタイトルへの部分一致だけに絞る
+        if (titleOnlySearch) {
+          return getDisplayTitle(r).toLowerCase().includes(q);
+        }
         return (
           getDisplayTitle(r).toLowerCase().includes(q) ||
           r.fileName.toLowerCase().includes(q) ||
@@ -1292,6 +1318,18 @@ export function AnalysisStockPanel() {
         );
       })
     : categoryFiltered;
+
+  // 種別チップ表示用集計（保存済みレコードから動的に。0件の種別は現れない・件数降順）
+  const typeSummary = (() => {
+    const map = new Map<string, { label: string; count: number }>();
+    for (const r of records) {
+      const t = r.analysisType || "";
+      const cur = map.get(t);
+      if (cur) cur.count++;
+      else map.set(t, { label: r.analysisLabel, count: 1 });
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count);
+  })();
 
   // AIカテゴリのチップ表示用集計（件数付き・件数降順）
   const aiCategorySummary = (() => {
@@ -1916,6 +1954,18 @@ export function AnalysisStockPanel() {
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           />
         </div>
+        <label
+          className="flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap text-xs text-gray-500"
+          title="ONにすると検索対象をタイトルだけに絞ります（本文などは対象外）"
+        >
+          <input
+            type="checkbox"
+            checked={titleOnlySearch}
+            onChange={(e) => setTitleOnlySearch(e.target.checked)}
+            className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
+          />
+          タイトルのみ
+        </label>
         <button
           onClick={() => setShowTagList(!showTagList)}
           className="flex items-center gap-1 px-3 py-2 text-xs border rounded-lg hover:border-[#B5D4F4] whitespace-nowrap"
@@ -1954,6 +2004,37 @@ export function AnalysisStockPanel() {
           </div>
         );
       })()}
+
+      {/* 種別絞り込みチップ（バッジと同じ配色 typeBadgeClass を流用） */}
+      {typeSummary.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="shrink-0 text-xs font-semibold text-gray-500">📑 種別:</span>
+          <button
+            onClick={() => setTypeFilter(null)}
+            className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+              typeFilter === null
+                ? "border-gray-400 bg-gray-200 font-semibold text-gray-900"
+                : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            すべて ({records.length})
+          </button>
+          {typeSummary.map(([type, { label, count }]) => (
+            <button
+              key={type}
+              onClick={() => setTypeFilter(typeFilter === type ? null : type)}
+              className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${typeBadgeClass(type)} ${
+                typeFilter === type
+                  ? "font-semibold ring-2 ring-[#378ADD] ring-offset-1"
+                  : "opacity-80 hover:opacity-100"
+              }`}
+              title={`「${label}」で絞り込み`}
+            >
+              {label} ({count})
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* AIカテゴリ絞り込みチップ + 未分類の一括AI分類 */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -2032,6 +2113,7 @@ export function AnalysisStockPanel() {
           <span className="text-xs text-gray-500">
             {selectedIds.size > 0 ? `${selectedIds.size}件選択中` : "全選択"}
           </span>
+          <span className="text-xs text-gray-400">{filtered.length}件表示中</span>
           {selectedIds.size > 0 && (
             <button
               onClick={() => setSelectedIds(new Set())}
@@ -2269,11 +2351,27 @@ export function AnalysisStockPanel() {
 
       {/* 一覧 */}
       {filtered.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-400">
-          {records.length === 0
-            ? "保存された分析結果はありません"
-            : "検索条件に一致する結果がありません"}
-        </p>
+        records.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">
+            保存された分析結果はありません
+          </p>
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-sm text-gray-400">
+              絞り込み条件に該当するカードがありません
+            </p>
+            <button
+              onClick={() => {
+                setTypeFilter(null);
+                setAiCategoryFilter(null);
+                setSearch("");
+              }}
+              className="mt-2 text-xs text-[#378ADD] underline hover:text-[#185FA5]"
+            >
+              種別・AIカテゴリ・検索の絞り込みを解除
+            </button>
+          </div>
+        )
       ) : (
         (() => {
           const folderPaths = getFlatFolderList(folderTree).map((f) => f.path);
