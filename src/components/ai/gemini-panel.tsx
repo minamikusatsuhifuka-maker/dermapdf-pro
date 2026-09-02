@@ -11,6 +11,7 @@ import {
   analyzeImagesWithGemini,
 } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { copyRichText } from "@/lib/clipboard-rich";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
 import { splitPdfPages, extractPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
@@ -1481,7 +1482,7 @@ export function GeminiPanel({
               getLabel(type),
               buildFallbackTitle(type)
             ).catch(() => buildFallbackTitle(type));
-            saveAnalysis({
+            const savedAuto = saveAnalysis({
               fileName: autoTitle,
               analysisType: type,
               analysisLabel: getLabel(type),
@@ -1489,6 +1490,8 @@ export function GeminiPanel({
               tags: [],
               folder: "",
             });
+            // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+            void classifyAnalysisInBackground(savedAuto.id, savedAuto.content);
           }
         } catch (innerErr) {
           const msg =
@@ -1736,7 +1739,7 @@ export function GeminiPanel({
       onResult?.(fullText);
 
       // 全チャンク連結後に1枚のカードとして保存（タイトルは元資料のまま）
-      saveAnalysis({
+      const savedScript = saveAnalysis({
         fileName: docTitle,
         analysisType: "presentation_script",
         analysisLabel: EXTRA_TYPE_LABELS.presentation_script,
@@ -1744,6 +1747,7 @@ export function GeminiPanel({
         tags: [],
         folder: "",
       });
+      void classifyAnalysisInBackground(savedScript.id, savedScript.content);
       toastOk("プレゼン原稿を作成し、ストックに保存しました");
     } catch (err) {
       toastError(
@@ -1861,7 +1865,7 @@ ${head}`;
       buildFallbackTitle(type)
     );
     console.log("[saveStock] 最終タイトル:", autoTitle);
-    saveAnalysis({
+    const savedStock = saveAnalysis({
       fileName: autoTitle,
       analysisType: type,
       analysisLabel: getLabel(type),
@@ -1869,6 +1873,7 @@ ${head}`;
       tags: [],
       folder: "",
     });
+    void classifyAnalysisInBackground(savedStock.id, savedStock.content);
     toastOk(`「${autoTitle}」としてストックに保存しました`);
   };
 
@@ -3110,7 +3115,7 @@ function ResultPanel({
           sourceTitle={label}
           onClose={() => setShowProofread(false)}
           onSaveCard={(title, content, before) => {
-            saveAnalysis({
+            const savedProofread = saveAnalysis({
               fileName: label,
               analysisType: "proofread",
               analysisLabel: "校正済み",
@@ -3120,6 +3125,8 @@ function ResultPanel({
               title,
               proofreadBefore: before,
             });
+            // folder:"校正" は従来どおり固定。AIカテゴリは別フィールドに裏で付与
+            void classifyAnalysisInBackground(savedProofread.id, savedProofread.content);
           }}
         />
       )}

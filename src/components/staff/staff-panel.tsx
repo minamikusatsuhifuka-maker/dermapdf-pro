@@ -18,6 +18,7 @@ import {
   type StaffRecord,
 } from "@/lib/staff-storage";
 import { loadAllAnalyses, saveAnalysis, getDisplayTitle, type AnalysisRecord } from "@/lib/analysis-storage";
+import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
 
@@ -268,7 +269,7 @@ ${philosophyContext}
   };
 
   const handleSaveAiToStock = () => {
-    saveAnalysis({
+    const saved = saveAnalysis({
       fileName: `${staff.name}のAI生成結果`,
       analysisType: "staff_ai",
       analysisLabel: "スタッフAI生成",
@@ -276,6 +277,8 @@ ${philosophyContext}
       tags: ["スタッフカルテ", staff.name],
       folder: "",
     });
+    // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+    void classifyAnalysisInBackground(saved.id, saved.content);
     toastOk("ストックに保存しました");
   };
 

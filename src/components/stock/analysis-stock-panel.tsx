@@ -24,6 +24,7 @@ import {
   bulkExportAsPdf,
   updateAnalysisTitle,
   updateAnalysisTags,
+  updateAnalysisAiCategory,
   updateAnalysisContent,
   revertAnalysisContent,
   getDisplayTitle,
@@ -42,6 +43,11 @@ import {
   type FolderNode,
 } from "@/lib/analysis-storage";
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
+import {
+  classifyAnalysisInBackground,
+  generateCategoryWithTimeout,
+  getExistingAiCategories,
+} from "@/lib/ai-category";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { copyRichText } from "@/lib/clipboard-rich";
 import MarkdownView from "@/components/ui/markdown-view";
@@ -432,16 +438,20 @@ function TagFolderEditor({
   folderTree,
   onSave,
   onClose,
+  onSaveAiCategory,
 }: {
   record: AnalysisRecord;
   allFolders: string[];
   folderTree: FolderNode[];
   onSave: (tags: string[], folder: string) => void;
   onClose: () => void;
+  // AIカテゴリの手動修正（空文字でクリア）。folderとは独立
+  onSaveAiCategory?: (aiCategory: string) => void;
 }) {
   const [folder, setFolder] = useState(record.folder || "");
   const [tags, setTags] = useState<string[]>(record.tags || []);
   const [tagInput, setTagInput] = useState("");
+  const [aiCategory, setAiCategory] = useState(record.aiCategory || "");
 
   const flatFolders = getFlatFolderList(folderTree);
 
@@ -514,8 +524,26 @@ function TagFolderEditor({
         </div>
       </div>
 
+      {onSaveAiCategory && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">
+            🏷 AIカテゴリ（自動分類の手動修正。空にすると未分類に戻る）
+          </label>
+          <input
+            type="text"
+            value={aiCategory}
+            onChange={(e) => setAiCategory(e.target.value)}
+            placeholder="カテゴリ名を入力（例：営業・トーク術）"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+          />
+        </div>
+      )}
+
       <button
-        onClick={() => onSave(tags, folder)}
+        onClick={() => {
+          onSaveAiCategory?.(aiCategory);
+          onSave(tags, folder);
+        }}
         className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-3 py-2 text-xs font-bold text-white shadow-sm"
       >
         <Save className="h-3 w-3" /> 保存
@@ -776,6 +804,12 @@ export function AnalysisStockPanel() {
   const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
   const [stockViewMode, setStockViewMode] = useState<"detail" | "compact">("detail");
   const [stockColumns, setStockColumns] = useState<number>(1);
+  // AIカテゴリ絞り込み（null=すべて / "__none__"=未分類 / その他=カテゴリ名）
+  const [aiCategoryFilter, setAiCategoryFilter] = useState<string | null>(null);
+  // 未分類カードの一括AI分類（進捗表示・中断対応）
+  const [bulkClassifying, setBulkClassifying] = useState(false);
+  const [bulkClassifyProgress, setBulkClassifyProgress] = useState({ done: 0, total: 0, failed: 0 });
+  const bulkClassifyAbortRef = useRef(false);
 
   const loadCustomFolders = useCallback((): string[] => {
     try {
@@ -1062,7 +1096,7 @@ export function AnalysisStockPanel() {
       // タイトルは元カードと同一にする（種別はバッジ「詳細にまとめる」で示す）
       const title = getDisplayTitle(record);
       // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
-      saveAnalysis({
+      const savedDetail = saveAnalysis({
         fileName: record.fileName,
         analysisType: "detail_summary",
         analysisLabel: "詳細にまとめる",
@@ -1071,6 +1105,8 @@ export function AnalysisStockPanel() {
         folder: record.folder,
         title,
       });
+      // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+      void classifyAnalysisInBackground(savedDetail.id, savedDetail.content);
       reload();
       toastOk(`「${title}」をストックに保存しました`);
     } catch (err) {
@@ -1103,7 +1139,7 @@ export function AnalysisStockPanel() {
       // タイトルは元カードと同一にする（種別はバッジ「要約・概要」で示す）
       const title = getDisplayTitle(record);
       // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
-      saveAnalysis({
+      const savedOverview = saveAnalysis({
         fileName: record.fileName,
         analysisType: "overview_summary",
         analysisLabel: "要約・概要",
@@ -1112,6 +1148,7 @@ export function AnalysisStockPanel() {
         folder: record.folder,
         title,
       });
+      void classifyAnalysisInBackground(savedOverview.id, savedOverview.content);
       reload();
       toastOk(`「${title}」をストックに保存しました`);
     } catch (err) {
@@ -1134,7 +1171,7 @@ export function AnalysisStockPanel() {
       // タイトルは元カードと同一にする（種別はバッジ「施策アドバイス」で示す）
       const title = getDisplayTitle(record);
       // 既存のストック保存経路で新規追加（ユニークID付与・既存カードは上書きしない）
-      saveAnalysis({
+      const savedAdvice = saveAnalysis({
         fileName: record.fileName,
         analysisType: "action_advice",
         analysisLabel: "施策アドバイス",
@@ -1143,6 +1180,7 @@ export function AnalysisStockPanel() {
         folder: record.folder,
         title,
       });
+      void classifyAnalysisInBackground(savedAdvice.id, savedAdvice.content);
       reload();
       toastOk(`「${title}」の施策アドバイスをストックに保存しました`);
     } catch (err) {
@@ -1230,8 +1268,16 @@ export function AnalysisStockPanel() {
       ? records.filter((r) => r.folder === activeFolder || (r.folder || "").startsWith(activeFolder + "/"))
       : records;
 
+  // AIカテゴリでの絞り込み（フォルダ絞り込みの後段に挟む。既存のフォルダ絞り込みは不変）
+  const categoryFiltered =
+    aiCategoryFilter === null
+      ? folderFiltered
+      : aiCategoryFilter === "__none__"
+        ? folderFiltered.filter((r) => !(r.aiCategory || "").trim())
+        : folderFiltered.filter((r) => (r.aiCategory || "").trim() === aiCategoryFilter);
+
   const filtered = search
-    ? folderFiltered.filter((r) => {
+    ? categoryFiltered.filter((r) => {
         const q = search.toLowerCase();
         return (
           getDisplayTitle(r).toLowerCase().includes(q) ||
@@ -1239,10 +1285,66 @@ export function AnalysisStockPanel() {
           r.content.toLowerCase().includes(q) ||
           r.analysisLabel.toLowerCase().includes(q) ||
           (r.folder || "").toLowerCase().includes(q) ||
+          (r.aiCategory || "").toLowerCase().includes(q) ||
           (r.tags || []).some((t) => t.toLowerCase().includes(q))
         );
       })
-    : folderFiltered;
+    : categoryFiltered;
+
+  // AIカテゴリのチップ表示用集計（件数付き・件数降順）
+  const aiCategorySummary = (() => {
+    const map = new Map<string, number>();
+    let none = 0;
+    for (const r of records) {
+      const c = (r.aiCategory || "").trim();
+      if (c) map.set(c, (map.get(c) || 0) + 1);
+      else none++;
+    }
+    return { list: Array.from(map.entries()).sort((a, b) => b[1] - a[1]), none };
+  })();
+
+  // 「未分類をAIで分類」：aiCategory未設定のレコードのみを順次分類。
+  // 失敗した件はスキップして続行。中断ボタンでループを止められる。
+  const runBulkClassify = async () => {
+    if (bulkClassifying) return;
+    const targets = loadAllAnalyses().filter((r) => !(r.aiCategory || "").trim());
+    if (targets.length === 0) {
+      toastOk("未分類のカードはありません");
+      return;
+    }
+    setBulkClassifying(true);
+    bulkClassifyAbortRef.current = false;
+    let done = 0;
+    let failed = 0;
+    setBulkClassifyProgress({ done: 0, total: targets.length, failed: 0 });
+    for (const t of targets) {
+      if (bulkClassifyAbortRef.current) break;
+      // 途中で（新規保存の裏分類などにより）カテゴリが付いた場合は再分類せずスキップ
+      const current = loadAllAnalyses().find((r) => r.id === t.id);
+      if (!current || (current.aiCategory || "").trim()) {
+        done++;
+        setBulkClassifyProgress({ done, total: targets.length, failed });
+        continue;
+      }
+      const cat = await generateCategoryWithTimeout(t.content, getExistingAiCategories());
+      if (cat) {
+        // aiCategoryのみ更新（content・folder・titleには触らない）
+        updateAnalysisAiCategory(t.id, cat);
+      } else {
+        failed++;
+      }
+      done++;
+      setBulkClassifyProgress({ done, total: targets.length, failed });
+    }
+    const aborted = bulkClassifyAbortRef.current;
+    setBulkClassifying(false);
+    reload();
+    toastOk(
+      aborted
+        ? `AI分類を中断しました（${done}/${targets.length}件処理・失敗${failed}件）`
+        : `AI分類が完了しました（${done}件処理・失敗${failed}件）`
+    );
+  };
 
   const handleAddFolder = () => {
     const trimmed = newFolderName.trim();
@@ -1808,7 +1910,7 @@ export function AnalysisStockPanel() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="ファイル名・内容・分析タイプ・タグ・フォルダで検索..."
+            placeholder="ファイル名・内容・分析タイプ・タグ・フォルダ・AIカテゴリで検索..."
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
           />
         </div>
@@ -1850,6 +1952,71 @@ export function AnalysisStockPanel() {
           </div>
         );
       })()}
+
+      {/* AIカテゴリ絞り込みチップ + 未分類の一括AI分類 */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="shrink-0 text-xs font-semibold text-gray-500">🏷 AIカテゴリ:</span>
+        <button
+          onClick={() => setAiCategoryFilter(null)}
+          className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+            aiCategoryFilter === null
+              ? "border-indigo-300 bg-indigo-100 font-semibold text-indigo-700"
+              : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          すべて ({records.length})
+        </button>
+        <button
+          onClick={() => setAiCategoryFilter("__none__")}
+          className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+            aiCategoryFilter === "__none__"
+              ? "border-indigo-300 bg-indigo-100 font-semibold text-indigo-700"
+              : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          未分類 ({aiCategorySummary.none})
+        </button>
+        {aiCategorySummary.list.map(([cat, count]) => (
+          <button
+            key={cat}
+            onClick={() => setAiCategoryFilter(aiCategoryFilter === cat ? null : cat)}
+            className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+              aiCategoryFilter === cat
+                ? "border-indigo-300 bg-indigo-100 font-semibold text-indigo-700"
+                : "border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-50"
+            }`}
+            title={`「${cat}」で絞り込み`}
+          >
+            {cat} ({count})
+          </button>
+        ))}
+        <span className="flex-1" />
+        {bulkClassifying ? (
+          <>
+            <span className="flex items-center gap-1 text-xs font-medium text-[#185FA5]">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              分類中... {bulkClassifyProgress.done}/{bulkClassifyProgress.total} 件完了
+              {bulkClassifyProgress.failed > 0 && `（失敗${bulkClassifyProgress.failed}件）`}
+            </span>
+            <button
+              onClick={() => { bulkClassifyAbortRef.current = true; }}
+              className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+            >
+              ⏸ 中断
+            </button>
+          </>
+        ) : (
+          aiCategorySummary.none > 0 && (
+            <button
+              onClick={runBulkClassify}
+              className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+              title="AIカテゴリが未設定のカードだけをAIで順次分類します（既存のカテゴリは上書きしません）"
+            >
+              🏷 未分類をAIで分類（{aiCategorySummary.none}件）
+            </button>
+          )
+        )}
+      </div>
 
       {/* 選択操作バー + 表示モード/列数切替 */}
       {filtered.length > 0 && (
@@ -2255,6 +2422,14 @@ export function AnalysisStockPanel() {
                     >
                       <FolderOpen className="inline h-2.5 w-2.5" />
                       {folderDisplayName}
+                    </span>
+                  )}
+                  {(r.aiCategory || "").trim() && (
+                    <span
+                      className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 border border-indigo-200"
+                      title={`AIカテゴリ: ${r.aiCategory}（タグ・フォルダ編集から変更できます）`}
+                    >
+                      🏷 {r.aiCategory}
                     </span>
                   )}
                   {r.locked && (
@@ -2724,6 +2899,9 @@ export function AnalysisStockPanel() {
                       reload();
                       toastOk("タグ・フォルダを保存しました");
                     }}
+                    onSaveAiCategory={(aiCategory) => {
+                      updateAnalysisAiCategory(r.id, aiCategory);
+                    }}
                     onClose={() => setEditingTagId(null)}
                   />
                 )}
@@ -2873,7 +3051,7 @@ export function AnalysisStockPanel() {
           sourceTitle={getDisplayTitle(proofreadRecord)}
           onClose={() => setProofreadRecord(null)}
           onSaveCard={(title, content, before) => {
-            saveAnalysis({
+            const savedProofread = saveAnalysis({
               fileName: proofreadRecord.fileName,
               analysisType: "proofread",
               analysisLabel: "校正済み",
@@ -2883,6 +3061,8 @@ export function AnalysisStockPanel() {
               title,
               proofreadBefore: before,
             });
+            // folder:"校正" は従来どおり固定。AIカテゴリは別フィールドに裏で付与
+            void classifyAnalysisInBackground(savedProofread.id, savedProofread.content);
             reload();
           }}
         />

@@ -16,6 +16,8 @@ export interface AnalysisRecord {
   proofreadBefore?: string;
   locked?: boolean;
   favorite?: boolean;
+  // AIが内容から自動付与するカテゴリ（folderとは独立。既存レコードはundefinedのままでよい）
+  aiCategory?: string;
 }
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
@@ -49,6 +51,22 @@ export function updateAnalysisTitle(id: string, title: string): void {
   const idx = records.findIndex((r) => r.id === id);
   if (idx !== -1) {
     records[idx].title = title;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.dispatchEvent(new Event("analysisStockUpdated"));
+  }
+}
+
+// AIカテゴリのみ更新（content・folder・titleには触らない）。空文字でクリア。
+export function updateAnalysisAiCategory(id: string, aiCategory: string): void {
+  const records = loadAllAnalyses();
+  const idx = records.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    const trimmed = aiCategory.trim();
+    if (trimmed) {
+      records[idx].aiCategory = trimmed;
+    } else {
+      delete records[idx].aiCategory;
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
     window.dispatchEvent(new Event("analysisStockUpdated"));
   }

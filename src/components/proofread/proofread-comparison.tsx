@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import type { AppliedFix } from "@/components/proofread/proofread-modal";
 import { toastOk } from "@/components/ui/toast-provider";
 
@@ -121,7 +122,7 @@ export function ProofreadComparison({
   };
 
   const handleSave = () => {
-    saveAnalysis({
+    const saved = saveAnalysis({
       fileName: title,
       analysisType: "proofread",
       analysisLabel: "校正済み",
@@ -131,6 +132,8 @@ export function ProofreadComparison({
       title: `【校正済み】${title}`,
       proofreadBefore: before,
     });
+    // folder:"校正" は従来どおり固定。AIカテゴリは別フィールドに裏で付与
+    void classifyAnalysisInBackground(saved.id, saved.content);
     toastOk("校正内容を「校正」フォルダに保存しました");
     onClose();
   };

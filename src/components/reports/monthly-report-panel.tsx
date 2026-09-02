@@ -5,6 +5,7 @@ import MarkdownView from "@/components/ui/markdown-view";
 import { Copy, Download, Loader2, BookmarkPlus, Sparkles } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { loadAllAnalyses, saveAnalysis, getDisplayTitle } from "@/lib/analysis-storage";
+import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
 
@@ -258,7 +259,7 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
   const handleSaveToStock = () => {
     const reportLabel = REPORT_TYPE_OPTIONS.find((r) => r.value === reportType)?.label ?? reportType;
     const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label ?? period;
-    saveAnalysis({
+    const saved = saveAnalysis({
       fileName: `${reportLabel}（${periodLabel}）`,
       analysisType: "report",
       analysisLabel: reportLabel,
@@ -266,6 +267,8 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
       tags: ["レポート", periodLabel],
       folder: "",
     });
+    // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+    void classifyAnalysisInBackground(saved.id, saved.content);
     toastOk("ストックに保存しました");
   };
 

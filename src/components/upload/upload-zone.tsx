@@ -10,6 +10,7 @@ import {
 } from "@/components/proofread/proofread-modal";
 import { ProofreadComparison } from "@/components/proofread/proofread-comparison";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { toastInfo } from "@/components/ui/toast-provider";
 
 const ACCEPTED_TYPES = [
@@ -306,7 +307,7 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
                 setComparison({ before, after, fixes })
               }
               onSaveCard={(title, content, before) => {
-                saveAnalysis({
+                const saved = saveAnalysis({
                   fileName: `テキスト入力_${todayStr}`,
                   analysisType: "proofread",
                   analysisLabel: "校正済み",
@@ -316,6 +317,8 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
                   title,
                   proofreadBefore: before,
                 });
+                // folder:"校正" は従来どおり固定。AIカテゴリは別フィールドに裏で付与
+                void classifyAnalysisInBackground(saved.id, saved.content);
               }}
             />
           )}
