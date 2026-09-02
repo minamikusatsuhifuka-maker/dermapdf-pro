@@ -77,6 +77,35 @@ const STOCK_GRID_CLASSES: Record<number, string> = {
   4: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2",
 };
 
+// 種別バッジの配色（analysisType → クラス）。既存の操作ボタンの色と対応させる
+// （青=詳細にまとめる／ティール=要約・概要／アンバー=施策／紫=校正）。
+// 未知の種別は現行の青系にフォールバックし、表示が壊れないようにする。
+// 種別を追加したらここに1行足すだけでよい。
+const TYPE_BADGE_FALLBACK_CLASS = "bg-[#E6F1FB] text-[#185FA5] border-[#B5D4F4]";
+const TYPE_BADGE_CLASSES: Record<string, string> = {
+  transcription: "bg-slate-100 text-slate-600 border-slate-300",
+  detail_summary: "bg-blue-50 text-blue-700 border-blue-200",
+  overview_summary: "bg-teal-50 text-teal-700 border-teal-200",
+  action_advice: "bg-amber-50 text-amber-700 border-amber-200",
+  proofread: "bg-purple-50 text-purple-700 border-purple-200",
+  presentation_script: "bg-rose-50 text-rose-700 border-rose-200",
+};
+function typeBadgeClass(analysisType: string): string {
+  // 校正系（proofread〜）はまとめて紫
+  if (analysisType?.startsWith("proofread")) return TYPE_BADGE_CLASSES.proofread;
+  return TYPE_BADGE_CLASSES[analysisType] || TYPE_BADGE_FALLBACK_CLASS;
+}
+
+// 文字数バッジの配色：量が増えるほど濃くなるエメラルド単色グラデーション
+// （種別バッジは色相で区別・文字数は濃度で区別、と役割を分ける）。
+// 境界は 3000 / 6000 / 10000。
+function charCountBadgeClass(len: number): string {
+  if (len >= 10000) return "bg-emerald-300 text-emerald-950 border-emerald-400";
+  if (len >= 6000) return "bg-emerald-200 text-emerald-900 border-emerald-300";
+  if (len >= 3000) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  return "bg-emerald-50 text-emerald-600 border-emerald-100";
+}
+
 // フォルダごとのカラーパレット（左端カラーバー・カラーバッジ用）
 const FOLDER_PALETTE = [
   "#378ADD",
@@ -2124,11 +2153,11 @@ export function AnalysisStockPanel() {
                         onClick={(e) => e.stopPropagation()}
                         className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
                       />
-                      <span className="shrink-0 rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium border ${typeBadgeClass(r.analysisType)}`}>
                         {r.analysisLabel}
                       </span>
                       {visibleTextLength(r.content) > 0 && (
-                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold border ${charCountBadgeClass(visibleTextLength(r.content))}`}>
                           {visibleTextLength(r.content).toLocaleString()} 文字
                         </span>
                       )}
@@ -2158,11 +2187,11 @@ export function AnalysisStockPanel() {
                           onClick={(e) => e.stopPropagation()}
                           className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
                         />
-                        <span className="shrink-0 rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium border ${typeBadgeClass(r.analysisType)}`}>
                           {r.analysisLabel}
                         </span>
                         {visibleTextLength(r.content) > 0 && (
-                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold border ${charCountBadgeClass(visibleTextLength(r.content))}`}>
                             {visibleTextLength(r.content).toLocaleString()} 文字
                           </span>
                         )}
@@ -2208,13 +2237,13 @@ export function AnalysisStockPanel() {
                     onClick={(e) => e.stopPropagation()}
                     className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#378ADD] focus:ring-[#B5D4F4]"
                   />
-                  <span className="rounded-full bg-[#E6F1FB] px-2 py-0.5 text-xs font-medium text-[#185FA5] border border-[#B5D4F4]">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium border ${typeBadgeClass(r.analysisType)}`}>
                     {r.analysisLabel}
                   </span>
                   {/* 文字数: 種別バッジ直後・タイトルの左に強調表示（日付とは分離）。
                       0/未取得は従来どおり非表示。算出は visibleTextLength を据え置き。 */}
                   {visibleTextLength(r.content) > 0 && (
-                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200">
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold border ${charCountBadgeClass(visibleTextLength(r.content))}`}>
                       {visibleTextLength(r.content).toLocaleString()} 文字
                     </span>
                   )}
