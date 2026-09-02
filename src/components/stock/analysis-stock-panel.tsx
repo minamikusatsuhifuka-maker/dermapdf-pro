@@ -815,6 +815,13 @@ export function AnalysisStockPanel() {
   const [titleOnlySearch, setTitleOnlySearch] = useState(false);
   // 本文の全画面表示（閲覧専用モーダル）。編集はカード側の✏️のみで行う
   const [fullscreenId, setFullscreenId] = useState<string | null>(null);
+  // 選択カードの横並び比較ビュー（閲覧専用モーダル。選択状態は読むだけでクリアしない）
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareFullscreen, setCompareFullscreen] = useState(false);
+  const [compareSync, setCompareSync] = useState(true);
+  const [compareFontSize, setCompareFontSize] = useState(13);
+  const compareScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const compareSyncingRef = useRef(false);
   // 未分類カードの一括AI分類（進捗表示・中断対応）
   const [bulkClassifying, setBulkClassifying] = useState(false);
   const [bulkClassifyProgress, setBulkClassifyProgress] = useState({ done: 0, total: 0, failed: 0 });
@@ -934,6 +941,43 @@ export function AnalysisStockPanel() {
       document.body.style.overflow = prevOverflow;
     };
   }, [fullscreenId]);
+
+  // 比較モーダル表示中のみ: Escで閉じる + 背景スクロールを止める（全画面表示と同じ作法）
+  useEffect(() => {
+    if (!compareOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCompareOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [compareOpen]);
+
+  // 比較モーダルのスクロール同期（進捗率方式）。
+  // 同期でプログラム的に動かした分が再発火して往復しないよう ref フラグ + rAF で抑制。
+  // scrollHeight - clientHeight が 0 の列（スクロール不要）は 0 除算を避けて同期対象外。
+  const handleCompareScroll = (sourceId: string) => {
+    if (!compareSync || compareSyncingRef.current) return;
+    const src = compareScrollRefs.current[sourceId];
+    if (!src) return;
+    const denom = src.scrollHeight - src.clientHeight;
+    if (denom <= 0) return;
+    const ratio = src.scrollTop / denom;
+    compareSyncingRef.current = true;
+    for (const [otherId, el] of Object.entries(compareScrollRefs.current)) {
+      if (otherId === sourceId || !el) continue;
+      const d = el.scrollHeight - el.clientHeight;
+      if (d <= 0) continue;
+      el.scrollTop = ratio * d;
+    }
+    requestAnimationFrame(() => {
+      compareSyncingRef.current = false;
+    });
+  };
 
   const setCardHeight = (id: string, h: number) => {
     setContentHeights((prev) => ({ ...prev, [id]: h }));
@@ -2320,6 +2364,37 @@ export function AnalysisStockPanel() {
             >
               📋 一括複製
             </button>
+            {(() => {
+              // 編集モード中のカードは比較対象から外す（比較ビューは閲覧専用のため）
+              const compareTargets = records.filter(
+                (r) => selectedIds.has(r.id) && bodyEditingId !== r.id
+              );
+              const canCompare = compareTargets.length >= 2 && compareTargets.length <= 3;
+              return (
+                <button
+                  onClick={() => {
+                    if (!canCompare) return;
+                    setCompareFontSize(fontSize);
+                    setCompareFullscreen(false);
+                    setCompareSync(true);
+                    setCompareOpen(true);
+                  }}
+                  disabled={!canCompare}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors ${
+                    canCompare
+                      ? "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
+                      : "bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed"
+                  }`}
+                  title={
+                    canCompare
+                      ? `選択した${compareTargets.length}件を横並びで比較`
+                      : "比較は2〜3件選んでください（編集中のカードは対象外）"
+                  }
+                >
+                  ⇹ 選択した{compareTargets.length}件を比較
+                </button>
+              );
+            })()}
 
             <span className="text-gray-300">|</span>
 
@@ -3279,6 +3354,155 @@ export function AnalysisStockPanel() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 選択カードの横並び比較モーダル（閲覧専用・contentEditableは置かない） */}
+      {compareOpen && (() => {
+        // 一覧の並び順で左から。編集モード中のカードは対象外
+        const compareRecords = records
+          .filter((r) => selectedIds.has(r.id) && bodyEditingId !== r.id)
+          .slice(0, 3);
+        if (compareRecords.length < 2) return null;
+        return (
+          <div
+            className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-sm ${
+              compareFullscreen ? "p-0" : "p-3 sm:p-6"
+            }`}
+            onClick={() => setCompareOpen(false)}
+          >
+            <div
+              className={`flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl ${
+                compareFullscreen ? "" : "rounded-xl"
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* ツールバー: 同期トグル・文字サイズ・全画面・閉じる */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-2">
+                <span className="text-sm font-bold text-gray-700">
+                  ⇹ 比較（{compareRecords.length}件）
+                </span>
+                <button
+                  onClick={() => setCompareSync(!compareSync)}
+                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                    compareSync
+                      ? "border-[#378ADD] bg-[#E6F1FB] font-semibold text-[#185FA5]"
+                      : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                  }`}
+                  title="ONにすると、ある列のスクロールに合わせて他の列も同じ進捗率の位置に揃います"
+                >
+                  ⇅ スクロール同期 {compareSync ? "ON" : "OFF"}
+                </button>
+                {/* 文字サイズ（既存のA−/A＋作法・全列一括適用） */}
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  文字
+                  <button
+                    onClick={() => setCompareFontSize((f) => Math.max(10, f - 1))}
+                    className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+                    title="文字を小さく"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center">{compareFontSize}px</span>
+                  <button
+                    onClick={() => setCompareFontSize((f) => Math.min(24, f + 1))}
+                    className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+                    title="文字を大きく"
+                  >
+                    ＋
+                  </button>
+                </span>
+                <span className="flex-1" />
+                <button
+                  onClick={() => setCompareFullscreen(!compareFullscreen)}
+                  className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+                    compareFullscreen
+                      ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
+                      : "border-gray-200 text-gray-500 hover:border-[#B5D4F4]"
+                  }`}
+                  title={compareFullscreen ? "全画面を解除" : "画面いっぱいに広げる"}
+                >
+                  ⛶ {compareFullscreen ? "全画面解除" : "全画面"}
+                </button>
+                <button
+                  onClick={() => setCompareOpen(false)}
+                  className="shrink-0 rounded p-1.5 hover:bg-gray-100"
+                  title="閉じる（Esc）"
+                >
+                  <X className="h-4 w-4 text-gray-500" />
+                </button>
+              </div>
+              {/* 列（2〜3列・各列独立スクロール） */}
+              <div className="flex flex-1 divide-x divide-gray-200 overflow-hidden">
+                {compareRecords.map((cr) => (
+                  <div key={cr.id} className="flex min-w-0 flex-1 flex-col">
+                    {/* 列ヘッダ: タイトル + バッジ + 日付（既存配色ヘルパを流用） */}
+                    <div className="shrink-0 space-y-1 border-b border-gray-100 bg-gray-50/50 px-3 py-2">
+                      <div
+                        className="truncate text-sm font-bold text-gray-800"
+                        title={getDisplayTitle(cr)}
+                      >
+                        {getDisplayTitle(cr)}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium border ${typeBadgeClass(cr.analysisType)}`}>
+                          {cr.analysisLabel}
+                        </span>
+                        {visibleTextLength(cr.content) > 0 && (
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold border ${charCountBadgeClass(visibleTextLength(cr.content))}`}>
+                            {visibleTextLength(cr.content).toLocaleString()} 文字
+                          </span>
+                        )}
+                        {(cr.aiCategory || "").trim() && (
+                          <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 border border-indigo-200">
+                            🏷 {cr.aiCategory}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-gray-400">
+                          {new Date(cr.createdAt).toLocaleString("ja-JP")}
+                        </span>
+                      </div>
+                    </div>
+                    {/* 列本文: 既存のHTML/Markdown出し分けを流用（読み取り専用） */}
+                    <div
+                      ref={(el) => {
+                        compareScrollRefs.current[cr.id] = el;
+                      }}
+                      onScroll={() => handleCompareScroll(cr.id)}
+                      className="flex-1 overflow-y-auto px-3 py-3"
+                    >
+                      {isHtmlContent(cr.content) ? (
+                        <div
+                          dangerouslySetInnerHTML={{ __html: cr.content || "" }}
+                          className="whitespace-pre-wrap text-gray-700"
+                          style={{
+                            fontSize: `${compareFontSize}px`,
+                            lineHeight: "1.7",
+                            wordBreak: "break-word",
+                            userSelect: "text",
+                            WebkitUserSelect: "text",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="text-gray-700"
+                          style={{
+                            fontSize: `${compareFontSize}px`,
+                            lineHeight: "1.7",
+                            wordBreak: "break-word",
+                            userSelect: "text",
+                            WebkitUserSelect: "text",
+                          }}
+                        >
+                          <MarkdownView>{cr.content || ""}</MarkdownView>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
