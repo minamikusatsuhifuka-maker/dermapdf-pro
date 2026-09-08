@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import MarkdownView from "@/components/ui/markdown-view";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X, Check, GripVertical } from "lucide-react";
@@ -497,6 +498,8 @@ const EXTRA_TYPE_LABELS: Record<string, string> = {
 const READER_LEVEL_KEY = "dermapdf_reader_level";
 // 生成結果の自動保存ON/OFF（既定ON）。"0" のときだけOFF。
 const AUTO_SAVE_KEY = "dermapdf_auto_save";
+// 分析タイプの選択状態（selectedTypes）の保持キー。保存値が無い初回だけ基本3種を既定ONにする。
+const SELECTED_TYPES_KEY = "dermapdf_selected_types";
 
 // 自動保存の進行状態（結果カードの「ストック」ボタン表示に使う）。
 // text を持つのは、平易化・編集で本文が変わったら「保存済み」を外すため（保存内容との不一致防止）。
@@ -574,6 +577,40 @@ export function GeminiPanel({
   const [selectedTypes, setSelectedTypes] = useState<Set<AnalysisType>>(
     () => new Set<AnalysisType>()
   );
+  // 選択状態の復元（マウント後）。保存値があればそれを（既知タイプのみ）、無ければ基本3種を既定ON。
+  // 復元前の初期値（空）を保存してしまわないよう、復元完了後にだけ保存する。
+  const selectedTypesRestoredRef = useRef(false);
+  useEffect(() => {
+    const known = new Set<AnalysisType>(
+      ANALYSIS_GROUPS.flatMap((gr) => gr.options.map((o) => o.value))
+    );
+    try {
+      const raw = window.localStorage.getItem(SELECTED_TYPES_KEY);
+      if (raw !== null) {
+        const parsed: unknown = JSON.parse(raw);
+        const list = (Array.isArray(parsed) ? parsed : []).filter(
+          (v): v is AnalysisType => typeof v === "string" && known.has(v as AnalysisType)
+        );
+        setSelectedTypes(new Set(list));
+      } else {
+        setSelectedTypes(new Set(BASIC_TRIO_ORDER));
+      }
+    } catch {
+      setSelectedTypes(new Set(BASIC_TRIO_ORDER));
+    }
+    selectedTypesRestoredRef.current = true;
+  }, []);
+  useEffect(() => {
+    if (!selectedTypesRestoredRef.current) return;
+    try {
+      window.localStorage.setItem(
+        SELECTED_TYPES_KEY,
+        JSON.stringify(Array.from(selectedTypes))
+      );
+    } catch {
+      /* 保存不可でも当該セッションでは反映される */
+    }
+  }, [selectedTypes]);
   // 専門グループ（基本分析以外）の表示トグルと、チップアコーディオンの開閉
   const [showSpecializedGroups, setShowSpecializedGroups] = useState(false);
   const [openChip, setOpenChip] = useState<string | null>(null);
@@ -639,7 +676,10 @@ export function GeminiPanel({
     syncScrollByRatio(type, resultScrollRefs.current, resultSyncingRef);
   };
   // 結果カード全体への一括高さ指定（null=未指定。各カードは個別状態を持ち続ける）
-  const [bulkHeight, setBulkHeight] = useState<BulkHeight | null>(null);
+  const [bulkHeight, setBulkHeight] = useState<BulkHeight | null>({
+    h: 500,
+    seq: 0,
+  });
   // 結果カードの全画面比較（閲覧専用モーダル）
   const [resultCompareOpen, setResultCompareOpen] = useState(false);
   const [resultCompareFontSize, setResultCompareFontSize] = useState(13);
@@ -2257,6 +2297,14 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
   const selectClass =
     "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]";
 
+  // 実行ボタンの押下不可条件（上部ショートカットと下部ボタンで同一）
+  const analyzeDisabled =
+    loading ||
+    selectedTypes.size === 0 ||
+    (isTextMode
+      ? !inputText?.trim()
+      : !fileBase64 && !(imageParts && imageParts.length > 0));
+
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
       {/* 見出し行：中央にワンクリック全文書き起こし（開いてすぐ押せる最短導線）。
@@ -2421,9 +2469,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           )}
         </label>
         <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-          {/* 基本分析（常時表示）。右端に3種の一括選択トグル。 */}
+          {/* 基本分析（常時表示）。見出しのすぐ右に3種の一括選択トグル、その右隣に実行ショートカット。 */}
           <div className="border-b border-gray-100">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gray-50 text-sm font-medium text-gray-700">
+            <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-gray-50 text-sm font-medium text-gray-700">
               <span>{ANALYSIS_GROUPS[0].label}</span>
               <button
                 type="button"
@@ -2437,6 +2485,21 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 title="全文書き起こし・概要・要約・詳細にまとめる の3つをまとめて選択／解除"
               >
                 {basicTrioAllSelected ? "3つの選択を解除" : "3つすべて選択"}
+              </button>
+              {/* 実行ショートカット：下部の実行ボタンと同じハンドラ・disabled条件・ローディング表示 */}
+              <button
+                type="button"
+                onClick={() => handleAnalyze()}
+                disabled={analyzeDisabled}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-bold text-white shadow transition-opacity disabled:opacity-40"
+                title="いま選択中の分析タイプで実行（下部の実行ボタンと同じ）"
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <span>🚀</span>
+                )}
+                {loading ? "分析中..." : "実行"}
               </button>
             </div>
             {renderGroupOptions(ANALYSIS_GROUPS[0], true)}
@@ -2688,13 +2751,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => handleAnalyze()}
-          disabled={
-            loading ||
-            selectedTypes.size === 0 ||
-            (isTextMode
-              ? !inputText?.trim()
-              : !fileBase64 && !(imageParts && imageParts.length > 0))
-          }
+          disabled={analyzeDisabled}
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
@@ -2854,13 +2911,16 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           体裁・同期・文字サイズ・Esc/✕/背景クリック・背景スクロール停止は 6f0ea00 と同じ作法） */}
       {resultCompareOpen && results.size > 0 && (() => {
         const compareEntries = orderResultEntries(results);
-        return (
+        // ⚠ 分析パネルの親（backdrop-blur-xl）が fixed の包含ブロックになり、inset-0 が
+        // ビューポートではなくパネルの箱に張り付いてしまう。document.body へポータルで
+        // 逃がし、高さは 100dvh で明示。flex 子には min-h-0 を付けて内容に押し広げられないようにする。
+        return createPortal(
           <div
-            className="fixed inset-0 z-50 bg-black/60 p-0 backdrop-blur-sm"
+            className="fixed inset-0 z-50 h-[100dvh] w-screen bg-black/60 p-0 backdrop-blur-sm"
             onClick={() => setResultCompareOpen(false)}
           >
             <div
-              className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl"
+              className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-2">
@@ -2911,9 +2971,9 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                   <X className="h-4 w-4 text-gray-500" />
                 </button>
               </div>
-              <div className="flex flex-1 divide-x divide-gray-200 overflow-hidden">
+              <div className="flex min-h-0 flex-1 divide-x divide-gray-200 overflow-hidden">
                 {compareEntries.map(([type, text]) => (
-                  <div key={type} className="flex min-w-0 flex-1 flex-col">
+                  <div key={type} className="flex min-h-0 min-w-0 flex-1 flex-col">
                     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50/50 px-3 py-2">
                       <span className="text-sm font-semibold text-[#378ADD]">
                         {getLabel(type)}
@@ -2927,7 +2987,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                         resultCompareRefs.current[type] = el;
                       }}
                       onScroll={() => handleResultCompareScroll(type)}
-                      className="flex-1 overflow-y-auto px-3 py-3"
+                      className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
                     >
                       <div
                         className="max-w-none text-gray-700"
@@ -2946,7 +3006,8 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 ))}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
