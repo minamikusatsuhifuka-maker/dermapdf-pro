@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
+import { syncScrollByRatio } from "@/lib/scroll-sync";
 import { appendToMemoSheet, loadMemoSheets } from "@/lib/memo-storage";
 import MemoPadPanel from "@/components/stock/memo-pad-panel";
 import { PipMemoPanel } from "@/components/stock/pip-memo-panel";
@@ -1015,23 +1016,10 @@ export function AnalysisStockPanel() {
   // 比較モーダルのスクロール同期（進捗率方式）。
   // 同期でプログラム的に動かした分が再発火して往復しないよう ref フラグ + rAF で抑制。
   // scrollHeight - clientHeight が 0 の列（スクロール不要）は 0 除算を避けて同期対象外。
+  // ロジック本体は lib/scroll-sync.ts に切り出し（結果カード側と共用。挙動は従来と同一）。
   const handleCompareScroll = (sourceId: string) => {
-    if (!compareSync || compareSyncingRef.current) return;
-    const src = compareScrollRefs.current[sourceId];
-    if (!src) return;
-    const denom = src.scrollHeight - src.clientHeight;
-    if (denom <= 0) return;
-    const ratio = src.scrollTop / denom;
-    compareSyncingRef.current = true;
-    for (const [otherId, el] of Object.entries(compareScrollRefs.current)) {
-      if (otherId === sourceId || !el) continue;
-      const d = el.scrollHeight - el.clientHeight;
-      if (d <= 0) continue;
-      el.scrollTop = ratio * d;
-    }
-    requestAnimationFrame(() => {
-      compareSyncingRef.current = false;
-    });
+    if (!compareSync) return;
+    syncScrollByRatio(sourceId, compareScrollRefs.current, compareSyncingRef);
   };
 
   const setCardHeight = (id: string, h: number) => {

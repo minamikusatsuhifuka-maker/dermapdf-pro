@@ -11,6 +11,7 @@ import {
   analyzeImagesWithGemini,
 } from "@/lib/gemini-client";
 import { saveAnalysis } from "@/lib/analysis-storage";
+import { syncScrollByRatio } from "@/lib/scroll-sync";
 import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { copyRichText } from "@/lib/clipboard-rich";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
@@ -115,6 +116,21 @@ const HEIGHT_PRESETS: { label: string; h: number }[] = [
   { label: "L", h: 500 },
   { label: "全", h: 9999 },
 ];
+
+// 結果カード全体への一括高さ指定。seq を進めるたびに各カードが自分の panelHeight を揃える
+// （同じ値を続けて押しても効くように seq を持つ）。個別のS/M/L/全はその後も従来どおり使える。
+type BulkHeight = { h: number; seq: number };
+
+// 全画面比較などで結果を固定順に並べる：全文書き起こし → 概要・要約 → 詳細にまとめる → その他（実行順）。
+function orderResultEntries(
+  results: Map<AnalysisType, string>
+): [AnalysisType, string][] {
+  const rank = (t: AnalysisType) => {
+    const i = BASIC_TRIO_ORDER.indexOf(t);
+    return i === -1 ? 99 : i;
+  };
+  return Array.from(results.entries()).sort((a, b) => rank(a[0]) - rank(b[0]));
+}
 
 const ANALYSIS_GROUPS: AnalysisGroup[] = [
   {
@@ -613,6 +629,40 @@ export function GeminiPanel({
   // 今回の実行のグループID（複数タイプ同時実行のときだけ発行。単独実行は null）。
   // 自動保存・手動ストックの両方でこの値を groupId に付け、保存カード側で1枚にまとめる。
   const runGroupIdRef = useRef<string | null>(null);
+
+  // 結果カードのスクロール同期（進捗率方式・既定ON）。保存カード比較ビュー(6f0ea00)と同じ作法。
+  const [resultSync, setResultSync] = useState(true);
+  const resultScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const resultSyncingRef = useRef(false);
+  const handleResultScroll = (type: AnalysisType) => {
+    if (!resultSync) return;
+    syncScrollByRatio(type, resultScrollRefs.current, resultSyncingRef);
+  };
+  // 結果カード全体への一括高さ指定（null=未指定。各カードは個別状態を持ち続ける）
+  const [bulkHeight, setBulkHeight] = useState<BulkHeight | null>(null);
+  // 結果カードの全画面比較（閲覧専用モーダル）
+  const [resultCompareOpen, setResultCompareOpen] = useState(false);
+  const [resultCompareFontSize, setResultCompareFontSize] = useState(13);
+  const resultCompareRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const resultCompareSyncingRef = useRef(false);
+  const handleResultCompareScroll = (type: AnalysisType) => {
+    if (!resultSync) return;
+    syncScrollByRatio(type, resultCompareRefs.current, resultCompareSyncingRef);
+  };
+  // 全画面比較の表示中のみ: Escで閉じる + 背景スクロールを止める（6f0ea00 と同じ作法）
+  useEffect(() => {
+    if (!resultCompareOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setResultCompareOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [resultCompareOpen]);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
   // 全文書き起こしオプション（既定: 手書きメモ含めない／空欄補足／著作権表記含めない）
@@ -1510,6 +1560,7 @@ export function GeminiPanel({
     setResult("");
     setResults(new Map());
     setAutoSaveStates(new Map());
+    setResultCompareOpen(false);
     setTranscriptionProgress("");
     runGroupIdRef.current =
       types.length > 1
@@ -2710,6 +2761,53 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             )
           : Array.from(results.entries());
         return (
+        <>
+        {/* 結果カード共通ツールバー: スクロール同期(2列以上)・一括高さ・全画面比較 */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {results.size >= 2 && (
+            <button
+              type="button"
+              onClick={() => setResultSync(!resultSync)}
+              className={`rounded-full border px-2 py-0.5 transition-colors ${
+                resultSync
+                  ? "border-[#378ADD] bg-[#E6F1FB] font-semibold text-[#185FA5]"
+                  : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+              }`}
+              title="ONにすると、あるカードのスクロールに合わせて他のカードも同じ進捗率の位置に揃います"
+            >
+              ⇅ スクロール同期 {resultSync ? "ON" : "OFF"}
+            </button>
+          )}
+          <span className="flex items-center gap-1 text-gray-500">
+            <span className="text-[10px] text-gray-400">全カードの高さ:</span>
+            {HEIGHT_PRESETS.map(({ label, h }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() =>
+                  setBulkHeight((prev) => ({ h, seq: (prev?.seq ?? 0) + 1 }))
+                }
+                className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                  bulkHeight?.h === h
+                    ? "bg-[#378ADD] text-white border-[#378ADD]"
+                    : "border-gray-200 text-gray-500 hover:border-[#378ADD]"
+                }`}
+                title="すべての結果カードの高さを揃える（個別の高さ切替はその後も使えます）"
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setResultCompareOpen(true)}
+            className="rounded border border-gray-200 px-2 py-0.5 text-gray-600 transition-colors hover:border-[#B5D4F4] hover:text-[#185FA5]"
+            title="結果カードを全画面で横並び比較（閲覧専用・編集はカードの✏️で）"
+          >
+            ⛶ 全画面で比較
+          </button>
+        </div>
         <div
           className={`grid gap-4 ${
             isBasicTrio
@@ -2740,9 +2838,115 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               onDownloadTxt={() => downloadTxt(type, text)}
               onDownloadMd={() => downloadMd(type, text)}
               onDownloadWord={() => downloadWord(type, text)}
+              bulkHeight={bulkHeight}
+              bodyScrollRef={(el) => {
+                resultScrollRefs.current[type] = el;
+              }}
+              onBodyScroll={() => handleResultScroll(type)}
             />
           ))}
         </div>
+        </>
+        );
+      })()}
+
+      {/* 結果カードの全画面比較モーダル（閲覧専用・contentEditable/textareaは置かない。
+          体裁・同期・文字サイズ・Esc/✕/背景クリック・背景スクロール停止は 6f0ea00 と同じ作法） */}
+      {resultCompareOpen && results.size > 0 && (() => {
+        const compareEntries = orderResultEntries(results);
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 p-0 backdrop-blur-sm"
+            onClick={() => setResultCompareOpen(false)}
+          >
+            <div
+              className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-2">
+                <span className="text-sm font-bold text-gray-700">
+                  ⇹ 結果の比較（{compareEntries.length}件）
+                </span>
+                {compareEntries.length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setResultSync(!resultSync)}
+                    className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                      resultSync
+                        ? "border-[#378ADD] bg-[#E6F1FB] font-semibold text-[#185FA5]"
+                        : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                    }`}
+                    title="ONにすると、ある列のスクロールに合わせて他の列も同じ進捗率の位置に揃います"
+                  >
+                    ⇅ スクロール同期 {resultSync ? "ON" : "OFF"}
+                  </button>
+                )}
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  文字
+                  <button
+                    type="button"
+                    onClick={() => setResultCompareFontSize((f) => Math.max(10, f - 1))}
+                    className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+                    title="文字を小さく"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center">{resultCompareFontSize}px</span>
+                  <button
+                    type="button"
+                    onClick={() => setResultCompareFontSize((f) => Math.min(24, f + 1))}
+                    className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 font-bold hover:border-[#B5D4F4]"
+                    title="文字を大きく"
+                  >
+                    ＋
+                  </button>
+                </span>
+                <span className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => setResultCompareOpen(false)}
+                  className="shrink-0 rounded p-1.5 hover:bg-gray-100"
+                  title="閉じる（Esc）"
+                >
+                  <X className="h-4 w-4 text-gray-500" />
+                </button>
+              </div>
+              <div className="flex flex-1 divide-x divide-gray-200 overflow-hidden">
+                {compareEntries.map(([type, text]) => (
+                  <div key={type} className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50/50 px-3 py-2">
+                      <span className="text-sm font-semibold text-[#378ADD]">
+                        {getLabel(type)}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {text.length.toLocaleString()} 文字
+                      </span>
+                    </div>
+                    <div
+                      ref={(el) => {
+                        resultCompareRefs.current[type] = el;
+                      }}
+                      onScroll={() => handleResultCompareScroll(type)}
+                      className="flex-1 overflow-y-auto px-3 py-3"
+                    >
+                      <div
+                        className="max-w-none text-gray-700"
+                        style={{
+                          fontSize: `${resultCompareFontSize}px`,
+                          lineHeight: "1.7",
+                          wordBreak: "break-word",
+                          userSelect: "text",
+                          WebkitUserSelect: "text",
+                        }}
+                      >
+                        <MarkdownView>{text}</MarkdownView>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         );
       })()}
 
@@ -2964,6 +3168,9 @@ function ResultPanel({
   onDownloadTxt,
   onDownloadMd,
   onDownloadWord,
+  bulkHeight,
+  bodyScrollRef,
+  onBodyScroll,
 }: {
   type: AnalysisType;
   label: string;
@@ -2981,6 +3188,11 @@ function ResultPanel({
   onDownloadTxt: () => void | Promise<void>;
   onDownloadMd: () => void | Promise<void>;
   onDownloadWord: () => void | Promise<void>;
+  // 一括高さ指定（親から。seq が進むたびに自分の panelHeight を揃える）
+  bulkHeight?: BulkHeight | null;
+  // 本文スクロール枠の参照登録と onScroll（親のスクロール同期用。閲覧表示のときだけ有効）
+  bodyScrollRef?: (el: HTMLDivElement | null) => void;
+  onBodyScroll?: () => void;
 }) {
   const [editedText, setEditedText] = useState(text);
   const [isEditing, setIsEditing] = useState(false);
@@ -2992,6 +3204,10 @@ function ResultPanel({
   const [pending, setPending] = useState<"save" | "txt" | "md" | "word" | null>(null);
   // 本文エリアの高さ（プリセット値・初期値=M=350）
   const [panelHeight, setPanelHeight] = useState<number>(350);
+  // 一括高さ指定が更新されたら自分の高さも揃える（個別切替はその後も従来どおり効く）
+  useEffect(() => {
+    if (bulkHeight) setPanelHeight(bulkHeight.h);
+  }, [bulkHeight]);
   // 保存済み表示の状態（このカード単位・ボタン種別ごとに保持）。
   // メモリ内stateのみ（新storageキーは作らない）。保存を伴うボタンが
   // 今後増えても action 文字列を足すだけで使い回せる汎用の形。
@@ -3084,6 +3300,8 @@ function ResultPanel({
         />
       ) : (
         <div
+          ref={bodyScrollRef}
+          onScroll={onBodyScroll}
           className="overflow-y-auto resize-y rounded border border-gray-100 p-2 bg-white/60"
           style={{
             height: panelHeight === 9999 ? "auto" : `${panelHeight}px`,
