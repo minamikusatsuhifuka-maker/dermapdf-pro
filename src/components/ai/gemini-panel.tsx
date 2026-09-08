@@ -122,8 +122,14 @@ const ANALYSIS_GROUPS: AnalysisGroup[] = [
     options: [
       { value: "summary", label: "概要・要約" },
       { value: "detail_summary", label: "詳細にまとめる" },
-      { value: "genspark_slide", label: "Gensparkスライド資料用まとめ" },
       { value: "transcription", label: "全文書き起こし" },
+    ],
+  },
+  {
+    // 旧・基本分析から移動（内部キー・プロンプトは不変。表示位置のみ「その他の分析タイプ」内へ）
+    label: "\u{1F39E}\uFE0F スライド資料",
+    options: [
+      { value: "genspark_slide", label: "Gensparkスライド資料用まとめ" },
     ],
   },
   {
@@ -227,6 +233,14 @@ const ANALYSIS_GROUPS: AnalysisGroup[] = [
       { value: "handout_a4", label: "ハンドアウト（1枚）" },
     ],
   },
+];
+
+// 基本分析3種の固定順（一括選択の対象／結果3列表示の左→右の並び）。
+// DnDの表示順（basicOrder）とは独立。結果の左右が実行のたびに入れ替わらないよう固定する。
+const BASIC_TRIO_ORDER: AnalysisType[] = [
+  "transcription",
+  "summary",
+  "detail_summary",
 ];
 
 // 基本分析タイプの表示順（DnD並べ替え）をlocalStorageに保存するキーと既定順。
@@ -578,6 +592,25 @@ export function GeminiPanel({
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
+      return next;
+    });
+  };
+
+  // 基本分析3種（全文書き起こし・概要・要約・詳細にまとめる）が全て選択済みか
+  const basicTrioAllSelected = BASIC_TRIO_ORDER.every((t) =>
+    selectedTypes.has(t)
+  );
+
+  // 基本分析3種の一括選択トグル。3つとも選択済みなら3つだけ解除、そうでなければ3つを追加。
+  // アコーディオン内（Genspark等）の選択状態には触れない（3キーの追加・削除のみ）。
+  const toggleBasicTrio = () => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev);
+      const all = BASIC_TRIO_ORDER.every((t) => next.has(t));
+      BASIC_TRIO_ORDER.forEach((t) => {
+        if (all) next.delete(t);
+        else next.add(t);
+      });
       return next;
     });
   };
@@ -2285,10 +2318,23 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
           )}
         </label>
         <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-          {/* 基本分析（常時表示） */}
+          {/* 基本分析（常時表示）。右端に3種の一括選択トグル。 */}
           <div className="border-b border-gray-100">
-            <div className="px-3 py-2 bg-gray-50 text-sm font-medium text-gray-700">
-              {ANALYSIS_GROUPS[0].label}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gray-50 text-sm font-medium text-gray-700">
+              <span>{ANALYSIS_GROUPS[0].label}</span>
+              <button
+                type="button"
+                onClick={toggleBasicTrio}
+                aria-pressed={basicTrioAllSelected}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  basicTrioAllSelected
+                    ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-[#378ADD] hover:text-[#185FA5]"
+                }`}
+                title="全文書き起こし・概要・要約・詳細にまとめる の3つをまとめて選択／解除"
+              >
+                {basicTrioAllSelected ? "3つの選択を解除" : "3つすべて選択"}
+              </button>
             </div>
             {renderGroupOptions(ANALYSIS_GROUPS[0], true)}
           </div>
@@ -2571,16 +2617,29 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         </div>
       )}
 
-      {/* 結果表示（複数選択時は2カラムグリッド、単一は1カラム） */}
-      {results.size > 0 && (
+      {/* 結果表示（複数選択時は2カラムグリッド、単一は1カラム）。
+          基本3種（全文書き起こし・概要・要約・詳細にまとめる）ちょうど3件のときだけ
+          1行3列＋固定順（左→右: 書き起こし→要約→詳細）で比較表示。それ以外は現行どおり。 */}
+      {results.size > 0 && (() => {
+        const isBasicTrio =
+          results.size === BASIC_TRIO_ORDER.length &&
+          BASIC_TRIO_ORDER.every((t) => results.has(t));
+        const entries = isBasicTrio
+          ? BASIC_TRIO_ORDER.map(
+              (t) => [t, results.get(t) ?? ""] as [AnalysisType, string]
+            )
+          : Array.from(results.entries());
+        return (
         <div
           className={`grid gap-4 ${
-            results.size >= 2
+            isBasicTrio
+              ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+              : results.size >= 2
               ? "grid-cols-1 lg:grid-cols-2"
               : "grid-cols-1"
           }`}
         >
-          {Array.from(results.entries()).map(([type, text]) => (
+          {entries.map(([type, text]) => (
             <ResultPanel
               key={type}
               type={type}
@@ -2600,7 +2659,8 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
             />
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {/* Genspark プレゼン資料生成 */}
       {result && (
