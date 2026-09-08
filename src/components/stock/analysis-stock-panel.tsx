@@ -99,6 +99,59 @@ const TYPE_BADGE_CLASSES: Record<string, string> = {
   proofread: "bg-purple-100 text-gray-900 border-purple-300",
   presentation_script: "bg-rose-100 text-gray-900 border-rose-300",
 };
+// グループ（同時実行の結果）内のタブ順。固定：全文書き起こし → 概要・要約 → 詳細にまとめる → その他（保存順）。
+const GROUP_TAB_ORDER: Record<string, number> = {
+  transcription: 0,
+  summary: 1,
+  detail_summary: 2,
+};
+function groupTabRank(analysisType: string): number {
+  return GROUP_TAB_ORDER[analysisType] ?? 99;
+}
+
+// 表示用の1枚（＝カード）。members が2件以上ならタブ切替でまとめて見せる。
+// データは1レコード=1本文のまま。操作は常に active（表示中タブ）のレコードに対して行う。
+interface StockDisplayItem {
+  key: string;
+  members: AnalysisRecord[];
+  active: AnalysisRecord;
+}
+
+// 絞り込み後の一覧を、同じ groupId のレコードだけ1枚にまとめる。
+// 絞り込み・検索で該当しないレコードはそもそも入らない（＝該当分だけのタブになる）。
+// groupId の無いレコードは従来どおり1枚1カード。
+function buildStockDisplayItems(
+  list: AnalysisRecord[],
+  activeTabs: Record<string, string>
+): StockDisplayItem[] {
+  const groups = new Map<string, AnalysisRecord[]>();
+  for (const r of list) {
+    if (!r.groupId) continue;
+    const arr = groups.get(r.groupId);
+    if (arr) arr.push(r);
+    else groups.set(r.groupId, [r]);
+  }
+  const seen = new Set<string>();
+  const items: StockDisplayItem[] = [];
+  for (const r of list) {
+    if (!r.groupId) {
+      items.push({ key: r.id, members: [r], active: r });
+      continue;
+    }
+    if (seen.has(r.groupId)) continue;
+    seen.add(r.groupId);
+    const members = [...(groups.get(r.groupId) ?? [r])].sort((a, b) => {
+      const d = groupTabRank(a.analysisType) - groupTabRank(b.analysisType);
+      if (d !== 0) return d;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+    const wanted = activeTabs[r.groupId];
+    const active = members.find((m) => m.id === wanted) ?? members[0];
+    items.push({ key: `group:${r.groupId}`, members, active });
+  }
+  return items;
+}
+
 function typeBadgeClass(analysisType: string): string {
   // 校正系（proofread〜）はまとめて紫
   if (analysisType?.startsWith("proofread")) return TYPE_BADGE_CLASSES.proofread;
@@ -736,6 +789,8 @@ export function AnalysisStockPanel() {
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // グループカードで表示中のタブ（groupId → レコードid）。未指定は固定順の先頭。
+  const [activeGroupTabs, setActiveGroupTabs] = useState<Record<string, string>>({});
   const [activeGensparkId, setActiveGensparkId] = useState<string | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1380,6 +1435,9 @@ export function AnalysisStockPanel() {
         );
       })
     : categoryFiltered;
+
+  // 一覧表示用：同じ groupId は1枚にまとめる（絞り込み後の該当分だけ）。選択・一括操作はレコード単位のまま。
+  const displayItems = buildStockDisplayItems(filtered, activeGroupTabs);
 
   // 種別チップ表示用集計（保存済みレコードから動的に。0件の種別は現れない・件数降順）
   const typeSummary = (() => {
@@ -2470,7 +2528,51 @@ export function AnalysisStockPanel() {
           const folderPaths = getFlatFolderList(folderTree).map((f) => f.path);
           return (
         <div className={STOCK_GRID_CLASSES[stockColumns] || STOCK_GRID_CLASSES[1]}>
-          {filtered.map((r) => {
+          {displayItems.map((item) => {
+            const r = item.active;
+            // グループカードのタブ（2件以上のときだけ）。切替先の展開状態は引き継ぐ。
+            const groupTabs =
+              item.members.length > 1 ? (
+                <div
+                  className="flex flex-wrap items-center gap-1 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="mr-1 text-[10px] font-medium text-gray-400">
+                    同時生成 {item.members.length}件
+                  </span>
+                  {item.members.map((m) => {
+                    const activeTab = m.id === r.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          if (activeTab) return;
+                          // 編集中のタブから離れるときは編集を確定終了（保存経路は従来どおり）
+                          if (bodyEditingId === r.id) finishBodyEdit(r.id);
+                          setActiveGroupTabs((prev) => ({
+                            ...prev,
+                            [r.groupId as string]: m.id,
+                          }));
+                          if (expandedId === r.id) setExpandedId(m.id);
+                        }}
+                        aria-pressed={activeTab}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          activeTab
+                            ? "border-[#378ADD] bg-[#E6F1FB] text-[#185FA5]"
+                            : "border-gray-200 bg-white text-gray-500 hover:border-[#B5D4F4] hover:text-[#185FA5]"
+                        }`}
+                        title={getDisplayTitle(m)}
+                      >
+                        {selectedIds.has(m.id) && (
+                          <span className="text-[#378ADD]">✓</span>
+                        )}
+                        {m.analysisLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null;
             const isExpanded = expandedId === r.id;
             const isGensparkActive = activeGensparkId === r.id;
             const folderColor = r.folder
@@ -2499,6 +2601,7 @@ export function AnalysisStockPanel() {
                       : "border-gray-100 bg-white/60"
                   }`}
                 >
+                  {groupTabs}
                   {stockColumns === 1 ? (
                     /* 1列: 従来どおり1行（日時フル表示） */
                     <div
@@ -2579,6 +2682,7 @@ export function AnalysisStockPanel() {
                     : "border-gray-100 bg-white/60"
                 }`}
               >
+                {groupTabs}
                 <div
                   className="px-4 py-3 cursor-pointer select-none hover:bg-blue-50/30 transition-colors space-y-1.5"
                   onClick={() => {

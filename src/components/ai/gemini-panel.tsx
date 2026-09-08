@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
 import { BrainCircuit, Copy, Download, Loader2, ExternalLink, Sparkles, BookmarkPlus, Save, X, Check, GripVertical } from "lucide-react";
@@ -479,6 +479,12 @@ const EXTRA_TYPE_LABELS: Record<string, string> = {
 // 読み手レベル（フェーズ2）。「指定なし」以外が選ばれているときのみ、対象タイプの
 // プロンプト先頭へ読み手指示を前置注入する。localStorageは新規キーを使用（既存キー非流用）。
 const READER_LEVEL_KEY = "dermapdf_reader_level";
+// 生成結果の自動保存ON/OFF（既定ON）。"0" のときだけOFF。
+const AUTO_SAVE_KEY = "dermapdf_auto_save";
+
+// 自動保存の進行状態（結果カードの「ストック」ボタン表示に使う）。
+// text を持つのは、平易化・編集で本文が変わったら「保存済み」を外すため（保存内容との不一致防止）。
+type AutoSaveEntry = { status: "saving" | "saved"; text: string };
 // 前置注入の対象＝フェーズ1で追加した「わかりやすく」「プレゼン」9タイプのみ。
 // 書き起こし等のmechanical系・校正には適用しない。
 const READER_LEVEL_TYPES: Set<AnalysisType> = new Set<AnalysisType>([
@@ -576,6 +582,37 @@ export function GeminiPanel({
   // 書き起こし→詳細にまとめる のチェイン処理中フラグ
   const [summarizing, setSummarizing] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // 自動保存ON/OFF（既定ON）。マウント後にlocalStorageから復元。
+  const [autoSave, setAutoSave] = useState(true);
+  useEffect(() => {
+    try {
+      setAutoSave(window.localStorage.getItem(AUTO_SAVE_KEY) !== "0");
+    } catch {
+      /* localStorage不可でも既定ONで動作 */
+    }
+  }, []);
+  const updateAutoSave = (value: boolean) => {
+    setAutoSave(value);
+    try {
+      window.localStorage.setItem(AUTO_SAVE_KEY, value ? "1" : "0");
+    } catch {
+      /* 保存不可でも当該セッションでは反映される */
+    }
+  };
+  // 分析タイプごとの自動保存状態（実行開始時にクリア）
+  const [autoSaveStates, setAutoSaveStates] = useState<
+    Map<AnalysisType, AutoSaveEntry>
+  >(new Map());
+  const setAutoSaveState = (type: AnalysisType, entry: AutoSaveEntry) =>
+    setAutoSaveStates((prev) => {
+      const next = new Map(prev);
+      next.set(type, entry);
+      return next;
+    });
+  // 今回の実行のグループID（複数タイプ同時実行のときだけ発行。単独実行は null）。
+  // 自動保存・手動ストックの両方でこの値を groupId に付け、保存カード側で1枚にまとめる。
+  const runGroupIdRef = useRef<string | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transcriptionProgress, setTranscriptionProgress] = useState("");
   // 全文書き起こしオプション（既定: 手書きメモ含めない／空欄補足／著作権表記含めない）
@@ -1472,7 +1509,12 @@ export function GeminiPanel({
     setLoading(true);
     setResult("");
     setResults(new Map());
+    setAutoSaveStates(new Map());
     setTranscriptionProgress("");
+    runGroupIdRef.current =
+      types.length > 1
+        ? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        : null;
 
     let lastResult = "";
     let lastType: AnalysisType = types[0];
@@ -1507,8 +1549,10 @@ export function GeminiPanel({
             return next;
           });
 
-          // 複数選択時は各結果を自動でストックに保存（別カードとして残す）
-          if (types.length > 1) {
+          // 自動保存ON（既定）なら各結果を自動でストックに保存（別カードとして残す）。
+          // 複数同時実行のときは同じ groupId を付け、保存カード側で1枚にまとめて表示する。
+          if (autoSave) {
+            setAutoSaveState(type, { status: "saving", text: analysis });
             // タイトル自動生成（失敗時はフォールバックで握りつぶす）
             const autoTitle = await generateTitleWithTimeout(
               analysis,
@@ -1522,7 +1566,9 @@ export function GeminiPanel({
               content: analysis,
               tags: [],
               folder: "",
+              groupId: runGroupIdRef.current ?? undefined,
             });
+            setAutoSaveState(type, { status: "saved", text: analysis });
             // AIカテゴリを裏で付与（失敗しても保存は成立済み）
             void classifyAnalysisInBackground(savedAuto.id, savedAuto.content);
           }
@@ -1548,10 +1594,14 @@ export function GeminiPanel({
 
       if (types.length > 1) {
         toastOk(
-          `${successCount}/${types.length} 件の分析が完了し、ストックに保存しました`
+          autoSave
+            ? `${successCount}/${types.length} 件の分析が完了し、ストックに保存しました`
+            : `${successCount}/${types.length} 件の分析が完了しました`
         );
       } else {
-        toastOk("AI分析が完了しました");
+        toastOk(
+          autoSave ? "AI分析が完了し、ストックに保存しました" : "AI分析が完了しました"
+        );
       }
     } finally {
       setLoading(false);
@@ -1905,6 +1955,8 @@ ${head}`;
       content: text,
       tags: [],
       folder: "",
+      // 同時実行の結果なら自動保存と同じ groupId で束ねる（単独実行は undefined）
+      groupId: runGroupIdRef.current ?? undefined,
     });
     void classifyAnalysisInBackground(savedStock.id, savedStock.content);
     toastOk(`「${autoTitle}」としてストックに保存しました`);
@@ -2553,6 +2605,34 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         </div>
       )}
 
+      {/* 自動保存ON/OFF（既定ON・localStorage保持）。OFFのときは手動「ストック」のみ。 */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => updateAutoSave(!autoSave)}
+          aria-pressed={autoSave}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            autoSave
+              ? "border-[#1D9E75] bg-[#E6F7F1] text-[#167a5c]"
+              : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+          }`}
+          title="ONのとき、実行結果をAIタイトル付きで自動的にストックへ保存します（OFFなら手動「ストック」のみ）"
+        >
+          <span
+            className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
+              autoSave ? "bg-[#1D9E75]" : "bg-gray-300"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+                autoSave ? "left-3.5" : "left-0.5"
+              }`}
+            />
+          </span>
+          結果を自動保存 {autoSave ? "ON" : "OFF"}
+        </button>
+      </div>
+
       {/* 実行ボタン + テンプレート保存 */}
       <div className="flex flex-wrap gap-2">
         <button
@@ -2652,6 +2732,10 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               onUpdate={(newText) => updateResult(type, newText)}
               onSimplify={() => simplifyOne(type, text)}
               onSave={() => saveStock(type, text)}
+              autoSaveStatus={(() => {
+                const e = autoSaveStates.get(type);
+                return e && e.text === text ? e.status : undefined;
+              })()}
               onCopy={() => copyText(text)}
               onDownloadTxt={() => downloadTxt(type, text)}
               onDownloadMd={() => downloadMd(type, text)}
@@ -2875,6 +2959,7 @@ function ResultPanel({
   onUpdate,
   onSimplify,
   onSave,
+  autoSaveStatus,
   onCopy,
   onDownloadTxt,
   onDownloadMd,
@@ -2890,6 +2975,8 @@ function ResultPanel({
   onUpdate: (text: string) => void;
   onSimplify: () => void;
   onSave: () => void | Promise<void>;
+  // 自動保存の状態（親が管理）。"saved" なら「✓ 保存済み」扱い、"saving" 中はストック不可。
+  autoSaveStatus?: "saving" | "saved";
   onCopy: () => void;
   onDownloadTxt: () => void | Promise<void>;
   onDownloadMd: () => void | Promise<void>;
@@ -2916,6 +3003,14 @@ function ResultPanel({
     setEditedText(text);
     setSavedActions(new Set());
   }, [text]);
+
+  // 自動保存が完了したら「✓ 保存済み」を立てる（上の text 同期リセットの後に実行される）。
+  // 本文が変わると親側の autoSaveStatus が undefined になるので、リセット側が勝つ。
+  useEffect(() => {
+    if (autoSaveStatus === "saved") {
+      setSavedActions((prev) => new Set(prev).add("save"));
+    }
+  }, [text, autoSaveStatus]);
 
   const currentLength = isEditing ? editedText.length : text.length;
 
@@ -3057,7 +3152,7 @@ function ResultPanel({
         </button>
         <button
           onClick={() => runWithPending("save", onSave)}
-          disabled={isBusy || savedActions.has("save")}
+          disabled={isBusy || savedActions.has("save") || autoSaveStatus === "saving"}
           title={savedActions.has("save") ? "このカードはストックに保存済みです" : undefined}
           className={`text-xs px-3 py-1.5 rounded-lg text-white inline-flex items-center gap-1 ${
             savedActions.has("save")
@@ -3068,6 +3163,10 @@ function ResultPanel({
           {pending === "save" ? (
             <>
               <Loader2 className="h-3 w-3 animate-spin" /> タイトル生成中...
+            </>
+          ) : autoSaveStatus === "saving" && !savedActions.has("save") ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" /> 自動保存中...
             </>
           ) : savedActions.has("save") ? (
             <>✓ 保存済み</>

@@ -18,6 +18,10 @@ export interface AnalysisRecord {
   favorite?: boolean;
   // AIが内容から自動付与するカテゴリ（folderとは独立。既存レコードはundefinedのままでよい）
   aiCategory?: string;
+  // 同時実行（1回の実行で複数タイプ）で生成された結果を束ねるID。
+  // 表示上だけ1枚のカードにまとめる（タブ切替）ためのもので、データは1レコード=1本文のまま。
+  // 既存レコードは undefined のままで従来どおり1枚1カード。
+  groupId?: string;
 }
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
@@ -157,6 +161,8 @@ export function duplicateAnalysis(id: string): AnalysisRecord | null {
     locked: false,
     updatedAt: undefined,
     originalContent: undefined,
+    // 複製はグループに混ぜない（同種別のタブが二重に並ぶのを防ぐ）
+    groupId: undefined,
   };
 
   records.splice(records.findIndex((r) => r.id === id) + 1, 0, duplicated);
