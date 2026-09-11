@@ -110,6 +110,13 @@ function groupTabRank(analysisType: string): number {
   return GROUP_TAB_ORDER[analysisType] ?? 99;
 }
 
+// 一括タブ切替ボタンの並び。固定：全文書き起こし → 概要・要約 → 詳細にまとめる（タブ順と同じ）。
+const BULK_TAB_TYPES: { type: string; label: string }[] = [
+  { type: "transcription", label: "全文書き起こし" },
+  { type: "summary", label: "概要・要約" },
+  { type: "detail_summary", label: "詳細にまとめる" },
+];
+
 // 表示用の1枚（＝カード）。members が2件以上ならタブ切替でまとめて見せる。
 // データは1レコード=1本文のまま。操作は常に active（表示中タブ）のレコードに対して行う。
 interface StockDisplayItem {
@@ -792,6 +799,9 @@ export function AnalysisStockPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // グループカードで表示中のタブ（groupId → レコードid）。未指定は固定順の先頭。
   const [activeGroupTabs, setActiveGroupTabs] = useState<Record<string, string>>({});
+  // 一括タブ切替の結果メッセージ（例「3件を切替（1件は該当なし）」）。保持はしない（都度表示・数秒で消える）。
+  const [bulkTabNotice, setBulkTabNotice] = useState<string | null>(null);
+  const bulkTabNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeGensparkId, setActiveGensparkId] = useState<string | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1426,6 +1436,50 @@ export function AnalysisStockPanel() {
 
   // 一覧表示用：同じ groupId は1枚にまとめる（絞り込み後の該当分だけ）。選択・一括操作はレコード単位のまま。
   const displayItems = buildStockDisplayItems(filtered, activeGroupTabs);
+
+  // 表示中（＝絞り込み・検索の結果に出ている）グループカードの件数。0件なら一括切替ボタンは出さない。
+  const groupCardCount = displayItems.filter((it) => it.members.length > 1).length;
+
+  // 一括タブ切替：表示中の全グループカードのアクティブタブを指定種別へ揃える。
+  // ・その種別を持たないグループは現在のタブのまま維持（別種別へ飛ばさない）
+  // ・グループでないカード（members 1件）は対象外
+  // ・編集中カードのタブが動く場合は、既存のタブ切替と同じく finishBodyEdit で確定してから切り替える
+  // データ（groupId・content・保存仕様）は一切変更せず、表示上のアクティブタブだけを変える。
+  const applyBulkGroupTab = (type: string, label: string) => {
+    const updates: Record<string, string> = {};
+    let aligned = 0;
+    let missing = 0;
+    let nextExpandedId: string | null = null;
+    let editingToFinish: string | null = null;
+    for (const item of displayItems) {
+      if (item.members.length < 2) continue;
+      const groupId = item.active.groupId;
+      if (!groupId) continue;
+      const target = item.members.find((m) => m.analysisType === type);
+      if (!target) {
+        missing++;
+        continue;
+      }
+      aligned++;
+      if (target.id === item.active.id) continue;
+      updates[groupId] = target.id;
+      // 編集中のタブから離れるときは編集を確定終了（保存経路は従来どおり）
+      if (bodyEditingId === item.active.id) editingToFinish = item.active.id;
+      // 展開中のタブから離れるときは展開状態を引き継ぐ（既存のタブ切替と同じ作法）
+      if (expandedId === item.active.id) nextExpandedId = target.id;
+    }
+    if (editingToFinish) finishBodyEdit(editingToFinish);
+    if (Object.keys(updates).length > 0) {
+      setActiveGroupTabs((prev) => ({ ...prev, ...updates }));
+      if (nextExpandedId) setExpandedId(nextExpandedId);
+    }
+    if (bulkTabNoticeTimer.current) clearTimeout(bulkTabNoticeTimer.current);
+    setBulkTabNotice(
+      `「${label}」に ${aligned}件を切替` +
+        (missing > 0 ? `（${missing}件は該当なし）` : "")
+    );
+    bulkTabNoticeTimer.current = setTimeout(() => setBulkTabNotice(null), 4000);
+  };
 
   // 種別チップ表示用集計（保存済みレコードから動的に。0件の種別は現れない・件数降順）
   const typeSummary = (() => {
@@ -2273,6 +2327,29 @@ export function AnalysisStockPanel() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* グループカードのタブ一括切替（表示中のグループカードのみ対象・配色は typeBadgeClass を流用） */}
+      {groupCardCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="shrink-0 text-xs font-semibold text-gray-500">
+            🔀 全カードを:
+          </span>
+          {BULK_TAB_TYPES.map(({ type, label }) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => applyBulkGroupTab(type, label)}
+              className={`rounded-full border px-2 py-0.5 text-xs font-medium opacity-80 transition-opacity hover:opacity-100 ${typeBadgeClass(type)}`}
+              title={`表示中のグループカード${groupCardCount}枚のタブを「${label}」に揃える（その種別が無いカードは現在のタブのまま）`}
+            >
+              {label}
+            </button>
+          ))}
+          {bulkTabNotice && (
+            <span className="text-xs text-gray-400">{bulkTabNotice}</span>
+          )}
         </div>
       )}
 
