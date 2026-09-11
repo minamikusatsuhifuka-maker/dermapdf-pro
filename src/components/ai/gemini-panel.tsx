@@ -500,6 +500,9 @@ const READER_LEVEL_KEY = "dermapdf_reader_level";
 const AUTO_SAVE_KEY = "dermapdf_auto_save";
 // 分析タイプの選択状態（selectedTypes）の保持キー。保存値が無い初回だけ基本3種を既定ONにする。
 const SELECTED_TYPES_KEY = "dermapdf_selected_types";
+// 「＋ 詳細設定」アコーディオンの開閉状態（新規キー。既存キーは流用も改変もしない）。
+// 閉じていても中の設定値（目的・文字数・書き起こしオプション等）は従来どおり実行に反映される。
+const ADVANCED_OPEN_KEY = "dermapdf_advanced_settings_open";
 
 // 自動保存の進行状態（結果カードの「ストック」ボタン表示に使う）。
 // text を持つのは、平易化・編集で本文が変わったら「保存済み」を外すため（保存内容との不一致防止）。
@@ -649,6 +652,24 @@ export function GeminiPanel({
     setAutoSave(value);
     try {
       window.localStorage.setItem(AUTO_SAVE_KEY, value ? "1" : "0");
+    } catch {
+      /* 保存不可でも当該セッションでは反映される */
+    }
+  };
+  // 「＋ 詳細設定」アコーディオンの開閉（既定は閉じる）。マウント後にlocalStorageから復元。
+  // 表示の開閉だけを持ち、中の設定値には一切関与しない（閉じていても実行に反映される）。
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  useEffect(() => {
+    try {
+      setShowAdvanced(window.localStorage.getItem(ADVANCED_OPEN_KEY) === "1");
+    } catch {
+      /* localStorage不可でも既定（閉じる）で動作 */
+    }
+  }, []);
+  const updateShowAdvanced = (value: boolean) => {
+    setShowAdvanced(value);
+    try {
+      window.localStorage.setItem(ADVANCED_OPEN_KEY, value ? "1" : "0");
     } catch {
       /* 保存不可でも当該セッションでは反映される */
     }
@@ -808,10 +829,152 @@ export function GeminiPanel({
     EXTRA_TYPE_LABELS[type] ??
     type;
 
+  // 選択中タイプの個別設定（文字数指定・Genspark設定）だけを描画。
+  // チェックボックス群と分離して、基本分析ぶんは「＋ 詳細設定」アコーディオン内へ置けるようにする。
+  // 描画位置が変わるだけで、値（typeLengths 等）と実行への反映は従来どおり。
+  const renderTypeSettings = (selectedOpts: AnalysisOption[]) =>
+    selectedOpts.map((opt) => {
+      const isGsSlide = opt.value === "genspark_slide";
+      return (
+        <div
+          key={opt.value}
+          className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2 space-y-2"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-[#185FA5]">
+              {opt.label}
+            </span>
+            <select
+              value={typeLengths[opt.value] || ""}
+              onChange={(e) => setTypeLength(opt.value, e.target.value)}
+              className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
+              title="この分析タイプの出力文字数"
+            >
+              <option value="">文字数指定なし</option>
+              {opt.value === "detail_summary" ? (
+                <>
+                  <option value="3000">3000字</option>
+                  <option value="5000">5000字</option>
+                  <option value="8000">8000字</option>
+                  <option value="12000">12000字</option>
+                </>
+              ) : (
+                <>
+                  <option value="200">200字</option>
+                  <option value="400">400字</option>
+                  <option value="600">600字</option>
+                  <option value="1000">1000字</option>
+                  <option value="2000">2000字</option>
+                  <option value="3000">3000字</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを展開 */}
+          {isGsSlide && (
+            <div className="mt-1 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
+              <p className="text-xs font-semibold text-[#185FA5]">
+                🎯 Gensparkプレゼン設定
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    聴講ターゲット
+                  </label>
+                  <select
+                    value={gsTarget}
+                    onChange={(e) => setGsTarget(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                  >
+                    {TARGET_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    内容レベル
+                  </label>
+                  <select
+                    value={gsLevel}
+                    onChange={(e) => setGsLevel(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                  >
+                    {LEVEL_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    プレゼンの目的
+                  </label>
+                  <select
+                    value={gsPurpose}
+                    onChange={(e) => setGsPurpose(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                  >
+                    {PURPOSE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    スライドのトーン
+                  </label>
+                  <select
+                    value={gsTone}
+                    onChange={(e) => setGsTone(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
+                  >
+                    {TONE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">
+                  追加要望（任意）
+                </label>
+                <textarea
+                  value={gsNotes}
+                  onChange={(e) => setGsNotes(e.target.value)}
+                  placeholder="スライドへの追加要望..."
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    });
+
+  // 基本分析（並べ替え後の順）で選択中のタイプ一覧。「＋ 詳細設定」内の文字数指定に使う。
+  const basicSelectedOpts = orderBasicOptions(ANALYSIS_GROUPS[0].options).filter(
+    (o) => selectedTypes.has(o.value)
+  );
+
   // グループ内の分析タイプ一覧（チェックボックス・個別文字数・Genspark設定）を描画。
   // 基本分析・専門グループ（チップ展開時）の両方で再利用する。
   // group: 描画するグループ。reorderable: 基本分析のみ true（DnD並べ替え・順序保存対象）。
-  const renderGroupOptions = (group: AnalysisGroup, reorderable = false) => {
+  // withTypeSettings: false のとき個別設定（文字数指定等）は描画しない（＝詳細設定側で描画する）。
+  const renderGroupOptions = (
+    group: AnalysisGroup,
+    reorderable = false,
+    withTypeSettings = true
+  ) => {
     const options = reorderable
       ? orderBasicOptions(group.options)
       : group.options;
@@ -890,134 +1053,9 @@ export function GeminiPanel({
         </div>
 
         {/* 選択中タイプの文字数指定・Genspark設定（ボタン行の下／横並びを崩さない）。
-            ここはボタンの外側なので操作してもトグルは反応しない（誤操作防止）。 */}
-        {selectedOpts.map((opt) => {
-          const isGsSlide = opt.value === "genspark_slide";
-          return (
-            <div
-              key={opt.value}
-              className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2 space-y-2"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-[#185FA5]">
-                  {opt.label}
-                </span>
-                <select
-                  value={typeLengths[opt.value] || ""}
-                  onChange={(e) => setTypeLength(opt.value, e.target.value)}
-                  className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-500"
-                  title="この分析タイプの出力文字数"
-                >
-                  <option value="">文字数指定なし</option>
-                  {opt.value === "detail_summary" ? (
-                    <>
-                      <option value="3000">3000字</option>
-                      <option value="5000">5000字</option>
-                      <option value="8000">8000字</option>
-                      <option value="12000">12000字</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="200">200字</option>
-                      <option value="400">400字</option>
-                      <option value="600">600字</option>
-                      <option value="1000">1000字</option>
-                      <option value="2000">2000字</option>
-                      <option value="3000">3000字</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* Gensparkスライド用まとめ選択時のみ、設定アコーディオンを展開 */}
-              {isGsSlide && (
-              <div className="mt-1 p-3 rounded-xl border border-[#B5D4F4] bg-[#F0F7FF] space-y-3">
-                <p className="text-xs font-semibold text-[#185FA5]">
-                  🎯 Gensparkプレゼン設定
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
-                      聴講ターゲット
-                    </label>
-                    <select
-                      value={gsTarget}
-                      onChange={(e) => setGsTarget(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                    >
-                      {TARGET_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
-                      内容レベル
-                    </label>
-                    <select
-                      value={gsLevel}
-                      onChange={(e) => setGsLevel(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                    >
-                      {LEVEL_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
-                      プレゼンの目的
-                    </label>
-                    <select
-                      value={gsPurpose}
-                      onChange={(e) => setGsPurpose(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                    >
-                      {PURPOSE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
-                      スライドのトーン
-                    </label>
-                    <select
-                      value={gsTone}
-                      onChange={(e) => setGsTone(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none"
-                    >
-                      {TONE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
-                    追加要望（任意）
-                  </label>
-                  <textarea
-                    value={gsNotes}
-                    onChange={(e) => setGsNotes(e.target.value)}
-                    placeholder="スライドへの追加要望..."
-                    rows={2}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[#B5D4F4] focus:outline-none resize-none"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+            基本分析ぶんは withTypeSettings=false で「＋ 詳細設定」アコーディオン側に描画する
+            （描画位置が変わるだけで、値と実行への反映は従来どおり）。 */}
+        {withTypeSettings && renderTypeSettings(selectedOpts)}
       </div>
     );
   };
@@ -2307,156 +2345,16 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
 
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
-      {/* 見出し行：中央にワンクリック全文書き起こし（開いてすぐ押せる最短導線）。
-          見出しは左のまま、左右に同じ伸縮スペーサを置いてボタンだけを中央に寄せる。
-          狭い画面では flex-wrap でボタンが見出しの下に回る（中央寄せのまま）。 */}
+      {/* 見出し行。書き起こしショートカット（⚡／✅／🎤）は「＋ 詳細設定」内へ移動済み。
+          左右の伸縮スペーサは、詳細設定を開いたときの並びを従来どおりに保つため残す。 */}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="flex flex-1 basis-0 items-center gap-2 whitespace-nowrap text-lg font-bold text-gray-700">
           <BrainCircuit className="h-5 w-5 text-[#378ADD]" />
           Gemini AI分析
         </h2>
-        {/* 書き起こしショートカット2種。どちらもチェック状態（selectedTypes）は変更しない。
-            ⚡＝資料全体、✅＝いま選択中のページ/画像だけ。 */}
-        <div className="mx-auto flex flex-wrap items-center justify-center gap-2">
-          {/* ワンクリック全文書き起こし：選択操作なしで transcription を1件だけ即実行。 */}
-          <button
-            onClick={handleQuickTranscription}
-            disabled={
-              loading ||
-              (isTextMode
-                ? !inputText?.trim()
-                : !fileBase64 && !(imageParts && imageParts.length > 0))
-            }
-            title="ページ/画像の選択に関係なく、資料すべてを書き起こします"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
-          >
-            {quickTranscribing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <span>⚡</span>
-            )}
-            {quickTranscribing ? "書き起こし中..." : "すべて書き起こしを実行"}
-          </button>
-          {/* 選択した資料だけを書き起こす：PDFは選択ページ、画像は選択画像のみが対象。 */}
-          <button
-            onClick={handleSelectedTranscription}
-            disabled={loading || isTextMode || selectedCount === 0}
-            title={
-              isTextMode
-                ? "テキスト入力モードでは使用できません"
-                : selectedCount === 0
-                  ? "ページ/画像を選択してください"
-                  : hasImageMode
-                    ? `選択中の ${selectedCount} 枚の画像だけを書き起こします`
-                    : `選択中の ${selectedCount} ページだけを書き起こします`
-            }
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
-          >
-            {selectedTranscribing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <span>✅</span>
-            )}
-            {selectedTranscribing
-              ? "書き起こし中..."
-              : selectedCount > 0
-                ? `選択した資料を書き起こす（${selectedCount}${hasImageMode ? "枚" : "ページ"}）`
-                : "選択した資料を書き起こす"}
-          </button>
-          {/* 🎤 プレゼン原稿：ページごとの発表原稿を1枚のカードにまとめて保存する。
-              左に「1ページあたりの長さ」「想定聴衆」のドロップダウンを横並びで置く。 */}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={scriptLength}
-              onChange={(e) => setScriptLength(e.target.value)}
-              disabled={loading || scriptGenerating}
-              title="1ページあたりの発表時間"
-              className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs focus:border-[#B5D4F4] focus:outline-none disabled:opacity-40"
-            >
-              {scriptLengths.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}／ページ
-                </option>
-              ))}
-            </select>
-            <select
-              value={scriptAudience}
-              onChange={(e) => setScriptAudience(e.target.value)}
-              disabled={loading || scriptGenerating}
-              title="想定聴衆（口調・訴求軸が変わります）"
-              className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs focus:border-[#B5D4F4] focus:outline-none disabled:opacity-40"
-            >
-              {scriptAudiences.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={handlePresentationScript}
-              disabled={
-                loading ||
-                scriptGenerating ||
-                isTextMode ||
-                (!fileBase64 && !hasImageMode)
-              }
-              title={
-                isTextMode
-                  ? "テキスト入力モードでは使用できません"
-                  : selectedCount > 0
-                    ? `選択中の ${selectedCount}${scriptUnit} の発表原稿を作成します`
-                    : "資料の全ページ分の発表原稿を作成します"
-              }
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
-            >
-              {scriptGenerating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <span>🎤</span>
-              )}
-              {scriptGenerating
-                ? "プレゼン原稿を生成中..."
-                : scriptTargetCount > 0
-                  ? `プレゼン原稿（${scriptIsAll ? "全" : ""}${scriptTargetCount}${scriptUnit}）`
-                  : "プレゼン原稿"}
-            </button>
-          </div>
-        </div>
         {/* 右側スペーサ（見出しと同じ伸縮量）。ボタンを行の水平中央に保つ。 */}
         <div className="flex-1 basis-0" aria-hidden />
       </div>
-
-      {/* テンプレートから呼び出し */}
-      {templates.length > 0 && (
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-600">
-            テンプレートから呼び出す
-          </label>
-          <select
-            value=""
-            onChange={(e) => {
-              const t = templates.find((t) => t.id === e.target.value);
-              if (t) handleApplyTemplateToGemini(t);
-            }}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-          >
-            <option value="">-- テンプレートを選択 --</option>
-            {templates.map((t) => {
-              const count =
-                t.selectedTypes && t.selectedTypes.length > 0
-                  ? t.selectedTypes.length
-                  : 1;
-              const summary =
-                count > 1 ? `${count}件選択` : t.analysisType;
-              return (
-                <option key={t.id} value={t.id}>
-                  {t.name}（{summary}）
-                </option>
-              );
-            })}
-          </select>
-        </div>
-      )}
 
       {/* 分析タイプ選択（複数選択可・グループ折りたたみ） */}
       <div>
@@ -2502,7 +2400,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 {loading ? "分析中..." : "実行"}
               </button>
             </div>
-            {renderGroupOptions(ANALYSIS_GROUPS[0], true)}
+            {renderGroupOptions(ANALYSIS_GROUPS[0], true, false)}
           </div>
 
           {/* その他の分析タイプ（トグル → 小チップの折り返しグリッド） */}
@@ -2580,59 +2478,271 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         </div>
       </div>
 
-      {/* 目的入力 */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-600">
-          目的・Geminiへの指示（任意）
-        </label>
-        <textarea
-          value={purpose}
-          onChange={(e) => setPurpose(e.target.value)}
-          placeholder="分析の目的や、Geminiに追加でやってほしい作業・指示を入力..."
-          rows={2}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-        />
-      </div>
+      {/* ＋ 詳細設定（既定で閉じる・開閉は localStorage 保持）。
+          ショートカット群／テンプレート呼び出し／各タイプの文字数指定／目的／出力文字数／
+          書き起こしオプションをここへ畳む。機能は削除せず位置だけ移動し、
+          閉じていても中の設定値は従来どおり実行に反映される。 */}
+      <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+        <button
+          type="button"
+          onClick={() => updateShowAdvanced(!showAdvanced)}
+          aria-expanded={showAdvanced}
+          className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-700"
+        >
+          <span>＋ 詳細設定</span>
+          <span className="text-gray-400 text-xs">
+            {showAdvanced ? "▲" : "▼"}
+          </span>
+        </button>
 
-      {/* 出力文字数指定 */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-600">
-          出力文字数の目安（任意）
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={targetLength}
-            onChange={(e) => setTargetLength(e.target.value)}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-          >
-            <option value="">指定なし（AIに任せる）</option>
-            <option value="200">200文字程度（超コンパクト）</option>
-            <option value="400">400文字程度（短め）</option>
-            <option value="600">600文字程度（標準）</option>
-            <option value="1000">1000文字程度（詳しめ）</option>
-            <option value="2000">2000文字程度（長文）</option>
-            <option value="3000">3000文字程度（非常に詳細）</option>
-            <option value="custom">カスタム指定</option>
-          </select>
+        {showAdvanced && (
+          <div className="space-y-4 px-3 py-3">
+            {/* 書き起こしショートカット2種。どちらもチェック状態（selectedTypes）は変更しない。
+                ⚡＝資料全体、✅＝いま選択中のページ/画像だけ。 */}
+            <div className="mx-auto flex flex-wrap items-center justify-center gap-2">
+              {/* ワンクリック全文書き起こし：選択操作なしで transcription を1件だけ即実行。 */}
+              <button
+                onClick={handleQuickTranscription}
+                disabled={
+                  loading ||
+                  (isTextMode
+                    ? !inputText?.trim()
+                    : !fileBase64 && !(imageParts && imageParts.length > 0))
+                }
+                title="ページ/画像の選択に関係なく、資料すべてを書き起こします"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D9E75] hover:bg-[#0F6E56] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+              >
+                {quickTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <span>⚡</span>
+                )}
+                {quickTranscribing ? "書き起こし中..." : "すべて書き起こしを実行"}
+              </button>
+              {/* 選択した資料だけを書き起こす：PDFは選択ページ、画像は選択画像のみが対象。 */}
+              <button
+                onClick={handleSelectedTranscription}
+                disabled={loading || isTextMode || selectedCount === 0}
+                title={
+                  isTextMode
+                    ? "テキスト入力モードでは使用できません"
+                    : selectedCount === 0
+                      ? "ページ/画像を選択してください"
+                      : hasImageMode
+                        ? `選択中の ${selectedCount} 枚の画像だけを書き起こします`
+                        : `選択中の ${selectedCount} ページだけを書き起こします`
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+              >
+                {selectedTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <span>✅</span>
+                )}
+                {selectedTranscribing
+                  ? "書き起こし中..."
+                  : selectedCount > 0
+                    ? `選択した資料を書き起こす（${selectedCount}${hasImageMode ? "枚" : "ページ"}）`
+                    : "選択した資料を書き起こす"}
+              </button>
+              {/* 🎤 プレゼン原稿：ページごとの発表原稿を1枚のカードにまとめて保存する。
+                  左に「1ページあたりの長さ」「想定聴衆」のドロップダウンを横並びで置く。 */}
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={scriptLength}
+                  onChange={(e) => setScriptLength(e.target.value)}
+                  disabled={loading || scriptGenerating}
+                  title="1ページあたりの発表時間"
+                  className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs focus:border-[#B5D4F4] focus:outline-none disabled:opacity-40"
+                >
+                  {scriptLengths.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}／ページ
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={scriptAudience}
+                  onChange={(e) => setScriptAudience(e.target.value)}
+                  disabled={loading || scriptGenerating}
+                  title="想定聴衆（口調・訴求軸が変わります）"
+                  className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs focus:border-[#B5D4F4] focus:outline-none disabled:opacity-40"
+                >
+                  {scriptAudiences.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handlePresentationScript}
+                  disabled={
+                    loading ||
+                    scriptGenerating ||
+                    isTextMode ||
+                    (!fileBase64 && !hasImageMode)
+                  }
+                  title={
+                    isTextMode
+                      ? "テキスト入力モードでは使用できません"
+                      : selectedCount > 0
+                        ? `選択中の ${selectedCount}${scriptUnit} の発表原稿を作成します`
+                        : "資料の全ページ分の発表原稿を作成します"
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 px-4 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
+                >
+                  {scriptGenerating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <span>🎤</span>
+                  )}
+                  {scriptGenerating
+                    ? "プレゼン原稿を生成中..."
+                    : scriptTargetCount > 0
+                      ? `プレゼン原稿（${scriptIsAll ? "全" : ""}${scriptTargetCount}${scriptUnit}）`
+                      : "プレゼン原稿"}
+                </button>
+              </div>
+            </div>
 
-          {targetLength === "custom" && (
-            <input
-              type="number"
-              value={customLength}
-              onChange={(e) => setCustomLength(e.target.value)}
-              placeholder="文字数を入力"
-              min={100}
-              max={10000}
-              step={100}
-              className="w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-            />
-          )}
-          {targetLength && targetLength !== "custom" && (
-            <span className="text-xs text-gray-400">
-              約{Number(targetLength).toLocaleString()}文字
-            </span>
-          )}
-        </div>
+            {/* テンプレートから呼び出し */}
+            {templates.length > 0 && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-600">
+                  テンプレートから呼び出す
+                </label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const t = templates.find((t) => t.id === e.target.value);
+                    if (t) handleApplyTemplateToGemini(t);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+                >
+                  <option value="">-- テンプレートを選択 --</option>
+                  {templates.map((t) => {
+                    const count =
+                      t.selectedTypes && t.selectedTypes.length > 0
+                        ? t.selectedTypes.length
+                        : 1;
+                    const summary =
+                      count > 1 ? `${count}件選択` : t.analysisType;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {t.name}（{summary}）
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+            {/* 基本分析で選択中のタイプの個別文字数指定（値・実行への反映は不変） */}
+            {basicSelectedOpts.length > 0 && (
+              <div className="space-y-2">
+                {renderTypeSettings(basicSelectedOpts)}
+              </div>
+            )}
+
+            {/* 目的入力 */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                目的・Geminiへの指示（任意）
+              </label>
+              <textarea
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+                placeholder="分析の目的や、Geminiに追加でやってほしい作業・指示を入力..."
+                rows={2}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+              />
+            </div>
+
+            {/* 出力文字数指定 */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-600">
+                出力文字数の目安（任意）
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={targetLength}
+                  onChange={(e) => setTargetLength(e.target.value)}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+                >
+                  <option value="">指定なし（AIに任せる）</option>
+                  <option value="200">200文字程度（超コンパクト）</option>
+                  <option value="400">400文字程度（短め）</option>
+                  <option value="600">600文字程度（標準）</option>
+                  <option value="1000">1000文字程度（詳しめ）</option>
+                  <option value="2000">2000文字程度（長文）</option>
+                  <option value="3000">3000文字程度（非常に詳細）</option>
+                  <option value="custom">カスタム指定</option>
+                </select>
+
+                {targetLength === "custom" && (
+                  <input
+                    type="number"
+                    value={customLength}
+                    onChange={(e) => setCustomLength(e.target.value)}
+                    placeholder="文字数を入力"
+                    min={100}
+                    max={10000}
+                    step={100}
+                    className="w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+                  />
+                )}
+                {targetLength && targetLength !== "custom" && (
+                  <span className="text-xs text-gray-400">
+                    約{Number(targetLength).toLocaleString()}文字
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 全文書き起こしオプション（全文書き起こし選択時のみ） */}
+            {selectedTypes.has("transcription") && (
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-600">
+                    手書きメモ
+                  </label>
+                  <select
+                    value={excludeHandwriting ? "exclude" : "include"}
+                    onChange={(e) => setExcludeHandwriting(e.target.value === "exclude")}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+                  >
+                    <option value="include">含める</option>
+                    <option value="exclude">含めない</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-600">空欄</label>
+                  <select
+                    value={fillBlanks ? "fill" : "keep"}
+                    onChange={(e) => setFillBlanks(e.target.value === "fill")}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+                  >
+                    <option value="keep">そのまま</option>
+                    <option value="fill">同ページの回答を参照して補足</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-600">
+                    著作権表記
+                  </label>
+                  <select
+                    value={excludeCopyright ? "exclude" : "include"}
+                    onChange={(e) => setExcludeCopyright(e.target.value === "exclude")}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
+                  >
+                    <option value="exclude">含めない</option>
+                    <option value="include">含める</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 読み手レベル（フェーズ2）。対象（わかりやすく／プレゼン）タイプ選択時のみ表示。
@@ -2673,49 +2783,6 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
               : isPdf && pageCount !== null && pageCount > 0
                 ? `⏱ 処理に30秒〜1分かかる場合があります（${pageCount}ページ）`
                 : "⏱ 処理に30秒〜1分かかる場合があります"}
-        </div>
-      )}
-
-      {/* 全文書き起こしオプション（全文書き起こし選択時のみ） */}
-      {selectedTypes.has("transcription") && (
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-600">
-              手書きメモ
-            </label>
-            <select
-              value={excludeHandwriting ? "exclude" : "include"}
-              onChange={(e) => setExcludeHandwriting(e.target.value === "exclude")}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-            >
-              <option value="include">含める</option>
-              <option value="exclude">含めない</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-600">空欄</label>
-            <select
-              value={fillBlanks ? "fill" : "keep"}
-              onChange={(e) => setFillBlanks(e.target.value === "fill")}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-            >
-              <option value="keep">そのまま</option>
-              <option value="fill">同ページの回答を参照して補足</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-600">
-              著作権表記
-            </label>
-            <select
-              value={excludeCopyright ? "exclude" : "include"}
-              onChange={(e) => setExcludeCopyright(e.target.value === "exclude")}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#B5D4F4] focus:outline-none focus:ring-2 focus:ring-[#B5D4F4]"
-            >
-              <option value="exclude">含めない</option>
-              <option value="include">含める</option>
-            </select>
-          </div>
         </div>
       )}
 

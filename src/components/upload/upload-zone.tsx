@@ -30,6 +30,8 @@ interface UploadZoneProps {
 export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // 読み込み済みファイル一覧の開閉（既定は閉じる。件数と「すべて削除」は見出しに残す）
+  const [showFileList, setShowFileList] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [showProofread, setShowProofread] = useState(false);
   // メイン画面に大きく表示する校正前後比較
@@ -201,11 +203,21 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
 
           {selectedFiles.length > 0 && (
             <div className="space-y-2">
-              {/* ファイル一覧ヘッダ＋一括削除（ページ選択の「全解除」とは別物：ファイル自体を削除） */}
+              {/* ファイル一覧ヘッダ＋一括削除（ページ選択の「全解除」とは別物：ファイル自体を削除）。
+                  見出しは開閉トグルを兼ねる（既定は閉じる）。閉じていても「すべて削除」は押せる。 */}
               <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-medium text-gray-500">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowFileList((v) => !v);
+                  }}
+                  aria-expanded={showFileList}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+                  title={showFileList ? "ファイル一覧を閉じる" : "ファイル一覧を開く"}
+                >
+                  <span className="text-gray-400">{showFileList ? "▲" : "▼"}</span>
                   読み込み済みファイル（{selectedFiles.length}件）
-                </span>
+                </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -217,7 +229,8 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
                   <Trash2 className="h-3 w-3" /> すべて削除
                 </button>
               </div>
-              {selectedFiles.map((file, i) => (
+              {showFileList &&
+                selectedFiles.map((file, i) => (
                 <div
                   key={`${file.name}-${i}`}
                   className="flex items-center gap-3 rounded-lg border border-white/50 bg-white/60 px-4 py-2 backdrop-blur-sm"
