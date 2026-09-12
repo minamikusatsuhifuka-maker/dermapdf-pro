@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eraser, FileOutput, BrainCircuit, Images, GripVertical } from "lucide-react";
+import { Eraser, FileOutput, BrainCircuit, Images, GripVertical, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageItem {
@@ -19,6 +19,13 @@ interface ImageGridProps {
   // 選択画像が変わるたびに親へ通知（選択画像のみの書き起こしで使用）。
   // ids は「画像のままAI分析」と同じ selectedArray（表示順・選択中のみ）。
   onSelectionChange?: (ids: string[]) => void;
+  // いま有効な解析方式（表示だけ）。"images"＝画像のまま／"pdf"＝PDF統合。既定は "images"。
+  // ボタンの挙動は従来どおり（押すと即その方式で準備＋AI分析パネルへ）。表示の排他だけを担う。
+  analysisMode?: "images" | "pdf";
+  // 基本分析の「🚀 実行」を画像グリッドのボタン行からも押せるようにする（同一ハンドラ）。
+  onRun?: () => void;
+  runDisabled?: boolean;
+  runLoading?: boolean;
 }
 
 export function ImageGrid({
@@ -28,6 +35,10 @@ export function ImageGrid({
   onMergePdfAndAnalyze,
   onAnalyzeImages,
   onSelectionChange,
+  analysisMode = "images",
+  onRun,
+  runDisabled,
+  runLoading,
 }: ImageGridProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // DnD並べ替え後の表示順（画像id）。永続化なし（セッション内のみ）。
@@ -120,12 +131,40 @@ export function ImageGrid({
         <span className="text-xs text-gray-400">
           {selected.size} / {images.length} 枚選択中
         </span>
+        {/* 解析方式：既定は「画像のまま」。選択中は塗り＋✓、非選択は白抜きで排他表示。
+            押したときの挙動は従来どおり（その方式で準備し、AI分析パネルを開く）。 */}
         <button
           disabled={selected.size === 0}
+          aria-pressed={analysisMode === "images"}
           onClick={() => onAnalyzeImages?.(selectedArray)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+          title="選択中の画像をPDFに統合せず、画像のままAI分析へ渡す（既定の解析方式）"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-sm transition-colors disabled:opacity-40",
+            analysisMode === "images"
+              ? "bg-[#378ADD] text-white ring-2 ring-[#185FA5] ring-offset-1 hover:bg-[#185FA5]"
+              : "border border-gray-200 bg-white text-gray-600 hover:border-[#378ADD] hover:text-[#185FA5]"
+          )}
         >
-          <Images className="h-3.5 w-3.5" /> 画像のままAI分析
+          {analysisMode === "images" ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Images className="h-3.5 w-3.5" />
+          )}
+          画像のままAI分析
+        </button>
+        {/* 基本分析の「🚀 実行」（下部・見出し右の実行ボタンと同一ハンドラ／同一disabled／同一ローディング） */}
+        <button
+          disabled={runDisabled}
+          onClick={() => onRun?.()}
+          title="いま選択中の分析タイプで実行（⌘+Enter / Ctrl+Enter・分析パネルの実行ボタンと同じ）"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-opacity disabled:opacity-40"
+        >
+          {runLoading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <span>🚀</span>
+          )}
+          {runLoading ? "分析中..." : "実行"}
         </button>
         <div className="ml-auto flex flex-wrap gap-2">
           <button
@@ -144,10 +183,22 @@ export function ImageGrid({
           </button>
           <button
             disabled={selected.size === 0}
+            aria-pressed={analysisMode === "pdf"}
             onClick={() => onMergePdfAndAnalyze?.(selectedArray)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity disabled:opacity-40"
+            title="選択中の画像を1本のPDFに統合してからAI分析へ渡す"
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-sm transition-colors disabled:opacity-40",
+              analysisMode === "pdf"
+                ? "bg-[#378ADD] text-white ring-2 ring-[#185FA5] ring-offset-1 hover:bg-[#185FA5]"
+                : "border border-gray-200 bg-white text-gray-600 hover:border-[#378ADD] hover:text-[#185FA5]"
+            )}
           >
-            <BrainCircuit className="h-3.5 w-3.5" /> PDF統合してAI分析
+            {analysisMode === "pdf" ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <BrainCircuit className="h-3.5 w-3.5" />
+            )}
+            PDF統合してAI分析
           </button>
         </div>
       </div>

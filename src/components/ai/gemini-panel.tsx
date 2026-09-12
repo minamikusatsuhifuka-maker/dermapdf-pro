@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import MarkdownView from "@/components/ui/markdown-view";
 import { ProofreadModal } from "@/components/proofread/proofread-modal";
@@ -563,6 +563,13 @@ interface GeminiPanelProps {
   // 複数PDFの遅延統合に使用：削除のたびに統合せず、解析時に一度だけ統合する。
   // 返り値があればその base64/mime を props より優先して解析に使う。
   onEnsureFileData?: () => Promise<{ base64: string; mime: string; name: string } | null>;
+  // 🚀 実行を親（画像グリッドのボタン行）からも呼べるように公開する通知。
+  // handleAnalyze / analyzeDisabled / loading は不変で、参照と状態を渡すだけ。
+  onRunStateChange?: (state: {
+    run: () => void;
+    disabled: boolean;
+    loading: boolean;
+  }) => void;
 }
 
 // TARGET_OPTIONS, LEVEL_OPTIONS, PURPOSE_OPTIONS, TONE_OPTIONS, getTechniqueFlags
@@ -580,6 +587,7 @@ export function GeminiPanel({
   selectedPdfPages,
   selectedImageParts,
   onEnsureFileData,
+  onRunStateChange,
 }: GeminiPanelProps) {
   // 理念コンテキストを構築
   const philosophyContext = clinicSettings ? buildPhilosophyContext(clinicSettings) : "";
@@ -2350,6 +2358,58 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
       ? !inputText?.trim()
       : !fileBase64 && !(imageParts && imageParts.length > 0));
 
+  // 既存の handleAnalyze をそのまま呼ぶための最新参照（実装・引数は不変）。
+  const handleAnalyzeRef = useRef(handleAnalyze);
+  useEffect(() => {
+    handleAnalyzeRef.current = handleAnalyze;
+  });
+  // 親（画像グリッドの🚀実行）から呼ぶ実行関数。参照は不変に保つ。
+  const runAnalyze = useCallback(() => {
+    void handleAnalyzeRef.current();
+  }, []);
+
+  // 実行関数・disabled・ローディングを親へ公開（画像グリッド側の🚀実行と共用する）。
+  const onRunStateChangeRef = useRef(onRunStateChange);
+  useEffect(() => {
+    onRunStateChangeRef.current = onRunStateChange;
+  });
+  useEffect(() => {
+    onRunStateChangeRef.current?.({
+      run: runAnalyze,
+      disabled: analyzeDisabled,
+      loading,
+    });
+  }, [analyzeDisabled, loading, runAnalyze]);
+  // アンマウント時（別パネルへ切替）は親側の🚀実行を無効化する。
+  useEffect(
+    () => () => {
+      onRunStateChangeRef.current?.({
+        run: () => {},
+        disabled: true,
+        loading: false,
+      });
+    },
+    []
+  );
+
+  // ⌘+Enter（Mac）/ Ctrl+Enter（Windows）で実行。
+  // ・analyzeDisabled のときは発火しない
+  // ・IME変換中（isComposing / keyCode 229）は発火しない
+  // ・モーダル表示中（[data-modal-root] が居るとき＝全画面比較・校正）は発火しない
+  // ・リスナーは毎回 remove してから付け直す（多重登録・リークなし）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (analyzeDisabled) return;
+      if (document.querySelector("[data-modal-root]")) return;
+      e.preventDefault();
+      void handleAnalyzeRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [analyzeDisabled]);
+
   return (
     <div className="space-y-4 rounded-2xl border border-white/40 bg-white/40 p-6 shadow-lg backdrop-blur-xl">
       {/* 見出し行。書き起こしショートカット（⚡／✅／🎤）は「＋ 詳細設定」内へ移動済み。
@@ -2397,7 +2457,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
                 onClick={() => handleAnalyze()}
                 disabled={analyzeDisabled}
                 className="inline-flex items-center gap-1.5 rounded-full bg-[#378ADD] hover:bg-[#185FA5] px-4 py-1.5 text-xs font-bold text-white shadow transition-opacity disabled:opacity-40"
-                title="いま選択中の分析タイプで実行（下部の実行ボタンと同じ）"
+                title="いま選択中の分析タイプで実行（⌘+Enter / Ctrl+Enter・下部の実行ボタンと同じ）"
               >
                 {loading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2826,6 +2886,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         <button
           onClick={() => handleAnalyze()}
           disabled={analyzeDisabled}
+          title="いま選択中の分析タイプで実行（⌘+Enter / Ctrl+Enter）"
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#378ADD] hover:bg-[#185FA5] px-6 py-3 text-sm font-bold text-white shadow-lg transition-opacity disabled:opacity-40"
       >
         {loading ? (
@@ -2990,6 +3051,7 @@ DermaPDF ProのGensparkプロンプト生成機能を使うと、
         // 逃がし、高さは 100dvh で明示。flex 子には min-h-0 を付けて内容に押し広げられないようにする。
         return createPortal(
           <div
+            data-modal-root="true"
             className="fixed inset-0 z-50 h-[100dvh] w-screen bg-black/60 p-0 backdrop-blur-sm"
             onClick={() => setResultCompareOpen(false)}
           >

@@ -419,8 +419,9 @@ export default function Home() {
   );
 
   // 選択画像をPDFに統合せず、圧縮した画像群として直接AI分析へ渡す。
+  // 返り値は準備できた画像枚数（0＝準備できず）。既存の呼び出し側は返り値を使わない。
   const handleAnalyzeImages = useCallback(
-    async (ids: string[]) => {
+    async (ids: string[]): Promise<number> => {
       // 選択順を保持して対象画像の { id, url } を取得
       const targets = ids
         .map((id) => ({ id, url: images.find((img) => img.id === id)?.url }))
@@ -428,7 +429,7 @@ export default function Home() {
       const urls = targets.map((t) => t.url);
       if (urls.length === 0) {
         toastError("分析対象の画像が見つかりません");
-        return;
+        return 0;
       }
 
       setProgress(0);
@@ -444,7 +445,7 @@ export default function Home() {
 
         if (parts.length === 0) {
           toastError("すべての画像の読み込みに失敗しました");
-          return;
+          return 0;
         }
 
         // 画像直接分析モードへ。PDF経路の入力はクリアして排他にする。
@@ -464,18 +465,76 @@ export default function Home() {
             ? `${parts.length} 枚を読み込みました（${skipped} 枚は失敗のためスキップ）。分析タイプを選んで実行してください`
             : `${parts.length} 枚を読み込みました。分析タイプを選んで実行してください`,
         );
+        return parts.length;
       } catch (e) {
         toastError(
           `画像の準備に失敗しました: ${
             e instanceof Error ? e.message : "不明なエラー"
           }`,
         );
+        return 0;
       } finally {
         setProgress(null);
       }
     },
     [images],
   );
+
+  // いま有効な解析方式（表示用）。画像群があれば「画像のまま」、統合PDFがあれば「PDF統合」。
+  // どちらも未準備＝画像を読み込んだ直後は既定の「画像のまま」。切替は既存の排他処理のまま。
+  const analysisMode: "images" | "pdf" =
+    imageParts.length > 0
+      ? "images"
+      : fileBase64 && fileMime === "application/pdf"
+        ? "pdf"
+        : "images";
+
+  // 基本分析の「🚀 実行」を画像グリッド側からも押せるようにするための橋渡し。
+  // GeminiPanel 側の handleAnalyze / analyzeDisabled / loading をそのまま受け取って使う。
+  const runAnalyzeRef = useRef<(() => void) | null>(null);
+  const [analyzeRunState, setAnalyzeRunState] = useState({
+    disabled: true,
+    loading: false,
+  });
+  // 「画像のまま」方式で画像が未準備のときに、準備完了後へ実行を持ち越すフラグ。
+  const pendingRunRef = useRef(false);
+
+  const handleRunStateChange = useCallback(
+    (state: { run: () => void; disabled: boolean; loading: boolean }) => {
+      runAnalyzeRef.current = state.run;
+      setAnalyzeRunState((prev) =>
+        prev.disabled === state.disabled && prev.loading === state.loading
+          ? prev
+          : { disabled: state.disabled, loading: state.loading },
+      );
+    },
+    [],
+  );
+
+  // 画像グリッド行の🚀実行。方式が「画像のまま」でまだ画像を渡していない場合は、
+  // 既存の「画像のままAI分析」と同じ準備処理を先に走らせ、完了後に実行する。
+  const handleRunFromImages = useCallback(async () => {
+    if (analysisMode === "images" && imageParts.length === 0) {
+      if (selectedImageIds.length === 0) {
+        toastError("分析する画像を選択してください");
+        return;
+      }
+      pendingRunRef.current = true;
+      const prepared = await handleAnalyzeImages(selectedImageIds);
+      if (!prepared) pendingRunRef.current = false;
+      return;
+    }
+    runAnalyzeRef.current?.();
+  }, [analysisMode, imageParts.length, selectedImageIds, handleAnalyzeImages]);
+
+  // 画像の準備が終わったら、持ち越した実行を一度だけ行う。
+  // 実行可否（分析タイプ未選択など）は従来どおり handleAnalyze 側が判定する。
+  useEffect(() => {
+    if (!pendingRunRef.current) return;
+    if (imageParts.length === 0) return;
+    pendingRunRef.current = false;
+    runAnalyzeRef.current?.();
+  }, [imageParts]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -628,8 +687,17 @@ export default function Home() {
               }
               onMergePdf={(ids) => handleMergePdf(ids, false)}
               onMergePdfAndAnalyze={(ids) => handleMergePdf(ids, true)}
-              onAnalyzeImages={(ids) => handleAnalyzeImages(ids)}
+              onAnalyzeImages={(ids) => void handleAnalyzeImages(ids)}
               onSelectionChange={handleImageSelectionChange}
+              analysisMode={analysisMode}
+              onRun={() => void handleRunFromImages()}
+              runDisabled={
+                analyzeRunState.loading ||
+                (analysisMode === "images" && imageParts.length === 0
+                  ? selectedImageIds.length === 0
+                  : analyzeRunState.disabled)
+              }
+              runLoading={analyzeRunState.loading}
             />
           </section>
         )}
@@ -672,6 +740,7 @@ export default function Home() {
               selectedPdfPages={selectedPdfPages}
               selectedImageParts={selectedImageParts}
               onEnsureFileData={ensurePdfMerged}
+              onRunStateChange={handleRunStateChange}
             />
           )}
 

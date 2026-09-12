@@ -198,6 +198,8 @@ ${numbered}`;
 
   return (
     <div
+      /* 表示中だけ印を付ける（⌘+Enter の実行ショートカットを抑止する判定に使う） */
+      data-modal-root={hidden ? undefined : "true"}
       className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40 p-4"
       style={{ display: hidden ? "none" : undefined }}
       onClick={onClose}
