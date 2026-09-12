@@ -11,6 +11,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { markdownToPlainText } from "@/lib/markdown-plain";
+import { cleanupLatexNotation } from "@/lib/latex-cleanup";
 
 // 貼り付け先は Tailwind クラスを解釈しないため、基本的なインラインスタイルで書式を付ける
 // （見出しサイズ・太字・リスト・表の枠線程度）。配色は画面表示の markdown-view に合わせる。
@@ -102,6 +103,8 @@ function markdownToHtml(markdown: string): string {
  * 非対応環境では markdownToPlainText のプレーンテキストで writeText フォールバック。
  */
 export async function copyRichText(markdown: string): Promise<void> {
+  // 既知のLaTeX記法は貼り付け先でも記号で見えるようにする（表示・出力時のみ）。
+  markdown = cleanupLatexNotation(markdown);
   const plain = markdownToPlainText(markdown);
   try {
     if (

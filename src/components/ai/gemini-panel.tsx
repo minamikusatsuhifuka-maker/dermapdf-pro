@@ -15,6 +15,7 @@ import { saveAnalysis } from "@/lib/analysis-storage";
 import { syncScrollByRatio } from "@/lib/scroll-sync";
 import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { copyRichText } from "@/lib/clipboard-rich";
+import { NO_LATEX_RULE, cleanupLatexNotation } from "@/lib/latex-cleanup";
 import { saveTemplate, loadTemplates, type AnalysisTemplate } from "@/lib/template-storage";
 import { splitPdfPages, extractPdfPages, getPdfPageCount } from "@/lib/pdf-splitter";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
@@ -285,7 +286,7 @@ function loadBasicOrder(): AnalysisType[] {
   }
 }
 
-export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
+const RAW_ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
   // 基本分析
   summary:
     "この資料の内容を簡潔に要約してください。主要なポイントを箇条書きで整理し、全体像がわかるようにまとめてください。",
@@ -426,6 +427,12 @@ export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = {
     "次の資料をもとに、発表者がそのまま読み上げられるプレゼン原稿を作成してください。資料に書かれている内容だけを根拠にし、書かれていない数値・事実を創作しないでください。",
 };
 
+// 本文生成系プロンプトの末尾に共通の表記ルール（LaTeX禁止）を1行だけ付与する。
+// 既存の指示文・出力構成・変数名は変更せず、ANALYSIS_PROMPTS の参照側も従来どおり。
+export const ANALYSIS_PROMPTS: Record<AnalysisType, string> = Object.fromEntries(
+  Object.entries(RAW_ANALYSIS_PROMPTS).map(([type, prompt]) => [type, prompt + NO_LATEX_RULE])
+) as Record<AnalysisType, string>;
+
 // 🎤 プレゼン原稿：1ページあたりの発表時間
 const scriptLengths = [
   { label: "約30秒", value: "30s", hint: "1ページあたり150字前後" },
@@ -485,7 +492,7 @@ const PRESENTATION_SCRIPT_PROMPT = `あなたは資料をもとにプレゼン�
 - 箇条書きを棒読みしない。要点を意味のまとまりで語り直す。
 - 製品・サービス・取り組みを扱うページでは「なぜ必要か（相手が抱える課題）→ どう解決するか → 相手にとっての得」の順で語り、聞いた人がそのまま他人に説明できる短い一言を1つ含める。
 - 医療に関する内容では、効果を断定する表現・最上級表現・ビフォーアフターの断定を避け、必要に応じて個人差がある旨を添える。
-- 「以下が原稿です」等の前置き・解説・まとめは書かない。指定の形式のみを出力する。`;
+- 「以下が原稿です」等の前置き・解説・まとめは書かない。指定の形式のみを出力する。` + NO_LATEX_RULE;
 
 // 分析タイプ一覧（ANALYSIS_GROUPS）に載せないタイプの表示ラベル。
 // 保存カードのバッジ・結果パネル見出しはここを参照する。
@@ -2095,7 +2102,7 @@ ${head}`;
   const simplifyOne = async (type: AnalysisType, text: string) => {
     setSimplifying(type);
     try {
-      const prompt = `以下の文章を、専門用語を使わずに誰でも理解できる平易な言葉でわかりやすく書き直してください。意味・内容は変えずに、表現だけをシンプルにしてください。\n\n${text}`;
+      const prompt = `以下の文章を、専門用語を使わずに誰でも理解できる平易な言葉でわかりやすく書き直してください。意味・内容は変えずに、表現だけをシンプルにしてください。${NO_LATEX_RULE}\n\n${text}`;
       const data = await analyzeTextWithGemini(prompt, text);
       if (!data.success) throw new Error(data.error || "変換に失敗しました");
       setResults((prev) => {
@@ -2184,7 +2191,7 @@ ${head}`;
         : "";
 
     // 分析内容（軽い整形）
-    const formattedAnalysis = text
+    const formattedAnalysis = cleanupLatexNotation(text)
       .replace(/\*\*(.+?)\*\*/g, "**$1**")
       .replace(/^#{1,6}\s/gm, (match) => match);
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
+import { NO_LATEX_RULE } from "@/lib/latex-cleanup";
 import { Copy, Download, Loader2, BookmarkPlus, Sparkles } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { loadAllAnalyses, saveAnalysis, getDisplayTitle } from "@/lib/analysis-storage";
@@ -229,7 +230,7 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
     setResult("");
 
     try {
-      const prompt = getReportPrompt(reportType, summary, philosophyContext);
+      const prompt = getReportPrompt(reportType, summary, philosophyContext) + NO_LATEX_RULE;
       const data = await analyzeTextWithGemini(prompt);
       if (!data.success) throw new Error(data.error || "レポート生成に失敗しました");
       setResult(data.analysis);

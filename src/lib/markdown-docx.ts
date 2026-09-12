@@ -21,6 +21,7 @@ import {
   type IParagraphOptions,
   type ILevelsOptions,
 } from "docx";
+import { cleanupLatexNotation } from "@/lib/latex-cleanup";
 
 // 日本語（東アジア文字）にも確実に適用されるようフォント属性を明示する。
 const JP_FONT = { ascii: "游明朝", eastAsia: "游明朝", hAnsi: "游明朝" } as const;
@@ -178,6 +179,8 @@ function orderedLevels(): ILevelsOptions[] {
 // Markdown文字列を docx の子要素（段落・表）へ変換。順序付きリストは
 // ブロックごとに個別の numbering インスタンスを割り当てて番号を1から振り直す。
 export function markdownToDocx(markdown: string): ConvertResult {
+  // 既知のLaTeX記法はWord出力時に記号へ戻す（保存データは書き換えない）。
+  markdown = cleanupLatexNotation(markdown);
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const children: (Paragraph | Table)[] = [];
   const numberingConfigs: ConvertResult["numberingConfigs"] = [];

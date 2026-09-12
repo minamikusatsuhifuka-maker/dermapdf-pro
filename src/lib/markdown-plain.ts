@@ -2,8 +2,11 @@
 // 見出しは記号を外して見出し行＋空行、太字/斜体/コードの記号を除去、箇条書きは「・」、
 // テーブルはセル内容を保持、リンクはテキストのみ、水平線は罫線文字に。構造は保つ。
 // 依存なし（一括テキスト出力・個別テキスト出力で共通利用）。
+import { cleanupLatexNotation } from "@/lib/latex-cleanup";
+
 export function markdownToPlainText(md: string): string {
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  // 既存データに残った既知のLaTeX記法は出力時に記号へ戻す（保存データは書き換えない）。
+  const lines = cleanupLatexNotation(md).replace(/\r\n/g, "\n").split("\n");
   const out: string[] = [];
 
   for (let raw of lines) {

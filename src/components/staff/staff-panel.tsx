@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
+import { NO_LATEX_RULE } from "@/lib/latex-cleanup";
 import { Plus, X, Trash2, ChevronDown, ChevronUp, Loader2, Copy, BookmarkPlus, Download } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import {
@@ -226,7 +227,7 @@ ${philosophyContext}
 ## 前回からの振り返り（気づきを問う）
 ## 今回のテーマ
 ## リードマネジメント的な問いかけ5選
-## 次回までのアクション（本人が決める）`;
+## 次回までのアクション（本人が決める）${NO_LATEX_RULE}`;
 
       const data = await analyzeTextWithGemini(prompt);
       if (!data.success) throw new Error(data.error);
@@ -255,7 +256,7 @@ ${philosophyContext}
 ${philosophyContext}
 
 個人の成長を承認し、チームの目標達成に向けた前向きなメッセージを3パターン出力してください。
-外部からの強制ではなく、本人の内発的動機を引き出す視点で書いてください。`;
+外部からの強制ではなく、本人の内発的動機を引き出す視点で書いてください。${NO_LATEX_RULE}`;
 
       const data = await analyzeTextWithGemini(prompt);
       if (!data.success) throw new Error(data.error);

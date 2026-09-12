@@ -51,6 +51,7 @@ import {
 } from "@/lib/ai-category";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { copyRichText } from "@/lib/clipboard-rich";
+import { NO_LATEX_RULE, cleanupLatexNotation } from "@/lib/latex-cleanup";
 import MarkdownView from "@/components/ui/markdown-view";
 import { markdownToPlainText } from "@/lib/markdown-plain";
 import { ANALYSIS_PROMPTS } from "@/components/ai/gemini-panel";
@@ -236,7 +237,8 @@ const OVERVIEW_SUMMARY_PROMPT =
   "①冒頭に全体像を1〜2文の概要として書く\n" +
   "②続けて要点を箇条書きで3〜6点にまとめる\n" +
   "③最後に結論または示唆を1〜2文で書く\n\n" +
-  "冗長な繰り返しを避け、詳細な逐条説明はしないこと。全体としてはっきり短くまとめ、Markdown形式で出力してください。";
+  "冗長な繰り返しを避け、詳細な逐条説明はしないこと。全体としてはっきり短くまとめ、Markdown形式で出力してください。" +
+  NO_LATEX_RULE;
 
 const ACTION_ADVICE_PROMPT =
   "以下は皮膚科・美容皮膚科クリニックの資料の内容（要約を含む）です。これをクリニックの現場で実行できる具体的な施策に落とし込み、アドバイスとTODOを作成してください。\n\n" +
@@ -248,7 +250,8 @@ const ACTION_ADVICE_PROMPT =
   "上記2観点ごとに具体策を数点挙げる。各策に「なぜ効くか（患者・クリニック双方のメリット）」「実践のしやすさ（低コスト・低負担か）」を簡潔に添える。\n\n" +
   "## TODOリスト\n" +
   "明日から着手できる具体的タスクをチェックボックス形式（`- [ ]`）で列挙する。各タスクに（担当の目安：受付／看護／医師／全員 等・優先度：高/中/低・所要目安）を括弧書きで付し、着手しやすい順に並べる。\n\n" +
-  "過度な理想論を避け、現実的で小さく始められる案にすること。資料内容に根ざした具体案にし、一般論に流れないこと。";
+  "過度な理想論を避け、現実的で小さく始められる案にすること。資料内容に根ざした具体案にし、一般論に流れないこと。" +
+  NO_LATEX_RULE;
 
 // フォルダパスに対して一貫した色を返す（パスが見つからない場合はグレー）
 function getFolderColor(path: string, allPaths: string[]): string {
@@ -3211,7 +3214,7 @@ export function AnalysisStockPanel() {
                            そのまま描画（b2beae7以前の見た目・整形済みなので崩れない）。読み取り専用。 */
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          dangerouslySetInnerHTML={{ __html: r.content || "" }}
+                          dangerouslySetInnerHTML={{ __html: cleanupLatexNotation(r.content || "") }}
                           className="overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50/50 p-3 text-gray-700"
                           style={{
                             height: `${contentHeights[r.id] || globalHeight}px`,
@@ -3498,7 +3501,7 @@ export function AnalysisStockPanel() {
                 <div className="mx-auto max-w-4xl">
                   {isHtmlContent(fr.content) ? (
                     <div
-                      dangerouslySetInnerHTML={{ __html: fr.content || "" }}
+                      dangerouslySetInnerHTML={{ __html: cleanupLatexNotation(fr.content || "") }}
                       className="whitespace-pre-wrap text-gray-700"
                       style={{
                         fontSize: `${fontSize}px`,
@@ -3645,7 +3648,7 @@ export function AnalysisStockPanel() {
                     >
                       {isHtmlContent(cr.content) ? (
                         <div
-                          dangerouslySetInnerHTML={{ __html: cr.content || "" }}
+                          dangerouslySetInnerHTML={{ __html: cleanupLatexNotation(cr.content || "") }}
                           className="whitespace-pre-wrap text-gray-700"
                           style={{
                             fontSize: `${compareFontSize}px`,

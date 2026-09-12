@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import MarkdownView from "@/components/ui/markdown-view";
+import { NO_LATEX_RULE } from "@/lib/latex-cleanup";
 import { MessageSquare, Copy, Loader2 } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
 import { analyzeWithGemini } from "@/lib/gemini-client";
@@ -51,7 +52,7 @@ export function MessagePanel({
     setResult("");
 
     try {
-      let prompt = MESSAGE_PROMPTS[messageType];
+      let prompt = MESSAGE_PROMPTS[messageType] + NO_LATEX_RULE;
       if (clinicContext) {
         prompt = `クリニック理念: ${clinicContext}\n\n${prompt}`;
       }

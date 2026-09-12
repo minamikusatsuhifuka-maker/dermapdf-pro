@@ -1,3 +1,4 @@
+import { cleanupLatexNotation } from "@/lib/latex-cleanup";
 import { markdownToPlainText } from "@/lib/markdown-plain";
 
 export interface AnalysisRecord {
@@ -389,7 +390,7 @@ ${record.tags?.length ? "- **タグ**: " + record.tags.join(", ") : ""}
 
 ## 分析内容
 
-${record.content}
+${cleanupLatexNotation(record.content)}
 
 ---
 

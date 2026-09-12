@@ -3,6 +3,7 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import { cleanupLatexNotation } from "@/lib/latex-cleanup";
 
 // 表示用の軽い整形のみ。元データ文字列は一切変更しない。
 function normalizeMarkdown(src: string): string {
@@ -55,7 +56,7 @@ export default function MarkdownView({ children }: { children: string }) {
         rehypePlugins={[rehypeRaw]}
         components={components}
       >
-        {normalizeMarkdown(children)}
+        {normalizeMarkdown(cleanupLatexNotation(children))}
       </ReactMarkdown>
     </div>
   );

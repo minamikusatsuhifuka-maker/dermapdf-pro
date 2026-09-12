@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import { cleanupLatexNotation } from "@/lib/latex-cleanup";
 
 // PDF出力専用のMarkdownレンダラ。
 // 画面表示（markdown-view.tsx）と同じ解析（remark-gfm + rehype-raw）で見た目を揃えつつ、
@@ -85,7 +86,7 @@ export default function MarkdownPrint({ children }: { children: string }) {
         rehypePlugins={[rehypeRaw]}
         components={components}
       >
-        {normalizeMarkdown(children)}
+        {normalizeMarkdown(cleanupLatexNotation(children))}
       </ReactMarkdown>
     </div>
   );
