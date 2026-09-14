@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eraser, FileOutput, BrainCircuit, Images, GripVertical, Check, Loader2 } from "lucide-react";
+import { Eraser, FileOutput, BrainCircuit, Images, GripVertical, Check, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageItem {
@@ -19,6 +19,9 @@ interface ImageGridProps {
   // 選択画像が変わるたびに親へ通知（選択画像のみの書き起こしで使用）。
   // ids は「画像のままAI分析」と同じ selectedArray（表示順・選択中のみ）。
   onSelectionChange?: (ids: string[]) => void;
+  // 選択中の画像だけを読み込み済みファイルから取り除く（確認ダイアログは親側で出す）。
+  // 既存の個別✕・すべて削除は変更せず、この経路を追加するだけ。
+  onDeleteSelected?: (ids: string[]) => void;
   // いま有効な解析方式（表示だけ）。"images"＝画像のまま／"pdf"＝PDF統合。既定は "images"。
   // ボタンの挙動は従来どおり（押すと即その方式で準備＋AI分析パネルへ）。表示の排他だけを担う。
   analysisMode?: "images" | "pdf";
@@ -35,6 +38,7 @@ export function ImageGrid({
   onMergePdfAndAnalyze,
   onAnalyzeImages,
   onSelectionChange,
+  onDeleteSelected,
   analysisMode = "images",
   onRun,
   runDisabled,
@@ -131,6 +135,21 @@ export function ImageGrid({
         <span className="text-xs text-gray-400">
           {selected.size} / {images.length} 枚選択中
         </span>
+        {/* 選択中の画像だけを削除（個別✕・すべて削除に加える third の手段）。
+            選択0件では押せない。実際の削除と確認ダイアログは親（page.tsx）が担当。 */}
+        <button
+          disabled={selected.size === 0}
+          onClick={() => onDeleteSelected?.(selectedArray)}
+          title={
+            selected.size === 0
+              ? "画像を選択してください"
+              : `選択中の ${selected.size} 枚を読み込み済みファイルから削除`
+          }
+          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 shadow-sm transition-colors hover:bg-red-100 disabled:opacity-40 disabled:hover:bg-red-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          選択した画像を削除（{selected.size}枚）
+        </button>
         {/* 解析方式：既定は「画像のまま」。選択中は塗り＋✓、非選択は白抜きで排他表示。
             押したときの挙動は従来どおり（その方式で準備し、AI分析パネルを開く）。 */}
         <button

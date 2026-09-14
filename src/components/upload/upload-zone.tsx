@@ -25,9 +25,12 @@ interface UploadZoneProps {
   onTextInput?: (text: string, fileName: string) => void;
   // 読み込んだファイル（PDF・画像）を一括削除して状態をリセットする。
   onClearFiles?: () => void;
+  // 親（画像グリッドの「選択した画像を削除」）から特定の File だけを取り除くための受け口。
+  // マウント中は「対象 File を selectedFiles から外して onFilesSelected へ渡す」関数が入る。
+  removeFilesRef?: React.RefObject<((files: File[]) => void) | null>;
 }
 
-export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: UploadZoneProps) {
+export function UploadZone({ onFilesSelected, onTextInput, onClearFiles, removeFilesRef }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   // 読み込み済みファイル一覧の開閉（既定は閉じる。件数と「すべて削除」は見出しに残す）
@@ -105,6 +108,23 @@ export function UploadZone({ onFilesSelected, onTextInput, onClearFiles }: Uploa
     setSelectedFiles(next);
     onFilesSelected(next);
   };
+
+  // 親からの部分削除の受け口を公開。削除経路は個別✕（removeFile）と同じで、
+  // selectedFiles を更新して onFilesSelected に渡すだけ（objectURLの解放・重複キーの更新は親側の handleFiles が担う）。
+  useEffect(() => {
+    if (!removeFilesRef) return;
+    removeFilesRef.current = (targets: File[]) => {
+      if (targets.length === 0) return;
+      const targetSet = new Set(targets);
+      const next = selectedFiles.filter((f) => !targetSet.has(f));
+      if (next.length === selectedFiles.length) return;
+      setSelectedFiles(next);
+      onFilesSelected(next);
+    };
+    return () => {
+      removeFilesRef.current = null;
+    };
+  }, [removeFilesRef, selectedFiles, onFilesSelected]);
 
   // 読み込んだファイルを一括削除（全PDF・全画像をまとめてクリア）。
   // ファイル自体の削除であり、再統合は一切走らせず状態をリセットするだけ。

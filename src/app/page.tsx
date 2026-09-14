@@ -84,6 +84,9 @@ export default function Home() {
   const imgUrlMapRef = useRef<Map<File, { id: string; url: string }>>(new Map());
   // 表示用画像エントリの安定したid採番。
   const imgIdCounterRef = useRef(0);
+  // UploadZone が公開する「特定の File だけを読み込み済みファイルから外す」関数。
+  // 「選択した画像を削除」から呼ぶ（個別✕と同じ経路＝handleFiles を通す）。
+  const removeFilesRef = useRef<((files: File[]) => void) | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>("gemini");
   const [analysisResult, setAnalysisResult] = useState("");
@@ -345,6 +348,24 @@ export default function Home() {
     setFileName(undefined);
   }, []);
 
+  // 画像グリッドの「選択した画像を削除」。選択中の画像に対応する File だけを
+  // 読み込み済みファイルから取り除く。削除経路は個別✕と同じ handleFiles で、
+  // そこで objectURL の revoke と imgUrlMapRef からの除去が行われる
+  // （＝重複スキップ用の既知キーも selectedFiles 由来なので自動で外れ、再アップロードできる）。
+  const handleDeleteSelectedImages = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`選択した${ids.length}枚の画像を削除しますか？`)) return;
+    const idSet = new Set(ids);
+    const targets: File[] = [];
+    for (const [file, entry] of imgUrlMapRef.current) {
+      if (idSet.has(entry.id)) targets.push(file);
+    }
+    if (targets.length === 0) return;
+    removeFilesRef.current?.(targets);
+    setSelectedImageIds((prev) => prev.filter((id) => !idSet.has(id)));
+    toastOk(`${targets.length} 枚の画像を削除しました`);
+  }, []);
+
   const handleTextInput = useCallback((text: string, textFileName: string) => {
     // テキスト入力時はファイル名をセット
     if (text.trim()) {
@@ -553,6 +574,7 @@ export default function Home() {
             onFilesSelected={handleFiles}
             onTextInput={handleTextInput}
             onClearFiles={handleClearFiles}
+            removeFilesRef={removeFilesRef}
           />
         </section>
 
@@ -689,6 +711,7 @@ export default function Home() {
               onMergePdfAndAnalyze={(ids) => handleMergePdf(ids, true)}
               onAnalyzeImages={(ids) => void handleAnalyzeImages(ids)}
               onSelectionChange={handleImageSelectionChange}
+              onDeleteSelected={handleDeleteSelectedImages}
               analysisMode={analysisMode}
               onRun={() => void handleRunFromImages()}
               runDisabled={
