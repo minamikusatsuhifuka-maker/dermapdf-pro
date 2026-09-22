@@ -1799,13 +1799,25 @@ export function AnalysisStockPanel() {
   };
 
   // 容量メーターの表示値（目安）。80%以上は黄、90%以上は赤
+  // local: localStorage 全体 / 約5MB。idb: カード実サイズ（キャッシュJSON長×2）/ estimate().quota
   const usageView = (() => {
     if (!storageUsage) return null;
     const mb = (b: number) => (b / (1024 * 1024)).toFixed(1);
+    const fmt = (b: number) => (b >= 1024 * 1024 * 1024 ? `${(b / (1024 * 1024 * 1024)).toFixed(1)}GB` : `${mb(b)}MB`);
     const pct = Math.round(storageUsage.ratio * 100);
     const level: "ok" | "warn" | "danger" =
       pct >= 90 ? "danger" : pct >= 80 ? "warn" : "ok";
-    return { mb, pct, level, used: storageUsage.totalBytes, limit: storageUsage.limitBytes, stock: storageUsage.stockBytes };
+    return {
+      mb,
+      fmt,
+      pct,
+      level,
+      used: storageUsage.totalBytes,
+      limit: storageUsage.limitBytes,
+      stock: storageUsage.stockBytes,
+      driver: storageUsage.driver,
+      persisted: storageUsage.persisted,
+    };
   })();
 
   return (
@@ -1846,12 +1858,20 @@ export function AnalysisStockPanel() {
               ? "border-yellow-300 bg-yellow-50 text-yellow-800"
               : "border-gray-200 bg-white/60 text-gray-600"
           }`}
-          title={`分析ストック: 約${usageView.mb(usageView.stock)}MB／localStorage全体: 約${usageView.mb(usageView.used)}MB（文字数×2バイトの概算）`}
+          title={
+            usageView.driver === "idb"
+              ? `保存先: IndexedDB（大容量）／カード実サイズ: 約${usageView.mb(usageView.stock)}MB／このサイト全体の使用量: 約${usageView.fmt(usageView.used)}／上限の目安: ${usageView.limit > 0 ? usageView.fmt(usageView.limit) : "不明"}`
+              : `分析ストック: 約${usageView.mb(usageView.stock)}MB／localStorage全体: 約${usageView.mb(usageView.used)}MB（文字数×2バイトの概算）`
+          }
         >
           <div className="flex items-center gap-2">
-            <span className="font-semibold">💽 保存容量（目安）</span>
+            <span className="font-semibold">
+              {usageView.driver === "idb" ? "🗄 保存容量（大容量・目安）" : "💽 保存容量（目安）"}
+            </span>
             <span>
-              {usageView.mb(usageView.used)}MB / 約{usageView.mb(usageView.limit)}MB（{usageView.pct}%）
+              {usageView.driver === "idb"
+                ? `カード ${usageView.mb(usageView.stock)}MB / 約${usageView.limit > 0 ? usageView.fmt(usageView.limit) : "—"}（${usageView.pct}%）`
+                : `${usageView.mb(usageView.used)}MB / 約${usageView.mb(usageView.limit)}MB（${usageView.pct}%）`}
             </span>
             <div className="h-2 w-28 overflow-hidden rounded-full bg-gray-200">
               <div
@@ -1865,6 +1885,20 @@ export function AnalysisStockPanel() {
                 style={{ width: `${Math.min(100, usageView.pct)}%` }}
               />
             </div>
+            {usageView.driver === "idb" && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  usageView.persisted === true
+                    ? "bg-green-100 text-green-700"
+                    : usageView.persisted === false
+                    ? "bg-gray-100 text-gray-600"
+                    : "bg-gray-100 text-gray-400"
+                }`}
+                title="navigator.storage.persist() の結果。許可ならブラウザの自動削除の対象外になります"
+              >
+                永続化：{usageView.persisted === true ? "許可" : usageView.persisted === false ? "未許可" : "確認中"}
+              </span>
+            )}
           </div>
           {usageView.level !== "ok" && (
             <span className="font-medium">
