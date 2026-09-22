@@ -1,5 +1,6 @@
 import { cleanupLatexNotation } from "@/lib/latex-cleanup";
 import { markdownToPlainText } from "@/lib/markdown-plain";
+import { loadFeatureFlags } from "@/lib/feature-flags";
 
 export interface AnalysisRecord {
   id: string;
@@ -61,15 +62,514 @@ export function describeSaveError(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-// ストック全件を一括で書き込む。容量超過は StorageQuotaError に変換して投げる。
-// 失敗時は何も書き込まれない（localStorage.setItem は原子的）ので既存データは無傷。
-function writeStock(records: AnalysisRecord[]): void {
+// ============================================================================
+// 保存ドライバ層
+//   - "local": 従来どおり localStorage に配列を丸ごと保存（挙動は完全に同じ）
+//   - "idb":   メモリキャッシュ＋裏で IndexedDB へ永続化（1レコード1オブジェクト・keyPath=id）
+// 公開関数はすべて同期のまま。呼び出し元（保護対象の本文編集・保存を含む）は一切変えない。
+// ============================================================================
+export type StorageDriverName = "local" | "idb";
+const DRIVER_KEY = "dermapdf_storage_driver";
+export const MIGRATED_KEY = "dermapdf_analysis_stock_migrated";
+const IDB_NAME = "dermapdf";
+const IDB_VERSION = 1;
+const IDB_STORE = "analysis_stock";
+const IDB_META = "meta";
+const ORDER_META_KEY = "order";
+const CHANNEL_NAME = "dermapdf_analysis_stock";
+export const PERSIST_ERROR_EVENT = "analysisStockPersistError";
+
+function notifyUpdated(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("analysisStockUpdated"));
+}
+
+// 設定されているドライバ名（ブラウザ単位の localStorage キー > 機能フラグ既定値）
+export function getStorageDriverName(): StorageDriverName {
+  if (typeof window === "undefined") return "local";
+  try {
+    const v = localStorage.getItem(DRIVER_KEY);
+    if (v === "idb" || v === "local") return v;
+  } catch {
+    /* noop */
+  }
+  try {
+    return loadFeatureFlags().idbStorage ? "idb" : "local";
+  } catch {
+    return "local";
+  }
+}
+
+// 実際に動作中のドライバ（IDB が開けずフォールバックした場合は "local" になる）
+let activeDriver: StorageDriverName | null = null;
+function currentDriver(): StorageDriverName {
+  if (activeDriver === null) {
+    activeDriver = getStorageDriverName();
+    if (activeDriver === "idb") void idbInit();
+  }
+  return activeDriver;
+}
+export function getActiveStorageDriver(): StorageDriverName {
+  return currentDriver();
+}
+
+// ---- localStorage ドライバ（現行コードそのまま） ----
+function localRead(): AnalysisRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+function localWrite(records: AnalysisRecord[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   } catch (err) {
     if (isQuotaExceeded(err)) throw new StorageQuotaError();
     throw err;
   }
+}
+
+// ---- IndexedDB ドライバ ----
+type IdbOp = { type: "put"; record: AnalysisRecord } | { type: "delete"; id: string };
+let idbCache: AnalysisRecord[] = [];
+let idbReady = false;
+let idbReadyResolve: (() => void) | null = null;
+const idbReadyPromise: Promise<void> = new Promise((res) => {
+  idbReadyResolve = res;
+});
+const idbDirty = new Set<string>(); // 初期読み込み完了前にメモリで触った id（読み込み結果より優先）
+const idbDeletedEarly = new Set<string>(); // 完了前に削除した id
+let idbDbPromise: Promise<IDBDatabase> | null = null;
+let idbQueue: IdbOp[] = [];
+let idbFailedOps: IdbOp[] = []; // 再試行しきれなかった分（次のフラッシュで再度試す）
+let idbOrderDirty = false;
+let idbFlushing = false;
+let idbReloadWanted = false;
+let idbPersistFailed = false;
+let idbChannel: BroadcastChannel | null = null;
+const idbTabId = Math.random().toString(36).slice(2);
+let storageEstimate: { usage: number; quota: number } | null = null;
+let persistGranted: boolean | null = null;
+
+function idbOpen(): Promise<IDBDatabase> {
+  if (idbDbPromise) return idbDbPromise;
+  const p = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof indexedDB === "undefined" || indexedDB === null) {
+      reject(new Error("IndexedDB が利用できません"));
+      return;
+    }
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(IDB_META)) db.createObjectStore(IDB_META, { keyPath: "key" });
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB を開けませんでした"));
+    req.onblocked = () => reject(new Error("IndexedDB が他のタブにブロックされています"));
+  });
+  idbDbPromise = p;
+  p.catch(() => {
+    idbDbPromise = null;
+  });
+  return p;
+}
+
+// 表示順は meta.order（id の配列）で保持する。無い id は createdAt 降順で末尾に付ける。
+function applyOrder(records: AnalysisRecord[], ids?: string[]): AnalysisRecord[] {
+  const map = new Map(records.map((r) => [r.id, r]));
+  const out: AnalysisRecord[] = [];
+  for (const id of ids ?? []) {
+    const r = map.get(id);
+    if (r) {
+      out.push(r);
+      map.delete(id);
+    }
+  }
+  const rest = Array.from(map.values()).sort((a, b) =>
+    a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0
+  );
+  return [...out, ...rest];
+}
+
+function idbReadAll(db: IDBDatabase): Promise<AnalysisRecord[]> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([IDB_STORE, IDB_META], "readonly");
+    const all = tx.objectStore(IDB_STORE).getAll();
+    const ord = tx.objectStore(IDB_META).get(ORDER_META_KEY);
+    tx.oncomplete = () =>
+      resolve(applyOrder(all.result as AnalysisRecord[], (ord.result as { ids?: string[] } | undefined)?.ids));
+    tx.onerror = () => reject(tx.error ?? new Error("IndexedDB の読み込みに失敗"));
+    tx.onabort = () => reject(tx.error ?? new Error("IndexedDB の読み込みが中断"));
+  });
+}
+
+function idbCount(db: IDBDatabase): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const c = tx.objectStore(IDB_STORE).count();
+    c.onsuccess = () => resolve(c.result);
+    c.onerror = () => reject(c.error ?? new Error("count failed"));
+  });
+}
+
+async function idbInit(): Promise<void> {
+  try {
+    const db = await idbOpen();
+    const stored = await idbReadAll(db);
+    // 必須条件3: 完了前にメモリで触ったレコード（dirty）を優先して id でマージ
+    const dirtyRecords = idbCache.filter((r) => idbDirty.has(r.id));
+    const dirtyIds = new Set(dirtyRecords.map((r) => r.id));
+    const hadEarlyChanges = dirtyRecords.length > 0 || idbDeletedEarly.size > 0;
+    idbCache = [
+      ...dirtyRecords,
+      ...stored.filter((r) => !dirtyIds.has(r.id) && !idbDeletedEarly.has(r.id)),
+    ];
+    idbDirty.clear();
+    idbDeletedEarly.clear();
+    idbReady = true;
+    if (hadEarlyChanges) {
+      idbOrderDirty = true;
+      scheduleFlush();
+    }
+    idbSetupChannel();
+    idbSetupUnloadGuards();
+    void idbRefreshEstimate();
+    void idbRequestPersist();
+    idbReadyResolve?.();
+    // 必須条件4: 読み込み完了を既存イベントで通知（一覧・件数バッジが再読込する）
+    notifyUpdated();
+  } catch (err) {
+    console.error("IndexedDB を初期化できないため localStorage に切り替えます:", err);
+    idbFallbackToLocal();
+  }
+}
+
+// IDB が使えない環境（プライベートモード等）は localStorage ドライバへ自動フォールバック。
+// 完了前にメモリへ書いた分があれば localStorage に合流させる（best effort）。
+function idbFallbackToLocal(): void {
+  activeDriver = "local";
+  if (idbCache.length > 0) {
+    try {
+      const existing = localRead();
+      const ids = new Set(existing.map((r) => r.id));
+      const add = idbCache.filter((r) => !ids.has(r.id));
+      if (add.length > 0) localWrite([...add, ...existing]);
+    } catch (e) {
+      console.error("フォールバック時の合流に失敗:", e);
+    }
+  }
+  idbCache = [];
+  idbQueue = [];
+  idbFailedOps = [];
+  idbReady = true;
+  idbReadyResolve?.();
+  notifyUpdated();
+}
+
+// レコードの浅い比較（配列は内容で比較・undefined と欠落は同一視）
+function shallowEqualRecord(a: AnalysisRecord, b: AnalysisRecord): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const av = (a as unknown as Record<string, unknown>)[k];
+    const bv = (b as unknown as Record<string, unknown>)[k];
+    if (av === bv) continue;
+    if (Array.isArray(av) && Array.isArray(bv)) {
+      if (av.length === bv.length && av.every((x, i) => x === bv[i])) continue;
+      return false;
+    }
+    return false;
+  }
+  return true;
+}
+
+function idbWrite(records: AnalysisRecord[]): void {
+  const prev = new Map(idbCache.map((r) => [r.id, r]));
+  // 呼び出し元の配列・オブジェクトとは切り離して保持する（外から書き換えられてもキャッシュは汚れない）
+  const next = records.map((r) => ({ ...r }));
+  const nextIds = new Set<string>();
+  for (const r of next) {
+    nextIds.add(r.id);
+    const p = prev.get(r.id);
+    if (!p || !shallowEqualRecord(p, r)) {
+      idbQueue.push({ type: "put", record: r });
+      if (!idbReady) idbDirty.add(r.id);
+    }
+  }
+  for (const id of prev.keys()) {
+    if (!nextIds.has(id)) {
+      idbQueue.push({ type: "delete", id });
+      if (!idbReady) idbDeletedEarly.add(id);
+      idbDirty.delete(id);
+    }
+  }
+  const orderChanged =
+    idbCache.length !== next.length || idbCache.some((r, i) => r.id !== next[i].id);
+  if (orderChanged) idbOrderDirty = true;
+  idbCache = next;
+  scheduleFlush();
+}
+
+function idbHasPending(): boolean {
+  return idbQueue.length > 0 || idbFailedOps.length > 0 || idbFlushing;
+}
+
+function scheduleFlush(): void {
+  if (idbFlushing) return;
+  idbFlushing = true;
+  // 同期関数の直後（同じティック）に書き込みを発行する
+  queueMicrotask(() => void idbFlush());
+}
+
+async function idbFlush(): Promise<void> {
+  try {
+    while (idbQueue.length > 0 || idbFailedOps.length > 0 || idbOrderDirty) {
+      const ops = [...idbFailedOps, ...idbQueue];
+      idbFailedOps = [];
+      idbQueue = [];
+      const writeOrder = idbOrderDirty;
+      idbOrderDirty = false;
+      const orderIds = writeOrder ? idbCache.map((r) => r.id) : null;
+      const ok = await idbCommitWithRetry(ops, orderIds);
+      if (!ok) break; // 最終失敗：失敗分は idbFailedOps に戻してある。次の書き込みで再試行
+    }
+  } finally {
+    idbFlushing = false;
+  }
+  if (idbReloadWanted) {
+    idbReloadWanted = false;
+    void idbReloadFromDb();
+  }
+}
+
+function idbCommit(ops: IdbOp[], orderIds: string[] | null): Promise<void> {
+  return idbOpen().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction([IDB_STORE, IDB_META], "readwrite");
+        const store = tx.objectStore(IDB_STORE);
+        // 同じ id への操作は最後のものだけ残す
+        const last = new Map<string, IdbOp>();
+        for (const op of ops) last.set(op.type === "put" ? op.record.id : op.id, op);
+        for (const op of last.values()) {
+          if (op.type === "put") store.put(op.record);
+          else store.delete(op.id);
+        }
+        if (orderIds) tx.objectStore(IDB_META).put({ key: ORDER_META_KEY, ids: orderIds });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? new Error("IndexedDB の書き込みに失敗"));
+        tx.onabort = () => reject(tx.error ?? new Error("IndexedDB の書き込みが中断"));
+      })
+  );
+}
+
+const RETRY_DELAYS_MS = [300, 1000, 2000, 4000];
+async function idbCommitWithRetry(ops: IdbOp[], orderIds: string[] | null): Promise<boolean> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await idbCommit(ops, orderIds);
+      idbPersistFailed = false;
+      idbChannel?.postMessage({ tab: idbTabId, type: "changed" });
+      void idbRefreshEstimate();
+      return true;
+    } catch (err) {
+      if (attempt >= RETRY_DELAYS_MS.length) {
+        // 最終失敗：メモリ上のデータは無傷。失敗分は保持して次の書き込み時に再度試す。
+        idbFailedOps = [...idbFailedOps, ...ops];
+        if (orderIds) idbOrderDirty = true;
+        idbPersistFailed = true;
+        console.error("IndexedDB への書き込みに失敗（再試行上限）:", err);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent(PERSIST_ERROR_EVENT, {
+              detail: { message: err instanceof Error ? err.message : String(err) },
+            })
+          );
+        }
+        return false;
+      }
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
+async function idbReloadFromDb(): Promise<void> {
+  if (idbHasPending()) {
+    idbReloadWanted = true;
+    return;
+  }
+  try {
+    const db = await idbOpen();
+    idbCache = await idbReadAll(db);
+    notifyUpdated();
+  } catch (err) {
+    console.error("IndexedDB の再読込に失敗:", err);
+  }
+}
+
+function idbSetupChannel(): void {
+  if (typeof BroadcastChannel === "undefined" || idbChannel) return;
+  try {
+    idbChannel = new BroadcastChannel(CHANNEL_NAME);
+    idbChannel.onmessage = (ev: MessageEvent) => {
+      if (ev.data?.tab === idbTabId) return;
+      void idbReloadFromDb();
+    };
+  } catch {
+    idbChannel = null;
+  }
+}
+
+let idbUnloadGuardsSet = false;
+function idbSetupUnloadGuards(): void {
+  if (idbUnloadGuardsSet || typeof window === "undefined") return;
+  idbUnloadGuardsSet = true;
+  window.addEventListener("beforeunload", (e) => {
+    if (idbHasPending()) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && (idbQueue.length > 0 || idbFailedOps.length > 0)) {
+      scheduleFlush();
+    }
+  });
+}
+
+async function idbRefreshEstimate(): Promise<void> {
+  try {
+    if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
+      const e = await navigator.storage.estimate();
+      storageEstimate = { usage: e.usage ?? 0, quota: e.quota ?? 0 };
+    }
+  } catch {
+    /* 取得不可は無視 */
+  }
+}
+
+async function idbRequestPersist(): Promise<void> {
+  try {
+    if (typeof navigator !== "undefined" && navigator.storage?.persist) {
+      persistGranted = await navigator.storage.persist();
+      notifyUpdated();
+    }
+  } catch {
+    persistGranted = null;
+  }
+}
+
+// 初期読み込みの完了を待つ（local ドライバは即解決）
+export function whenStorageReady(): Promise<void> {
+  if (currentDriver() === "local") return Promise.resolve();
+  return idbReadyPromise;
+}
+export function isStorageReady(): boolean {
+  return currentDriver() === "local" || idbReady;
+}
+export function hasPendingPersist(): boolean {
+  return currentDriver() === "idb" && idbHasPending();
+}
+export function isPersistFailed(): boolean {
+  return currentDriver() === "idb" && idbPersistFailed;
+}
+
+// ---- 読み書きプリミティブ（全公開関数はこれを経由する） ----
+function readStock(): AnalysisRecord[] {
+  if (currentDriver() === "idb") {
+    // 必須条件2: キャッシュのコピーを返す（呼び出し元が書き換えてもキャッシュは汚れない）
+    return idbCache.map((r) => ({ ...r }));
+  }
+  return localRead();
+}
+
+// ストック全件を書き込む。local: localStorage に丸ごと（容量超過は StorageQuotaError、失敗時は無書き込み）。
+// idb: キャッシュを差し替え、差分だけ裏で IndexedDB へ put/delete する。
+function writeStock(records: AnalysisRecord[]): void {
+  if (currentDriver() === "idb") {
+    idbWrite(records);
+    return;
+  }
+  localWrite(records);
+}
+
+function clearStock(): void {
+  if (currentDriver() === "idb") {
+    idbWrite([]);
+    return;
+  }
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// ============================================================================
+// 初回移行（院長が明示的に実行）
+//   localStorage の全件を 1 トランザクションで IndexedDB へ put → 件数検証 → 一致したときだけ切替。
+//   元キー dermapdf_analysis_stock は読み取り専用で残し、以後書き込まない。
+// ============================================================================
+export async function migrateToIndexedDB(opts?: { reimport?: boolean }): Promise<{ count: number }> {
+  if (typeof window === "undefined") throw new Error("ブラウザでのみ実行できます");
+  if (!opts?.reimport && getStorageDriverName() === "idb") {
+    throw new Error("すでに大容量の保存先を使用しています");
+  }
+  const source = localRead();
+  const db = await idbOpen();
+  if (opts?.reimport) {
+    const existing = await idbCount(db);
+    if (existing > 0) throw new Error(`保存先に ${existing} 件のデータがあるため再取込は行いません`);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([IDB_STORE, IDB_META], "readwrite");
+    const store = tx.objectStore(IDB_STORE);
+    store.clear();
+    for (const r of source) store.put(r);
+    tx.objectStore(IDB_META).put({ key: ORDER_META_KEY, ids: source.map((r) => r.id) });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("IndexedDB への書き込みに失敗"));
+    tx.onabort = () => reject(tx.error ?? new Error("IndexedDB への書き込みが中断"));
+  });
+  const count = await idbCount(db);
+  if (count !== source.length) {
+    throw new Error(`件数が一致しません（移行元 ${source.length} 件 / 保存先 ${count} 件）。切り替えは行いません`);
+  }
+  localStorage.setItem(MIGRATED_KEY, `${new Date().toISOString()}|${count}`);
+  localStorage.setItem(DRIVER_KEY, "idb");
+  return { count };
+}
+
+export function getMigrationInfo(): { migratedAt: string; count: number } | null {
+  try {
+    const v = localStorage.getItem(MIGRATED_KEY);
+    if (!v) return null;
+    const [migratedAt, count] = v.split("|");
+    return { migratedAt, count: Number(count) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+// 整合性チェック：移行フラグがあるのに保存先が空で、移行前データ（localStorage）が残っている
+export async function checkStorageIntegrity(): Promise<{
+  status: "ok" | "idb-empty-with-flag";
+  localCount: number;
+}> {
+  const localCount = localRead().length;
+  if (currentDriver() !== "idb") return { status: "ok", localCount };
+  await whenStorageReady();
+  if (currentDriver() !== "idb") return { status: "ok", localCount };
+  if (idbCache.length === 0 && getMigrationInfo() && localCount > 0) {
+    return { status: "idb-empty-with-flag", localCount };
+  }
+  return { status: "ok", localCount };
 }
 
 export function saveAnalysis(
@@ -85,16 +585,12 @@ export function saveAnalysis(
   // 件数上限は設けない。消えるのはユーザーが削除したときだけ。
   // 容量超過時は StorageQuotaError を投げ、何も書き込まない（イベントも発火しない）。
   writeStock(records);
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  notifyUpdated();
   return newRecord;
 }
 
 export function loadAllAnalyses(): AnalysisRecord[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch {
-    return [];
-  }
+  return readStock();
 }
 
 export function updateAnalysisTitle(id: string, title: string): void {
@@ -102,8 +598,8 @@ export function updateAnalysisTitle(id: string, title: string): void {
   const idx = records.findIndex((r) => r.id === id);
   if (idx !== -1) {
     records[idx].title = title;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 
@@ -118,8 +614,8 @@ export function updateAnalysisAiCategory(id: string, aiCategory: string): void {
     } else {
       delete records[idx].aiCategory;
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 
@@ -132,8 +628,8 @@ export function updateAnalysisContent(id: string, content: string): void {
     }
     records[idx].content = content;
     records[idx].updatedAt = new Date().toISOString();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 
@@ -144,8 +640,8 @@ export function revertAnalysisContent(id: string): void {
     records[idx].content = records[idx].originalContent!;
     delete records[idx].originalContent;
     delete records[idx].updatedAt;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 
@@ -158,8 +654,8 @@ export function toggleLock(id: string): void {
   const idx = records.findIndex((r) => r.id === id);
   if (idx !== -1) {
     records[idx].locked = !records[idx].locked;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 
@@ -168,8 +664,8 @@ export function toggleFavorite(id: string): void {
   const idx = records.findIndex((r) => r.id === id);
   if (idx !== -1) {
     records[idx].favorite = !records[idx].favorite;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 
@@ -215,7 +711,7 @@ export function duplicateAnalysis(id: string): AnalysisRecord | null {
   records.splice(records.findIndex((r) => r.id === id) + 1, 0, duplicated);
   // 件数上限なし。容量超過時は StorageQuotaError を投げ、何も書き込まない。
   writeStock(records);
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  notifyUpdated();
   return duplicated;
 }
 
@@ -224,14 +720,14 @@ export function bulkToggleLock(ids: string[], locked: boolean): void {
   records.forEach((r) => {
     if (ids.includes(r.id)) r.locked = locked;
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  writeStock(records);
+  notifyUpdated();
 }
 
 export function deleteAnalysis(id: string): void {
   const records = loadAllAnalyses().filter((r) => r.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  writeStock(records);
+  notifyUpdated();
 }
 
 export function renameFolder(oldName: string, newName: string): void {
@@ -239,21 +735,22 @@ export function renameFolder(oldName: string, newName: string): void {
   records.forEach((r) => {
     if (r.folder === oldName) r.folder = newName;
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  writeStock(records);
+  notifyUpdated();
 }
 
+// フォルダ削除：そのフォルダとサブフォルダ配下のカードの folder を "" に戻す
 export function deleteFolder(folderName: string): void {
   const records = loadAllAnalyses();
   records.forEach((r) => {
-    if (r.folder === folderName) r.folder = "";
+    if (r.folder === folderName || (r.folder || "").startsWith(folderName + "/")) r.folder = "";
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  writeStock(records);
+  notifyUpdated();
 }
 
 export function clearAllAnalyses(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  clearStock();
 }
 
 export function exportAnalysesAsJSON(): void {
@@ -274,13 +771,28 @@ export function exportAnalysesAsJSON(): void {
 export const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 export interface StorageUsage {
-  stockBytes: number; // dermapdf_analysis_stock の概算バイト数
-  totalBytes: number; // 同一オリジンの localStorage 全体の概算バイト数
-  limitBytes: number; // 上限の目安
-  ratio: number; // totalBytes / limitBytes（0〜）
+  stockBytes: number; // 保存カードの概算バイト数
+  totalBytes: number; // local: localStorage 全体の概算 / idb: navigator.storage.estimate().usage
+  limitBytes: number; // local: 約5MB / idb: estimate().quota
+  ratio: number; // local: totalBytes / limitBytes、idb: stockBytes / limitBytes（0〜）
+  driver: StorageDriverName;
+  persisted: boolean | null; // idb のときの navigator.storage.persist() 結果（不明は null）
 }
 
 export function estimateStorageUsage(): StorageUsage {
+  if (currentDriver() === "idb") {
+    // カードの実サイズ＝キャッシュの JSON 長×2（UTF-16）。分母は estimate().quota（目安）
+    const stockBytes = JSON.stringify(idbCache).length * 2;
+    const quota = storageEstimate?.quota ?? 0;
+    return {
+      stockBytes,
+      totalBytes: storageEstimate?.usage ?? stockBytes,
+      limitBytes: quota,
+      ratio: quota > 0 ? stockBytes / quota : 0,
+      driver: "idb",
+      persisted: persistGranted,
+    };
+  }
   let stockChars = 0;
   let totalChars = 0;
   try {
@@ -302,6 +814,8 @@ export function estimateStorageUsage(): StorageUsage {
     totalBytes,
     limitBytes: STORAGE_LIMIT_BYTES,
     ratio: totalBytes / STORAGE_LIMIT_BYTES,
+    driver: "local",
+    persisted: null,
   };
 }
 
@@ -366,7 +880,7 @@ export function importAnalysesFromJSON(text: string): ImportResult {
   // 復元分は新しい順（createdAt 降順）で既存の後ろに付ける。既存の並びは崩さない。
   toAdd.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   writeStock([...existing, ...toAdd]);
-  window.dispatchEvent(new Event("analysisStockUpdated"));
+  notifyUpdated();
   return { added: toAdd.length, skipped };
 }
 
@@ -376,8 +890,8 @@ export function updateAnalysisTags(id: string, tags: string[], folder: string): 
   if (idx !== -1) {
     records[idx].tags = tags;
     records[idx].folder = folder;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    window.dispatchEvent(new Event("analysisStockUpdated"));
+    writeStock(records);
+    notifyUpdated();
   }
 }
 

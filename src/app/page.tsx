@@ -17,7 +17,7 @@ import { AnalysisStockPanel } from "@/components/stock/analysis-stock-panel";
 import { TemplatePanel } from "@/components/templates/template-panel";
 import { MonthlyReportPanel } from "@/components/reports/monthly-report-panel";
 import { StaffPanel } from "@/components/staff/staff-panel";
-import { loadAllAnalyses } from "@/lib/analysis-storage";
+import { loadAllAnalyses, PERSIST_ERROR_EVENT } from "@/lib/analysis-storage";
 import { loadTemplates, initDefaultTemplates } from "@/lib/template-storage";
 import { loadStaffProfiles } from "@/lib/staff-storage";
 import { loadFeatureFlags, type FeatureFlags } from "@/lib/feature-flags";
@@ -205,7 +205,12 @@ export default function Home() {
     window.addEventListener("staffUpdated", refreshStaffCount);
     window.addEventListener("storage", refreshStaffCount);
     window.addEventListener("featureFlagsUpdated", updateFlags);
+    // 保存先（IndexedDB）への裏書き込みが再試行の末に失敗したときの常時通知（メモリ上のデータは残っている）
+    const onPersistError = () =>
+      toastError("⚠ 保存先への書き込みに失敗しました。💾 バックアップを取ってください");
+    window.addEventListener(PERSIST_ERROR_EVENT, onPersistError);
     return () => {
+      window.removeEventListener(PERSIST_ERROR_EVENT, onPersistError);
       window.removeEventListener("storage", refreshStockCount);
       window.removeEventListener("analysisStockUpdated", refreshStockCount);
       window.removeEventListener("templatesUpdated", refreshTemplateCount);

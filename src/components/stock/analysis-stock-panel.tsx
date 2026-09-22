@@ -40,6 +40,7 @@ import {
   buildFolderTree,
   getFlatFolderList,
   getFolderName,
+  deleteFolder,
   describeSaveError,
   estimateStorageUsage,
   importAnalysesFromJSON,
@@ -1598,23 +1599,17 @@ export function AnalysisStockPanel() {
     const updated = customFolders.filter((f) => f !== path && !f.startsWith(path + "/"));
     saveCustomFolders(updated);
 
-    // このフォルダ配下のカードのfolderを''にリセット
-    const allRecords = loadAllAnalyses();
-    const updatedRecords = allRecords.map((r) => {
-      if (r.folder === path || (r.folder || "").startsWith(path + "/")) {
-        return { ...r, folder: "" };
-      }
-      return r;
-    });
-    localStorage.setItem("dermapdf_analysis_stock", JSON.stringify(updatedRecords));
+    // このフォルダ配下（サブフォルダ含む）のカードの folder を '' にリセット。
+    // 保存層を迂回しないよう、既存の deleteFolder（サブフォルダ対応）経由で書き込む。
+    deleteFolder(path);
 
     // アクティブフォルダが削除対象なら解除
     if (activeFolder === path || (activeFolder || "").startsWith(path + "/")) {
       setActiveFolder(null);
     }
 
-    // 再読み込み
-    setRecords(updatedRecords);
+    // 再読み込み（deleteFolder が analysisStockUpdated を発火するが、即時反映のため明示的に読み直す）
+    setRecords(loadAllAnalyses());
   };
 
   const handleDelete = (record: AnalysisRecord) => {

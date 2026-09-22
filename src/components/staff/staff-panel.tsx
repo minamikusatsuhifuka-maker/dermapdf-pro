@@ -566,9 +566,12 @@ export function StaffPanel({ clinicSettings }: StaffPanelProps) {
     reload();
     window.addEventListener("staffUpdated", reload);
     window.addEventListener("storage", reload);
+    // 保存カード（紐付け候補）の読み込み完了・更新でも再描画する（IndexedDB は storage イベントを出さない）
+    window.addEventListener("analysisStockUpdated", reload);
     return () => {
       window.removeEventListener("staffUpdated", reload);
       window.removeEventListener("storage", reload);
+      window.removeEventListener("analysisStockUpdated", reload);
     };
   }, [reload]);
 
