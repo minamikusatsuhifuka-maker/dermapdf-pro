@@ -44,6 +44,9 @@ import {
   describeSaveError,
   estimateStorageUsage,
   importAnalysesFromJSON,
+  getStorageDriverName,
+  migrateToIndexedDB,
+  checkStorageIntegrity,
   type AnalysisRecord,
   type FolderNode,
   type StorageUsage,
@@ -807,6 +810,12 @@ export function AnalysisStockPanel() {
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   // バックアップ復元用の隠しファイル入力
   const restoreInputRef = useRef<HTMLInputElement>(null);
+  // 保存先の移行（段階2）：フラグOFF（localStorage）のブラウザでのみボタンを出す
+  const [storageDriver, setStorageDriver] = useState<"local" | "idb" | null>(null);
+  const [migrateStep, setMigrateStep] = useState<"idle" | "confirm" | "running">("idle");
+  // 整合性チェック：移行フラグがあるのに保存先が空 → 再取込を提案
+  const [integrityLocalCount, setIntegrityLocalCount] = useState<number | null>(null);
+  const [reimporting, setReimporting] = useState(false);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // グループカードで表示中のタブ（groupId → レコードid）。未指定は固定順の先頭。
@@ -933,6 +942,13 @@ export function AnalysisStockPanel() {
 
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    setStorageDriver(getStorageDriverName());
+    void checkStorageIntegrity().then((r) => {
+      setIntegrityLocalCount(r.status === "idb-empty-with-flag" ? r.localCount : null);
+    });
   }, []);
 
   useEffect(() => {
@@ -1754,6 +1770,34 @@ export function AnalysisStockPanel() {
     }
   };
 
+  // 大容量の保存先（IndexedDB）へ移行：全件 put → 件数検証 → 一致したときだけ切替 → 再読込
+  const handleMigrate = async () => {
+    setMigrateStep("running");
+    try {
+      const { count } = await migrateToIndexedDB();
+      toastOk(`${count}件を大容量の保存先へ移行しました。再読み込みします`);
+      window.setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      console.error("保存先の移行に失敗:", err);
+      toastError(describeSaveError(err, "保存先の移行に失敗しました。切り替えは行っていません"));
+      setMigrateStep("idle");
+    }
+  };
+
+  // 整合性バナーからの再取込（移行前データ localStorage → 空の IndexedDB）
+  const handleReimport = async () => {
+    setReimporting(true);
+    try {
+      const { count } = await migrateToIndexedDB({ reimport: true });
+      toastOk(`${count}件を再取込しました。再読み込みします`);
+      window.setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      console.error("再取込に失敗:", err);
+      toastError(describeSaveError(err, "再取込に失敗しました"));
+      setReimporting(false);
+    }
+  };
+
   // 容量メーターの表示値（目安）。80%以上は黄、90%以上は赤
   const usageView = (() => {
     if (!storageUsage) return null;
@@ -1775,6 +1819,22 @@ export function AnalysisStockPanel() {
           保存済み分析 ({records.length}件)
         </h2>
       </div>
+
+      {/* 整合性チェック：移行フラグがあるのに保存先が空（ブラウザ側で消された等） */}
+      {integrityLocalCount !== null && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+          <span className="font-medium">
+            ⚠ 保存先のデータが見つかりません。移行前のデータ（{integrityLocalCount}件）から再取込しますか？
+          </span>
+          <button
+            onClick={() => void handleReimport()}
+            disabled={reimporting}
+            className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-orange-600 disabled:opacity-50"
+          >
+            {reimporting ? "再取込中..." : "再取込する"}
+          </button>
+        </div>
+      )}
 
       {/* 保存容量の目安 + バックアップ/復元 */}
       {usageView && (
@@ -1829,6 +1889,15 @@ export function AnalysisStockPanel() {
             >
               📥 バックアップから復元（JSON）
             </button>
+            {storageDriver === "local" && migrateStep === "idle" && (
+              <button
+                onClick={() => setMigrateStep("confirm")}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] px-2.5 py-1 text-xs font-medium text-[#185FA5] shadow-sm hover:bg-[#d6e8f8]"
+                title="保存カードの保存先を localStorage（約5MB）から IndexedDB（大容量）へ移す。移行前のデータは残る"
+              >
+                🗄 大容量の保存先へ移行（試験）
+              </button>
+            )}
             <input
               ref={restoreInputRef}
               type="file"
@@ -1842,6 +1911,34 @@ export function AnalysisStockPanel() {
               }}
             />
           </div>
+          {migrateStep !== "idle" && (
+            <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-[#B5D4F4] bg-white/80 px-3 py-2 text-xs text-gray-700">
+              <span className="font-medium">
+                💾 バックアップを取りましたか？ 移行後は新しいカードが大容量の保存先にだけ保存されます（移行前のデータは残ります）。
+              </span>
+              <button
+                onClick={exportAnalysesAsJSON}
+                disabled={migrateStep === "running" || records.length === 0}
+                className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-40"
+              >
+                💾 先にバックアップ
+              </button>
+              <button
+                onClick={() => void handleMigrate()}
+                disabled={migrateStep === "running"}
+                className="rounded-lg bg-[#378ADD] px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-[#185FA5] disabled:opacity-50"
+              >
+                {migrateStep === "running" ? "移行中..." : "はい、移行する"}
+              </button>
+              <button
+                onClick={() => setMigrateStep("idle")}
+                disabled={migrateStep === "running"}
+                className="rounded-lg bg-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+            </div>
+          )}
         </div>
       )}
 
