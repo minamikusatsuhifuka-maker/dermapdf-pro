@@ -11,7 +11,7 @@ import {
   analyzeTextWithGemini,
   analyzeImagesWithGemini,
 } from "@/lib/gemini-client";
-import { saveAnalysis } from "@/lib/analysis-storage";
+import { saveAnalysis, describeSaveError } from "@/lib/analysis-storage";
 import { syncScrollByRatio } from "@/lib/scroll-sync";
 import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { copyRichText } from "@/lib/clipboard-rich";
@@ -697,6 +697,14 @@ export function GeminiPanel({
     setAutoSaveStates((prev) => {
       const next = new Map(prev);
       next.set(type, entry);
+      return next;
+    });
+  // 自動保存に失敗したときは状態を消し、「✓ 保存済み」を付けずに手動ストックボタンへ戻す
+  const clearAutoSaveState = (type: AnalysisType) =>
+    setAutoSaveStates((prev) => {
+      if (!prev.has(type)) return prev;
+      const next = new Map(prev);
+      next.delete(type);
       return next;
     });
   // 今回の実行のグループID（複数タイプ同時実行のときだけ発行。単独実行は null）。
@@ -1663,6 +1671,8 @@ export function GeminiPanel({
     let lastResult = "";
     let lastType: AnalysisType = types[0];
     let successCount = 0;
+    // 自動保存だけ失敗した件数（分析結果は画面に残る。完了メッセージの文言を切り替える）
+    let autoSaveFailed = 0;
 
     try {
       for (let i = 0; i < types.length; i++) {
@@ -1703,18 +1713,29 @@ export function GeminiPanel({
               getLabel(type),
               buildFallbackTitle(type)
             ).catch(() => buildFallbackTitle(type));
-            const savedAuto = saveAnalysis({
-              fileName: autoTitle,
-              analysisType: type,
-              analysisLabel: getLabel(type),
-              content: analysis,
-              tags: [],
-              folder: "",
-              groupId: runGroupIdRef.current ?? undefined,
-            });
-            setAutoSaveState(type, { status: "saved", text: analysis });
-            // AIカテゴリを裏で付与（失敗しても保存は成立済み）
-            void classifyAnalysisInBackground(savedAuto.id, savedAuto.content);
+            // 保存失敗（容量超過など）は分析エラーとは別に扱う：
+            // 結果は画面に残し、「✓ 保存済み」は付けず、分かる文言で通知する。
+            try {
+              const savedAuto = saveAnalysis({
+                fileName: autoTitle,
+                analysisType: type,
+                analysisLabel: getLabel(type),
+                content: analysis,
+                tags: [],
+                folder: "",
+                groupId: runGroupIdRef.current ?? undefined,
+              });
+              setAutoSaveState(type, { status: "saved", text: analysis });
+              // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+              void classifyAnalysisInBackground(savedAuto.id, savedAuto.content);
+            } catch (saveErr) {
+              clearAutoSaveState(type);
+              autoSaveFailed += 1;
+              console.error(`${getLabel(type)} の自動保存に失敗:`, saveErr);
+              toastError(
+                `${getLabel(type)}: ${describeSaveError(saveErr, "ストックへの保存に失敗しました")}`
+              );
+            }
           }
         } catch (innerErr) {
           const msg =
@@ -1736,15 +1757,17 @@ export function GeminiPanel({
         return;
       }
 
+      // 自動保存が1件でも失敗していれば「保存しました」とは言わない（結果は画面に残っている）
+      const savedAll = autoSave && autoSaveFailed === 0;
       if (types.length > 1) {
         toastOk(
-          autoSave
+          savedAll
             ? `${successCount}/${types.length} 件の分析が完了し、ストックに保存しました`
             : `${successCount}/${types.length} 件の分析が完了しました`
         );
       } else {
         toastOk(
-          autoSave ? "AI分析が完了し、ストックに保存しました" : "AI分析が完了しました"
+          savedAll ? "AI分析が完了し、ストックに保存しました" : "AI分析が完了しました"
         );
       }
     } finally {
@@ -1977,9 +2000,8 @@ export function GeminiPanel({
       void classifyAnalysisInBackground(savedScript.id, savedScript.content);
       toastOk("プレゼン原稿を作成し、ストックに保存しました");
     } catch (err) {
-      toastError(
-        err instanceof Error ? err.message : "プレゼン原稿の生成に失敗しました"
-      );
+      // 容量超過なら分かる文言で通知（生成済みの原稿は画面に残る）
+      toastError(describeSaveError(err, "プレゼン原稿の生成に失敗しました"));
     } finally {
       setLoading(false);
       setScriptGenerating(false);
@@ -2092,18 +2114,24 @@ ${head}`;
       buildFallbackTitle(type)
     );
     console.log("[saveStock] 最終タイトル:", autoTitle);
-    const savedStock = saveAnalysis({
-      fileName: autoTitle,
-      analysisType: type,
-      analysisLabel: getLabel(type),
-      content: text,
-      tags: [],
-      folder: "",
-      // 同時実行の結果なら自動保存と同じ groupId で束ねる（単独実行は undefined）
-      groupId: runGroupIdRef.current ?? undefined,
-    });
-    void classifyAnalysisInBackground(savedStock.id, savedStock.content);
-    toastOk(`「${autoTitle}」としてストックに保存しました`);
+    // 保存失敗（容量超過など）は握りつぶさず通知する（onSave から void 呼びされるため未捕捉にしない）
+    try {
+      const savedStock = saveAnalysis({
+        fileName: autoTitle,
+        analysisType: type,
+        analysisLabel: getLabel(type),
+        content: text,
+        tags: [],
+        folder: "",
+        // 同時実行の結果なら自動保存と同じ groupId で束ねる（単独実行は undefined）
+        groupId: runGroupIdRef.current ?? undefined,
+      });
+      void classifyAnalysisInBackground(savedStock.id, savedStock.content);
+      toastOk(`「${autoTitle}」としてストックに保存しました`);
+    } catch (err) {
+      console.error("[saveStock] 保存に失敗:", err);
+      toastError(describeSaveError(err, "ストックへの保存に失敗しました"));
+    }
   };
 
   // 個別結果を Gemini で平易化して上書き

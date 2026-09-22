@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
-import { toastOk } from "@/components/ui/toast-provider";
+import { toastOk, toastError } from "@/components/ui/toast-provider";
+import { describeSaveError } from "@/lib/analysis-storage";
 
 export type IssueScope = "line" | "all";
 type IssueStatus = "pending" | "applied" | "rejected" | "manual";
@@ -188,7 +189,14 @@ ${numbered}`;
   };
 
   const handleSave = () => {
-    onSaveCard(`【校正済み】${sourceTitle}`, workText, sourceText);
+    // 保存失敗（容量超過など）はモーダルを閉じずに通知する（校正結果は画面に残る）
+    try {
+      onSaveCard(`【校正済み】${sourceTitle}`, workText, sourceText);
+    } catch (err) {
+      console.error("校正済みカードの保存に失敗:", err);
+      toastError(describeSaveError(err, "校正済みカードの保存に失敗しました"));
+      return;
+    }
     toastOk("校正済みカードを保存しました");
     onClose();
   };

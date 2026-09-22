@@ -18,7 +18,7 @@ import {
   type StaffProfile,
   type StaffRecord,
 } from "@/lib/staff-storage";
-import { loadAllAnalyses, saveAnalysis, getDisplayTitle, type AnalysisRecord } from "@/lib/analysis-storage";
+import { loadAllAnalyses, saveAnalysis, getDisplayTitle, describeSaveError, type AnalysisRecord } from "@/lib/analysis-storage";
 import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
@@ -270,17 +270,23 @@ ${philosophyContext}
   };
 
   const handleSaveAiToStock = () => {
-    const saved = saveAnalysis({
-      fileName: `${staff.name}のAI生成結果`,
-      analysisType: "staff_ai",
-      analysisLabel: "スタッフAI生成",
-      content: aiResult,
-      tags: ["スタッフカルテ", staff.name],
-      folder: "",
-    });
-    // AIカテゴリを裏で付与（失敗しても保存は成立済み）
-    void classifyAnalysisInBackground(saved.id, saved.content);
-    toastOk("ストックに保存しました");
+    // 保存失敗（容量超過など）は通知する（生成結果は画面に残る）
+    try {
+      const saved = saveAnalysis({
+        fileName: `${staff.name}のAI生成結果`,
+        analysisType: "staff_ai",
+        analysisLabel: "スタッフAI生成",
+        content: aiResult,
+        tags: ["スタッフカルテ", staff.name],
+        folder: "",
+      });
+      // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+      void classifyAnalysisInBackground(saved.id, saved.content);
+      toastOk("ストックに保存しました");
+    } catch (err) {
+      console.error("スタッフAI生成結果の保存に失敗:", err);
+      toastError(describeSaveError(err, "ストックへの保存に失敗しました"));
+    }
   };
 
   const handleCopyAi = async () => {

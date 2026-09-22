@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Trash2, Download, Search, ChevronDown, ChevronUp, Sparkles, ExternalLink, X, Loader2, Tag, FolderOpen, Plus, Save, Pencil, User } from "lucide-react";
-import { toastOk, toastError } from "@/components/ui/toast-provider";
+import { toastOk, toastError, toastInfo } from "@/components/ui/toast-provider";
 import { syncScrollByRatio } from "@/lib/scroll-sync";
 import { appendToMemoSheet, loadMemoSheets } from "@/lib/memo-storage";
 import MemoPadPanel from "@/components/stock/memo-pad-panel";
@@ -40,8 +40,12 @@ import {
   buildFolderTree,
   getFlatFolderList,
   getFolderName,
+  describeSaveError,
+  estimateStorageUsage,
+  importAnalysesFromJSON,
   type AnalysisRecord,
   type FolderNode,
+  type StorageUsage,
 } from "@/lib/analysis-storage";
 import { loadStaffProfiles, saveStaffRecord, type StaffProfile } from "@/lib/staff-storage";
 import {
@@ -798,6 +802,10 @@ export function AnalysisStockPanel() {
   const [mainTab, setMainTab] = useState<"stock" | "memo">("stock");
   const [isMounted, setIsMounted] = useState(false);
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
+  // 保存容量の目安（一覧の読み込み時・保存後の reload でだけ再計算する）
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  // バックアップ復元用の隠しファイル入力
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // グループカードで表示中のタブ（groupId → レコードid）。未指定は固定順の先頭。
@@ -912,6 +920,7 @@ export function AnalysisStockPanel() {
   const reload = useCallback(() => {
     const all = loadAllAnalyses();
     setRecords(all);
+    setStorageUsage(estimateStorageUsage());
     setStaffProfiles(loadStaffProfiles());
     // カスタムフォルダを収集（localStorage + レコードから）
     const saved = loadCustomFolders();
@@ -1246,7 +1255,8 @@ export function AnalysisStockPanel() {
       reload();
       toastOk(`「${title}」をストックに保存しました`);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "まとめに失敗しました");
+      // 容量超過なら分かる文言で通知（保存はされていない）
+      toastError(describeSaveError(err, "まとめに失敗しました"));
     } finally {
       setSummarizingId(null);
     }
@@ -1288,7 +1298,7 @@ export function AnalysisStockPanel() {
       reload();
       toastOk(`「${title}」をストックに保存しました`);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "要約に失敗しました");
+      toastError(describeSaveError(err, "要約に失敗しました"));
     } finally {
       setOverviewSummarizingId(null);
     }
@@ -1320,7 +1330,7 @@ export function AnalysisStockPanel() {
       reload();
       toastOk(`「${title}」の施策アドバイスをストックに保存しました`);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "アドバイス生成に失敗しました");
+      toastError(describeSaveError(err, "アドバイス生成に失敗しました"));
     } finally {
       setActionAdvisingId(null);
     }
@@ -1730,6 +1740,35 @@ export function AnalysisStockPanel() {
     setPendingDeleteId(null);
   };
 
+  // バックアップ（JSON）から復元：id が既存と重複するものはスキップし、追加のみ。既存は上書きしない。
+  const handleRestoreFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const result = importAnalysesFromJSON(text);
+      reload();
+      if (result.added === 0 && result.skipped === 0) {
+        toastInfo("バックアップにカードがありませんでした");
+      } else {
+        toastOk(
+          `${result.added}件を追加／${result.skipped}件は既に存在するためスキップしました`
+        );
+      }
+    } catch (err) {
+      console.error("バックアップの復元に失敗:", err);
+      toastError(describeSaveError(err, "バックアップの復元に失敗しました"));
+    }
+  };
+
+  // 容量メーターの表示値（目安）。80%以上は黄、90%以上は赤
+  const usageView = (() => {
+    if (!storageUsage) return null;
+    const mb = (b: number) => (b / (1024 * 1024)).toFixed(1);
+    const pct = Math.round(storageUsage.ratio * 100);
+    const level: "ok" | "warn" | "danger" =
+      pct >= 90 ? "danger" : pct >= 80 ? "warn" : "ok";
+    return { mb, pct, level, used: storageUsage.totalBytes, limit: storageUsage.limitBytes, stock: storageUsage.stockBytes };
+  })();
+
   return (
     <div
       id="analysis-stock"
@@ -1741,6 +1780,75 @@ export function AnalysisStockPanel() {
           保存済み分析 ({records.length}件)
         </h2>
       </div>
+
+      {/* 保存容量の目安 + バックアップ/復元 */}
+      {usageView && (
+        <div
+          className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-3 py-2 text-xs ${
+            usageView.level === "danger"
+              ? "border-red-300 bg-red-50 text-red-700"
+              : usageView.level === "warn"
+              ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+              : "border-gray-200 bg-white/60 text-gray-600"
+          }`}
+          title={`分析ストック: 約${usageView.mb(usageView.stock)}MB／localStorage全体: 約${usageView.mb(usageView.used)}MB（文字数×2バイトの概算）`}
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">💽 保存容量（目安）</span>
+            <span>
+              {usageView.mb(usageView.used)}MB / 約{usageView.mb(usageView.limit)}MB（{usageView.pct}%）
+            </span>
+            <div className="h-2 w-28 overflow-hidden rounded-full bg-gray-200">
+              <div
+                className={`h-full rounded-full ${
+                  usageView.level === "danger"
+                    ? "bg-red-500"
+                    : usageView.level === "warn"
+                    ? "bg-yellow-400"
+                    : "bg-[#378ADD]"
+                }`}
+                style={{ width: `${Math.min(100, usageView.pct)}%` }}
+              />
+            </div>
+          </div>
+          {usageView.level !== "ok" && (
+            <span className="font-medium">
+              {usageView.level === "danger"
+                ? "⚠ 容量がほぼいっぱいです。保存できなくなる前に、バックアップを取って不要なカードを削除してください"
+                : "容量が残り少なくなっています。バックアップと整理をおすすめします"}
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={exportAnalysesAsJSON}
+              disabled={records.length === 0}
+              className="inline-flex items-center gap-1 rounded-lg bg-white/80 px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-white disabled:opacity-40"
+              title="保存済み分析を全件JSONでバックアップ"
+            >
+              💾 全件バックアップ（JSON）
+            </button>
+            <button
+              onClick={() => restoreInputRef.current?.click()}
+              className="inline-flex items-center gap-1 rounded-lg bg-white/80 px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-white"
+              title="バックアップ（JSON）から復元。既存カードは上書きせず、無いものだけ追加"
+            >
+              📥 バックアップから復元（JSON）
+            </button>
+            <input
+              ref={restoreInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                // 同じファイルを続けて選べるように値を戻す
+                e.target.value = "";
+                if (file) void handleRestoreFile(file);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* メインタブ */}
       <div className="flex gap-2 border-b border-gray-100 mb-4">
@@ -2478,9 +2586,18 @@ export function AnalysisStockPanel() {
             <button
               onClick={() => {
                 let count = 0;
-                Array.from(selectedIds).forEach((id) => {
-                  if (duplicateAnalysis(id)) count++;
-                });
+                try {
+                  Array.from(selectedIds).forEach((id) => {
+                    if (duplicateAnalysis(id)) count++;
+                  });
+                } catch (err) {
+                  // 容量超過など：途中まで複製できた件数は保持されている（1件ずつ書き込むため）
+                  reload();
+                  toastError(
+                    `${count}件を複製したところで失敗しました。${describeSaveError(err, "複製に失敗しました")}`
+                  );
+                  return;
+                }
                 setSelectedIds(new Set());
                 reload();
                 toastOk(`${count}件を複製しました`);
@@ -3019,10 +3136,14 @@ export function AnalysisStockPanel() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const copied = duplicateAnalysis(r.id);
-                      if (copied) {
-                        reload();
-                        toastOk(`「${copied.title}」を複製しました`);
+                      try {
+                        const copied = duplicateAnalysis(r.id);
+                        if (copied) {
+                          reload();
+                          toastOk(`「${copied.title}」を複製しました`);
+                        }
+                      } catch (err) {
+                        toastError(describeSaveError(err, "複製に失敗しました"));
                       }
                     }}
                     className="rounded p-1 text-gray-300 hover:text-blue-500 transition-colors"

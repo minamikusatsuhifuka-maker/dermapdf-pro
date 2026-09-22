@@ -27,6 +27,51 @@ export interface AnalysisRecord {
 
 const STORAGE_KEY = "dermapdf_analysis_stock";
 
+export const STORAGE_QUOTA_MESSAGE =
+  "⚠ 保存容量がいっぱいのため保存できませんでした。不要なカードを削除するか、バックアップ後に整理してください";
+
+// 保存容量（localStorage）が足りず書き込めなかったことを示すエラー。
+// 呼び出し元は instanceof で判別し、ユーザーに分かる文言で通知する。
+export class StorageQuotaError extends Error {
+  constructor(message: string = STORAGE_QUOTA_MESSAGE) {
+    super(message);
+    this.name = "StorageQuotaError";
+  }
+}
+
+// ブラウザが投げる容量超過例外の判定（Chrome/Safari: QuotaExceededError / code 22, Firefox: code 1014）
+function isQuotaExceeded(err: unknown): boolean {
+  if (err instanceof StorageQuotaError) return true;
+  if (typeof DOMException !== "undefined" && err instanceof DOMException) {
+    return (
+      err.name === "QuotaExceededError" ||
+      err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      err.code === 22 ||
+      err.code === 1014
+    );
+  }
+  return false;
+}
+
+// 保存系エラーをユーザー向け文言に変換する共通ヘルパー。
+// 容量超過なら統一メッセージ、それ以外は err.message、無ければ fallback。
+export function describeSaveError(err: unknown, fallback: string): string {
+  if (err instanceof StorageQuotaError) return err.message;
+  if (isQuotaExceeded(err)) return STORAGE_QUOTA_MESSAGE;
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
+// ストック全件を一括で書き込む。容量超過は StorageQuotaError に変換して投げる。
+// 失敗時は何も書き込まれない（localStorage.setItem は原子的）ので既存データは無傷。
+function writeStock(records: AnalysisRecord[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  } catch (err) {
+    if (isQuotaExceeded(err)) throw new StorageQuotaError();
+    throw err;
+  }
+}
+
 export function saveAnalysis(
   record: Omit<AnalysisRecord, "id" | "createdAt">
 ): AnalysisRecord {
@@ -37,8 +82,9 @@ export function saveAnalysis(
     createdAt: new Date().toISOString(),
   };
   records.unshift(newRecord);
-  const trimmed = records.slice(0, 100);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  // 件数上限は設けない。消えるのはユーザーが削除したときだけ。
+  // 容量超過時は StorageQuotaError を投げ、何も書き込まない（イベントも発火しない）。
+  writeStock(records);
   window.dispatchEvent(new Event("analysisStockUpdated"));
   return newRecord;
 }
@@ -167,7 +213,8 @@ export function duplicateAnalysis(id: string): AnalysisRecord | null {
   };
 
   records.splice(records.findIndex((r) => r.id === id) + 1, 0, duplicated);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records.slice(0, 100)));
+  // 件数上限なし。容量超過時は StorageQuotaError を投げ、何も書き込まない。
+  writeStock(records);
   window.dispatchEvent(new Event("analysisStockUpdated"));
   return duplicated;
 }
@@ -220,6 +267,107 @@ export function exportAnalysesAsJSON(): void {
   a.download = `dermapdf_analyses_${new Date().toISOString().split("T")[0]}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ---- 容量の目安 ----
+// localStorage は多くのブラウザで約5MB（UTF-16 文字数×2バイトで概算）。あくまで目安。
+export const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024;
+
+export interface StorageUsage {
+  stockBytes: number; // dermapdf_analysis_stock の概算バイト数
+  totalBytes: number; // 同一オリジンの localStorage 全体の概算バイト数
+  limitBytes: number; // 上限の目安
+  ratio: number; // totalBytes / limitBytes（0〜）
+}
+
+export function estimateStorageUsage(): StorageUsage {
+  let stockChars = 0;
+  let totalChars = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === null) continue;
+      const value = localStorage.getItem(key) ?? "";
+      const chars = key.length + value.length;
+      totalChars += chars;
+      if (key === STORAGE_KEY) stockChars = chars;
+    }
+  } catch {
+    // アクセス不可（プライベートモード等）は 0 扱い
+  }
+  const stockBytes = stockChars * 2;
+  const totalBytes = totalChars * 2;
+  return {
+    stockBytes,
+    totalBytes,
+    limitBytes: STORAGE_LIMIT_BYTES,
+    ratio: totalBytes / STORAGE_LIMIT_BYTES,
+  };
+}
+
+// ---- バックアップからの復元 ----
+export interface ImportResult {
+  added: number;
+  skipped: number;
+}
+
+function isImportableRecord(v: unknown): v is AnalysisRecord {
+  if (!v || typeof v !== "object") return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.id === "string" &&
+    r.id.length > 0 &&
+    typeof r.content === "string" &&
+    typeof r.createdAt === "string" &&
+    typeof r.fileName === "string" &&
+    typeof r.analysisType === "string"
+  );
+}
+
+// exportAnalysesAsJSON の出力（AnalysisRecord の配列）を読み込み、既存に無い id だけ追加する。
+// 既存カードは上書きしない。不正な JSON・形式なら何も書かずに Error を投げる。
+// 書き込みは一括1回（途中まで書いて壊さない）。容量超過は StorageQuotaError。
+export function importAnalysesFromJSON(text: string): ImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("JSON として読み取れませんでした。バックアップファイルを確認してください");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("バックアップの形式が違います（配列ではありません）");
+  }
+  const invalid = parsed.findIndex((v) => !isImportableRecord(v));
+  if (invalid !== -1) {
+    throw new Error(
+      `バックアップの ${invalid + 1} 件目に必須項目（id・content・createdAt 等）がありません`
+    );
+  }
+  const incoming = parsed as AnalysisRecord[];
+  const existing = loadAllAnalyses();
+  const existingIds = new Set(existing.map((r) => r.id));
+  const seen = new Set<string>();
+  const toAdd: AnalysisRecord[] = [];
+  let skipped = 0;
+  for (const r of incoming) {
+    if (existingIds.has(r.id) || seen.has(r.id)) {
+      skipped++;
+      continue;
+    }
+    seen.add(r.id);
+    toAdd.push({
+      ...r,
+      tags: Array.isArray(r.tags) ? r.tags : [],
+      folder: typeof r.folder === "string" ? r.folder : "",
+      analysisLabel: typeof r.analysisLabel === "string" ? r.analysisLabel : r.analysisType,
+    });
+  }
+  if (toAdd.length === 0) return { added: 0, skipped };
+  // 復元分は新しい順（createdAt 降順）で既存の後ろに付ける。既存の並びは崩さない。
+  toAdd.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  writeStock([...existing, ...toAdd]);
+  window.dispatchEvent(new Event("analysisStockUpdated"));
+  return { added: toAdd.length, skipped };
 }
 
 export function updateAnalysisTags(id: string, tags: string[], folder: string): void {

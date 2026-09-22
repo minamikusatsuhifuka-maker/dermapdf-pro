@@ -2,10 +2,10 @@
 
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
-import { saveAnalysis } from "@/lib/analysis-storage";
+import { saveAnalysis, describeSaveError } from "@/lib/analysis-storage";
 import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import type { AppliedFix } from "@/components/proofread/proofread-modal";
-import { toastOk } from "@/components/ui/toast-provider";
+import { toastOk, toastError } from "@/components/ui/toast-provider";
 
 // 1行内で targets に一致する全箇所を <mark> でハイライトする。
 // 見つからなければ素のテキストをそのまま返す（誤ハイライト・クラッシュ防止）。
@@ -122,16 +122,24 @@ export function ProofreadComparison({
   };
 
   const handleSave = () => {
-    const saved = saveAnalysis({
-      fileName: title,
-      analysisType: "proofread",
-      analysisLabel: "校正済み",
-      content: after,
-      tags: [],
-      folder: "校正",
-      title: `【校正済み】${title}`,
-      proofreadBefore: before,
-    });
+    // 保存失敗（容量超過など）は比較画面を閉じずに通知する
+    let saved;
+    try {
+      saved = saveAnalysis({
+        fileName: title,
+        analysisType: "proofread",
+        analysisLabel: "校正済み",
+        content: after,
+        tags: [],
+        folder: "校正",
+        title: `【校正済み】${title}`,
+        proofreadBefore: before,
+      });
+    } catch (err) {
+      console.error("校正内容の保存に失敗:", err);
+      toastError(describeSaveError(err, "校正内容の保存に失敗しました"));
+      return;
+    }
     // folder:"校正" は従来どおり固定。AIカテゴリは別フィールドに裏で付与
     void classifyAnalysisInBackground(saved.id, saved.content);
     toastOk("校正内容を「校正」フォルダに保存しました");

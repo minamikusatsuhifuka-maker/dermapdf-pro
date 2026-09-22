@@ -5,7 +5,7 @@ import MarkdownView from "@/components/ui/markdown-view";
 import { NO_LATEX_RULE } from "@/lib/latex-cleanup";
 import { Copy, Download, Loader2, BookmarkPlus, Sparkles } from "lucide-react";
 import { toastOk, toastError } from "@/components/ui/toast-provider";
-import { loadAllAnalyses, saveAnalysis, getDisplayTitle } from "@/lib/analysis-storage";
+import { loadAllAnalyses, saveAnalysis, getDisplayTitle, describeSaveError } from "@/lib/analysis-storage";
 import { classifyAnalysisInBackground } from "@/lib/ai-category";
 import { analyzeTextWithGemini } from "@/lib/gemini-client";
 import { type ClinicSettings, buildPhilosophyContext } from "@/components/settings/settings-modal";
@@ -260,17 +260,23 @@ export function MonthlyReportPanel({ clinicSettings }: MonthlyReportPanelProps) 
   const handleSaveToStock = () => {
     const reportLabel = REPORT_TYPE_OPTIONS.find((r) => r.value === reportType)?.label ?? reportType;
     const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label ?? period;
-    const saved = saveAnalysis({
-      fileName: `${reportLabel}（${periodLabel}）`,
-      analysisType: "report",
-      analysisLabel: reportLabel,
-      content: result,
-      tags: ["レポート", periodLabel],
-      folder: "",
-    });
-    // AIカテゴリを裏で付与（失敗しても保存は成立済み）
-    void classifyAnalysisInBackground(saved.id, saved.content);
-    toastOk("ストックに保存しました");
+    // 保存失敗（容量超過など）は通知する（レポート本文は画面に残る）
+    try {
+      const saved = saveAnalysis({
+        fileName: `${reportLabel}（${periodLabel}）`,
+        analysisType: "report",
+        analysisLabel: reportLabel,
+        content: result,
+        tags: ["レポート", periodLabel],
+        folder: "",
+      });
+      // AIカテゴリを裏で付与（失敗しても保存は成立済み）
+      void classifyAnalysisInBackground(saved.id, saved.content);
+      toastOk("ストックに保存しました");
+    } catch (err) {
+      console.error("レポートの保存に失敗:", err);
+      toastError(describeSaveError(err, "ストックへの保存に失敗しました"));
+    }
   };
 
   const handleToGenspark = () => {
